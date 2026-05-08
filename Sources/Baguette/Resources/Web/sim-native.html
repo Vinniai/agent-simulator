@@ -150,6 +150,42 @@
     max-width: 100% !important;
   }
 
+  /* Device-frame rotation. The wrapper inside #nativeDeviceFrame
+     mirrors the simulator's interface orientation as a CSS
+     transform; sim-native.js sets `data-orientation` on the
+     container after each rotate-button click. Rotation is purely
+     visual — pixel positions inside the screen area stay in the
+     device's portrait coord system, and JS wraps the input
+     transport + pinch overlay so coords still land where the
+     user's cursor is.
+
+     In landscape, the rotated visual width = portrait device
+     height; cap the unrotated max-height by viewport width too so
+     the rotated bbox fits horizontally on narrow viewports. */
+  #simNativeView #nativeDeviceFrame > div {
+    transform-origin: center center;
+    transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  /* Rotation direction matches what iOS draws into the portrait
+     framebuffer: UI's "up" runs along the buffer's right edge for
+     `landscape-right` (home on right) and the buffer's left edge
+     for `landscape-left`, so the host has to rotate CCW / CW
+     respectively to land the content upright. The bezel goes the
+     same way and ends up with the home indicator on the side the
+     wire name advertises. */
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-right"] > div { transform: rotate(-90deg); }
+  #simNativeView #nativeDeviceFrame[data-orientation="portrait-upside-down"] > div { transform: rotate(180deg); }
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-left"] > div { transform: rotate(90deg); }
+
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-right"] > div,
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-left"] > div,
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-right"] img,
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-right"] canvas,
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-left"] img,
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-left"] canvas {
+    max-height: min(calc(100vh - 68px), calc(100vw - 32px)) !important;
+  }
+
   /* Label group — clickable, returns to the simulator list. The
      chevron + device name + OS subtitle read as one breadcrumb. */
   #simNativeView .tb-label {

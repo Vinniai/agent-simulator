@@ -56,12 +56,57 @@
   const ORIENTATION_CYCLE_PHONE  = ['portrait', 'landscape-right', 'landscape-left'];
   const ORIENTATION_CYCLE_TABLET = ['portrait', 'landscape-right', 'portrait-upside-down', 'landscape-left'];
   let orientationIndex = 0;
+  let currentOrientation = 'portrait';
 
   function orientationCycle() {
     // chrome.json's `identifier` is `phone12` / `tablet5` / etc.
     // Anything that isn't an iPhone gets the full 4-step cycle.
     const id = (layout && layout.identifier) || '';
     return id.startsWith('phone') ? ORIENTATION_CYCLE_PHONE : ORIENTATION_CYCLE_TABLET;
+  }
+
+  // Apply orientation visually: set `data-orientation` on the
+  // device-frame container so the CSS rotation rules in
+  // sim-native.html kick in. Coord transforms in the input
+  // transport + pinch overlay read `currentOrientation` so the
+  // user's clicks land at the right pixel regardless of rotation.
+  function applyOrientation(value) {
+    currentOrientation = value;
+    const root = document.getElementById('nativeDeviceFrame');
+    if (root) {
+      if (value === 'portrait') root.removeAttribute('data-orientation');
+      else                      root.setAttribute('data-orientation', value);
+    }
+  }
+
+  // Map a normalized coord [0, 1]² from the rotated visual frame
+  // back to the device's portrait coord system. Used by the input
+  // transport so taps/swipes/touches land on the iOS element the
+  // user clicked on, even though iOS expects portrait coords.
+  // Direction must mirror the CSS transforms in sim-native.html —
+  // landscape-right is rotate(-90deg) (CCW) on the wrapper, so the
+  // visual→portrait inverse rotates CW.
+  function visualToPortraitNorm(x, y) {
+    switch (currentOrientation) {
+      case 'landscape-right':       return { x: 1 - y,     y: x         };
+      case 'portrait-upside-down':  return { x: 1 - x,     y: 1 - y     };
+      case 'landscape-left':        return { x: y,         y: 1 - x     };
+      default:                      return { x,            y            };
+    }
+  }
+
+  // Map a pixel coord from the rotated visual bbox back to the
+  // unrotated DOM-local frame (the screenArea's own pre-rotation
+  // pixel grid). Used when placing pinch-overlay dots — their CSS
+  // left/top is in unrotated local pixels, so we have to undo the
+  // wrapper's rotation before the dot lines up under the cursor.
+  function visualToUnrotatedLocalPx(vx, vy, w, h) {
+    switch (currentOrientation) {
+      case 'landscape-right':       return { x: h - vy,    y: vx        };
+      case 'portrait-upside-down':  return { x: w - vx,    y: h - vy    };
+      case 'landscape-left':        return { x: vy,        y: w - vx    };
+      default:                      return { x: vx,        y: vy        };
+    }
   }
 
   // --- Bootstrap ---------------------------------------------------
@@ -313,12 +358,18 @@
     simInput = new window.SimInput({
       udid: targetUdid,
       log,
-      // Shared translator from sim-input-bridge.js — same dialect
-      // adapter sim-stream.js and farm-tile.js use.
-      transport: window.SimInputBridge.makeTransport(session, log),
+      // Shared translator from sim-input-bridge.js — wrapped here
+      // so user gestures captured in the rotated visual frame are
+      // remapped back to the device's portrait coord system
+      // before the bridge converts them to wire envelopes.
+      transport: makeOrientationTransport(session, log),
     });
     simInput.setScreenSize(screenSize.w, screenSize.h);
-    pinchOverlay = new window.PinchOverlay(surface.screenArea);
+    pinchOverlay = makeOrientationPinchOverlay(surface.screenArea);
+    // Restore the cached orientation across format-swap remounts,
+    // so reopening the session doesn't snap the device back to
+    // portrait while the simulator is still landscape.
+    if (currentOrientation !== 'portrait') applyOrientation(currentOrientation);
     mouseSource = new window.MouseGestureSource({
       el: surface.screenArea,
       input: simInput,
@@ -326,6 +377,60 @@
       log,
     });
     mouseSource.attach();
+  }
+
+  // Wrap SimInputBridge's transport with a normalized-coord
+  // remapper. MouseGestureSource computes finger coords against
+  // screenArea's bounding rect, which after CSS rotation is the
+  // ROTATED bbox — so the normalized [0, 1] coords arriving here
+  // are in the user's visual frame. We translate them to portrait
+  // device-norm before the bridge multiplies by width/height
+  // (still portrait pixel dims) to produce wire envelopes.
+  function makeOrientationTransport(session, log) {
+    const inner = window.SimInputBridge.makeTransport(session, log);
+    return (payload) => inner(remapPayloadToPortrait(payload));
+  }
+
+  function remapPayloadToPortrait(payload) {
+    if (currentOrientation === 'portrait' || !payload) return payload;
+    switch (payload.kind) {
+      case 'tap': {
+        const p = visualToPortraitNorm(payload.x, payload.y);
+        return { ...payload, x: p.x, y: p.y };
+      }
+      case 'swipe': {
+        const a = visualToPortraitNorm(payload.x1, payload.y1);
+        const b = visualToPortraitNorm(payload.x2, payload.y2);
+        return { ...payload, x1: a.x, y1: a.y, x2: b.x, y2: b.y };
+      }
+      case 'touchDown':
+      case 'touchMove':
+      case 'touchUp': {
+        const fingers = (payload.fingers || []).map((f) => visualToPortraitNorm(f.x, f.y));
+        return { ...payload, fingers };
+      }
+      default:
+        return payload;
+    }
+  }
+
+  // Wrap PinchOverlay so dot positions are placed in the
+  // unrotated DOM-local frame even when the user's cursor (and
+  // therefore the (x, y) we receive) is in the rotated visual
+  // frame. Without this, dots drift away from the cursor as soon
+  // as the device is in landscape.
+  function makeOrientationPinchOverlay(host) {
+    const inner = new window.PinchOverlay(host);
+    return {
+      setFingers(points) {
+        if (currentOrientation === 'portrait') return inner.setFingers(points);
+        const r = host.getBoundingClientRect();
+        const w = r.width, h = r.height;
+        const remapped = points.map(({ x, y }) => visualToUnrotatedLocalPx(x, y, w, h));
+        return inner.setFingers(remapped);
+      },
+      clear() { inner.clear(); },
+    };
   }
 
   // Wire host-keyboard → simulator. Focus-gated: while the screen
@@ -392,6 +497,12 @@
       const cycle = orientationCycle();
       orientationIndex = (orientationIndex + 1) % cycle.length;
       const value = cycle[orientationIndex];
+      // Mirror the rotation in the UI immediately. The CSS
+      // transform on `#nativeDeviceFrame > div` rotates the bezel
+      // + canvas as one unit, while the input + overlay wrappers
+      // remap coords back to portrait so taps still land on the
+      // iOS element under the cursor.
+      applyOrientation(value);
       const url = '/simulators/' + encodeURIComponent(udid)
                 + '/orientation?value=' + encodeURIComponent(value);
       fetch(url, { method: 'POST' }).catch(() => { /* best-effort */ });
