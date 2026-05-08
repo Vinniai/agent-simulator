@@ -354,6 +354,13 @@
       if (axInspector.isEnabled()) axInspector.disable();
       else axInspector.enable();
     };
+    // Sidebar-view jump — bounce out of focus mode and into the
+    // inline `startStream` layout on `/simulators`. The hash is
+    // the cue sim-stream.js reads on load to auto-open the same
+    // device's stream view without an extra click.
+    window.__nativeOpenSidebarView = () => {
+      location.href = '/simulators#stream=' + encodeURIComponent(udid);
+    };
   }
 
   // Surface a selected AX node in the floating `#nativeAxHost`

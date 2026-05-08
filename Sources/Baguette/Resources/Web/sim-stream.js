@@ -511,8 +511,46 @@
   }
 
   // --- Affordance handler ---
+  // Stream click on the list page navigates to `/simulators/<udid>`
+  // — the focus-mode page owned by sim-native.js — instead of
+  // swapping the inline #simPluginView in place. The deep-link route
+  // is the canonical "stream this device" surface (browser back
+  // returns to the list, share-link works, no inline-view flash).
   window.simAffordanceHandlers = window.simAffordanceHandlers || {};
-  window.simAffordanceHandlers['stream'] = (id, name) => startStream(id, name);
+  window.simAffordanceHandlers['stream'] = (id) => {
+    location.href = '/simulators/' + encodeURIComponent(id);
+  };
+
+  // --- Hash trigger ---
+  // Focus mode (sim-native.js) exposes a "sidebar view" floating
+  // button that navigates here with `#stream=<udid>`. When that
+  // hash is present on load, auto-open the inline stream view for
+  // the named device so the user lands directly in the sidebar
+  // layout instead of having to click Stream again.
+  async function openFromHash() {
+    const match = location.hash.match(/^#stream=([^&]+)/);
+    if (!match) return;
+    const udid = decodeURIComponent(match[1]);
+    if (!udid) return;
+    history.replaceState(null, '', location.pathname + location.search);
+    let name = 'Simulator';
+    try {
+      const r = await fetch('/simulators.json', { cache: 'no-store' });
+      if (r.ok) {
+        const json = await r.json();
+        const all = (json.running || []).concat(json.available || []);
+        const hit = all.find((d) => (d.id || d.udid) === udid);
+        if (hit && hit.name) name = hit.name;
+      }
+    } catch (_) { /* fall through with default name */ }
+    startStream(udid, name);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', openFromHash, { once: true });
+  } else {
+    openFromHash();
+  }
 
   console.log('[ASC Pro] sim-stream.js loaded (modular)');
 })();
