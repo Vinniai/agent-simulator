@@ -205,11 +205,20 @@
      * @param {PinchOverlay} [opts.overlay]
      * @param {(msg:string)=>void} [opts.log]
      */
-    constructor({ el, input, overlay, log }) {
+    constructor({ el, input, overlay, log, getOrientation }) {
       this.el = el;
       this.input = input;
       this.overlay = overlay;
       this.log = log || (() => {});
+      // Returns the current device orientation so the edge-stream
+      // detector knows which visual edge holds the home indicator
+      // — bottom for portrait/landscape, top for
+      // portrait-upside-down (iOS in raw=2 doesn't rotate the
+      // home-indicator hot zone in our headless setup, so the
+      // pill renders at portrait-bottom of the framebuffer which
+      // after our 180° canvas rotation appears at the user's
+      // visual top).
+      this.getOrientation = getOrientation || (() => 'portrait');
       this._handlers = [];
       // Shared with _attachOptionHoverPreview so the preview pauses while a
       // real gesture is streaming.
@@ -311,18 +320,27 @@
         const mode = modeOf(e);
         this._dragActive = true;
 
-        // Edge gesture from the bottom of the device screen.
-        // Stream `touch1-*` events with `edge: 'bottom'`; the
-        // server's `IOHIDDigitizerDispatch` patches the
-        // `IndigoHIDEdge` byte and iOS animates the home /
-        // app-switcher preview in real time.
+        // Edge gesture from the user's-visual-bottom of the
+        // device screen. Stream `touch1-*` events with
+        // `edge: 'bottom'`; the server's `IOHIDDigitizerDispatch`
+        // patches the `IndigoHIDEdge` byte and iOS animates the
+        // home / app-switcher preview in real time. Which
+        // viewport edge counts as "user's visual bottom" depends
+        // on the current orientation — for portrait-upside-down
+        // it's the visual TOP of the rotated canvas (iOS's
+        // recognizer doesn't rotate its hot zone for raw=2 in
+        // our headless setup).
         const yNorm = r.height ? (vy / r.height) : 0;
-        if (mode === 'tap-or-swipe' && yNorm >= EDGE_BAND_NORM) {
+        const ori = this.getOrientation();
+        const inEdgeBand = ori === 'portrait-upside-down'
+          ? yNorm <= (1 - EDGE_BAND_NORM)
+          : yNorm >= EDGE_BAND_NORM;
+        if (mode === 'tap-or-swipe' && inEdgeBand) {
           const fx = vx / r.width;
           const fy = vy / r.height;
           state = { mode: 'edge-stream' };
           this.input.touchDown([{ x: fx, y: fy }], { edge: 'bottom' });
-          this.log('edge stream begin');
+          this.log('edge stream begin (' + ori + ', yNorm=' + yNorm.toFixed(2) + ')');
           return;
         }
 

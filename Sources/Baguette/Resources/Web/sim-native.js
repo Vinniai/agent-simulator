@@ -145,31 +145,24 @@
   // the same CSS rotate transforms the bezel uses.
   function visualToPortraitEdge(edge) {
     if (!edge) return edge;
-    // Strict rotation-by-orientation mapping — the edge name
-    // rotates by the same angle the coord transform uses, so the
-    // flag matches the physical edge the touch coords land on:
+    // Empirical mapping (verified against iOS 26.4 home-indicator
+    // recognizer in our headless setup):
     //   portrait                : bottom → bottom
-    //   landscape-left  (raw=4) : bottom → right   (verified)
-    //   landscape-right (raw=3) : bottom → left    (does NOT fire — known limitation)
-    //   portrait-upside-down    : bottom → top
+    //   landscape-left  (raw=4) : bottom → right   (recognizer rotates with orientation; verified)
+    //   landscape-right (raw=3) : bottom → left    (recognizer not wired — known limitation)
+    //   portrait-upside-down    : bottom → bottom  (recognizer does NOT rotate; expects portrait-bottom + edge=bottom)
     //
-    // Empirically: `landscape-left` with `edge=right` fires the
-    // home gesture; `landscape-right` does not fire on either
-    // `edge=left` (the symmetric mapping) or `edge=right`. The
-    // asymmetry appears to be inside iOS — the home-indicator
-    // recognizer for `UIDeviceOrientationLandscapeLeft (raw=3)`
-    // doesn't fully wire up in our headless setup (no
-    // `SimDisplayChromeView` attachment). Browser canvas drags
-    // from the visual bottom in `landscape-right` won't fire the
-    // home gesture; rotate to `landscape-left` or run
-    // `baguette press --button swipe-to-home` against a portrait
-    // device instead.
+    // The portrait-upside-down case is the asymmetry: iOS rotates
+    // the recognizer hot zone for landscape-left but *not* for
+    // upside-down. The user's visual-top drag in our 180°-rotated
+    // view maps to portrait-bottom via the coordinate transform,
+    // which is what the (non-rotated) recognizer expects, so we
+    // keep `edge: bottom` rather than rotating it to `top`.
     const rotateCCW = { bottom: 'left', left: 'top', top: 'right', right: 'bottom' };
     const rotateCW  = { bottom: 'right', right: 'top', top: 'left', left: 'bottom' };
-    const rotate180 = { bottom: 'top', top: 'bottom', left: 'right', right: 'left' };
     switch (currentOrientation) {
       case 'landscape-right':       return rotateCCW[edge] || edge;
-      case 'portrait-upside-down':  return rotate180[edge] || edge;
+      case 'portrait-upside-down':  return edge;  // recognizer doesn't rotate
       case 'landscape-left':        return rotateCW[edge]  || edge;
       default:                      return edge;
     }
@@ -254,6 +247,16 @@
     wireUnload();
     applyStoredTheme();
     reflectActionable();
+
+    // Reset iOS to portrait on page boot. Without this, a page
+    // reload would leave our JS state at `currentOrientation =
+    // 'portrait'` (rotation degrees 0) while iOS still holds
+    // whatever orientation it was set to in a previous session
+    // — the bezel renders un-rotated but the iOS framebuffer
+    // shows UI from the stale orientation, which looks upside
+    // down to the user.
+    fetch('/simulators/' + encodeURIComponent(udid) + '/orientation?value=portrait',
+          { method: 'POST' }).catch(() => { /* best-effort */ });
   }
 
   // Actionable-bezel toggle. Off by default — the bezel renders
@@ -455,6 +458,7 @@
       input: simInput,
       overlay: pinchOverlay,
       log,
+      getOrientation: () => currentOrientation,
     });
     mouseSource.attach();
   }
