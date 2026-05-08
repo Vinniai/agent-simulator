@@ -247,28 +247,18 @@ production path — taps / swipes / touches go through
   rotated, the user's *visual* bottom corresponds to a different
   *physical* edge in the portrait coord frame the message uses.
   The browser's orientation transport rotates the `edge` name
-  alongside the coords (`landscape-right`: visual-bottom →
-  physical-left, etc.) so iOS's gesture recognizer sees a touch +
-  edge flag pair on the matching physical edge. CLI / wire
-  callers passing `edge: bottom` directly while the device is
-  rotated will *not* fire the home gesture — they need to send
-  the orientation-appropriate edge name themselves, or use the
-  `swipe-to-home` / `app-switcher` button shortcuts (which
-  always run their canned shapes from the device's portrait
-  bottom regardless of current orientation, then iOS handles the
-  rotation internally).
-- **`landscape-right` (raw=3) home gesture is not yet working.**
-  Empirically: `landscape-left` (raw=4, home on left) fires the
-  home gesture cleanly with `edge=right` flagged on touches at
-  portrait-right. `landscape-right` (raw=3, home on right) does
-  *not* fire on either `edge=left` (the symmetric mapping) or
-  `edge=right` (the alternative we tested). The gesture
-  recognizer for that specific orientation appears to depend on
-  state we don't fully replicate in our headless setup
-  (likely a `SimDisplayChromeView` attachment). Workaround:
-  rotate to `landscape-left` if you need a landscape edge gesture,
-  or rotate back to `portrait` and use `baguette press --button
-  swipe-to-home` / `--button app-switcher`.
+  alongside the coords so iOS's gesture recognizer sees a touch +
+  edge flag pair on the matching physical edge. Verified mapping
+  for a visual-bottom drag: `portrait` → `bottom`,
+  `landscape-left` (raw=4) → `right`, `portrait-upside-down`
+  (raw=2) → `right`, `landscape-right` (raw=3) → `top`.
+  CLI / wire callers passing `edge: bottom` directly while the
+  device is rotated will *not* fire the home gesture — they need
+  to send the orientation-appropriate edge name from the table
+  above, or use the `swipe-to-home` / `app-switcher` button
+  shortcuts (which always run their canned shapes from the
+  device's portrait bottom regardless of current orientation,
+  then iOS handles the rotation internally).
 - **No carplay / external display targets** — `target = 0x32`
   (touch digitizer) is hard-coded. The dispatch helper would need
   a target parameter to support those, plus a way to route
