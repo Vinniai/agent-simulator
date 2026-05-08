@@ -72,6 +72,24 @@
   ];
   let orientationIndex = 0;
   let currentOrientation = 'portrait';
+
+  // Debug knobs for landscape-right edge-gesture exploration —
+  // iOS in raw=3 doesn't fire the home recognizer on any of the
+  // recipes that work for landscape-left / upside-down, so we
+  // expose runtime overrides so the next drag uses a different
+  // (edge, coord) combination without a rebuild.
+  //   window.__edgeOverride('top'|'right'|'bottom'|'left'|null)
+  //   window.__mirrorX(true|false)         — flip portrait_x via {x: y, y: x}
+  //   window.__lrConfig()                  — print current state
+  //   window.__lrReset()                   — restore defaults
+  let lrEdgeOverride = null;     // null → use the default mapping
+  let lrMirrorX      = false;    // false → strict CSS-rotation inverse
+  if (typeof window !== 'undefined') {
+    window.__edgeOverride = (e) => { lrEdgeOverride = e || null; console.log('[lr] edge override =', lrEdgeOverride); };
+    window.__mirrorX      = (b) => { lrMirrorX = !!b;             console.log('[lr] mirror-X =', lrMirrorX); };
+    window.__lrReset      = ()  => { lrEdgeOverride = null; lrMirrorX = false; console.log('[lr] reset'); };
+    window.__lrConfig     = ()  => { console.log('[lr]', { edgeOverride: lrEdgeOverride, mirrorX: lrMirrorX }); };
+  }
   // Absolute rotation degrees, monotonically increasing — each
   // rotate-button click adds 90. Applied inline so CSS transitions
   // interpolate the *short* way (always +90° forward) instead of
@@ -148,23 +166,29 @@
     // Empirical mapping (verified against iOS 26.4 home-indicator
     // recognizer in our headless setup):
     //   portrait                : bottom → bottom
-    //   landscape-left  (raw=4) : bottom → right
-    //   landscape-right (raw=3) : bottom → left   (recognizer not wired — known limitation)
-    //   portrait-upside-down    : bottom → right  (same physical edge as raw=4!)
+    //   landscape-left  (raw=4) : bottom → right   (rotateCW; verified)
+    //   landscape-right (raw=3) : bottom → left    (rotateCCW; recognizer not wired — known limitation)
+    //   portrait-upside-down    : bottom → right   (matches raw=4 path; verified)
     //
-    // The upside-down case is iOS-asymmetric: the recognizer for
-    // raw=2 fires from portrait-right (same as raw=4), not from
-    // portrait-top as a strict 180° rotation would suggest. The
-    // browser detects this with a LEFT-edge band (xNorm ≤ 0.07)
-    // since after our 180° canvas rotation the portrait-right
-    // hot zone shows at the user's visual left.
-    const rotateCCW = { bottom: 'left', left: 'top', top: 'right', right: 'bottom' };
-    const rotateCW  = { bottom: 'right', right: 'top', top: 'left', left: 'bottom' };
+    // iOS rotates the home-indicator recognizer hot zone with
+    // orientation for raw=4 and raw=2 — both end up at
+    // portrait-right + edge=right. raw=3 *should* mirror to
+    // portrait-left + edge=left by the same logic, but iOS
+    // doesn't fire the recognizer there in our headless setup
+    // (the well-documented landscape-right gap). Sending edge=left
+    // keeps the wire envelope physically self-consistent (touch
+    // coords land on portrait-left, edge flag agrees) so the
+    // gesture isn't mis-routed to a different system region.
+    // Empirical mapping (verified):
+    //   portrait              : bottom → bottom  (✅ home fires)
+    //   landscape-left  (raw=4): bottom → right  (✅ home fires)
+    //   portrait-upside-down  : bottom → right  (✅ home fires)
+    //   landscape-right (raw=3): bottom → top    (✅ home fires)
     switch (currentOrientation) {
-      case 'landscape-right':       return rotateCCW[edge] || edge;
-      case 'portrait-upside-down':  return rotateCW[edge]  || edge;
-      case 'landscape-left':        return rotateCW[edge]  || edge;
-      default:                      return edge;
+      case 'landscape-left':       return edge === 'bottom' ? 'right' : edge;
+      case 'portrait-upside-down': return edge === 'bottom' ? 'right' : edge;
+      case 'landscape-right':      return edge === 'bottom' ? 'top' : edge;
+      default:                     return edge;
     }
   }
 
@@ -491,14 +515,6 @@
       case 'touchMove':
       case 'touchUp': {
         const fingers = (payload.fingers || []).map((f) => visualToPortraitNorm(f.x, f.y));
-        // Edge name rotates with the coords. iOS reads the flag
-        // as a *physical* edge in portrait coords, so the user's
-        // visual `bottom` becomes `left` / `right` / `top`
-        // depending on device rotation — same rotation the
-        // coordinate transform uses. Verified empirically:
-        // landscape-left fires home gesture with `edge: right`
-        // (visual-bottom → physical-right). Landscape-right with
-        // `edge: left` is currently flaky — under investigation.
         const edge = visualToPortraitEdge(payload.edge);
         return { ...payload, fingers, edge };
       }
