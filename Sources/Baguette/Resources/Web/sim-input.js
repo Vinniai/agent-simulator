@@ -321,16 +321,16 @@
         this._dragActive = true;
 
         // Edge gesture — origin band depends on where iOS draws
-        // the home indicator after our CSS rotation, which varies
-        // by orientation:
-        //   portrait              → user's visual bottom (yNorm ≥ 0.93)
-        //   landscape-*           → user's visual bottom (yNorm ≥ 0.93,
-        //                            in the rotated bbox)
-        //   portrait-upside-down  → user's visual LEFT  (xNorm ≤ 0.07)
-        // The upside-down case is iOS-asymmetric: the recognizer
-        // for raw=2 fires from the same physical edge as raw=4
-        // (portrait-right), which after our 180° canvas rotation
-        // is the user's visual left. Detection mirrors that.
+        // the home indicator visually after our CSS rotation:
+        //   portrait              → visual bottom (yNorm ≥ 0.93)
+        //   landscape-left  (+90) → visual bottom (yNorm ≥ 0.93)
+        //   landscape-right (−90) → visual bottom (yNorm ≥ 0.93)  *iOS recognizer not wired — see touches.md*
+        //   portrait-upside-down  → visual left  (xNorm ≤ 0.07)
+        // The rotated-bbox bottom corresponds to the user's visual
+        // bottom in each orientation; only upside-down sees the
+        // hot zone at a different visual edge because iOS routes
+        // its raw=2 recognizer to portrait-right (= visual left
+        // after our 180° rotation).
         const yNorm = r.height ? (vy / r.height) : 0;
         const xNorm = r.width  ? (vx / r.width)  : 0;
         const ori = this.getOrientation();
@@ -494,12 +494,18 @@
       this._on(this.el, 'mouseleave', end);
     }
 
-    _ripple(x, y) {
+    _ripple(clientX, clientY) {
+      // Position in viewport coords (`position: fixed`) so the
+      // ripple lands where the cursor actually is, regardless of
+      // any CSS rotation applied to `this.el`'s ancestors. A
+      // child of `this.el` would be rotated alongside the bezel
+      // and visually drift away from the click point in
+      // landscape / upside-down orientations.
       const r = document.createElement('div');
-      r.style.cssText = `position:absolute;border:2px solid #6366f1;border-radius:50%;
+      r.style.cssText = `position:fixed;border:2px solid #6366f1;border-radius:50%;
         transform:translate(-50%,-50%);pointer-events:none;
-        left:${x}px;top:${y}px;animation:simRipple 0.5s ease-out forwards;z-index:10;`;
-      this.el.appendChild(r);
+        left:${clientX}px;top:${clientY}px;animation:simRipple 0.5s ease-out forwards;z-index:10000;`;
+      document.body.appendChild(r);
       setTimeout(() => r.remove(), 500);
     }
 
