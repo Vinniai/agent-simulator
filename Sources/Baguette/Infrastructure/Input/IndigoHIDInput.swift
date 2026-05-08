@@ -326,7 +326,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
             let y = yStart + (yEnd - yStart) * t
             if sendMouseEdge(
                 client: client, p1: CGPoint(x: xN, y: y), p2: nil,
-                eventType: Self.nsEventDown, edge: Self.edgeBottom
+                eventType: Self.nsEventDragged, edge: Self.edgeBottom
             ) { ok += 1 }
             usleep(stepUs)
         }
@@ -340,7 +340,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
             for _ in 0..<5 {
                 _ = sendMouseEdge(
                     client: client, p1: CGPoint(x: xN, y: yEnd), p2: nil,
-                    eventType: Self.nsEventDown, edge: Self.edgeBottom
+                    eventType: Self.nsEventDragged, edge: Self.edgeBottom
                 )
                 usleep(80_000)
             }
