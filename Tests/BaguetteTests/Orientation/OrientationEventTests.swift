@@ -74,3 +74,81 @@ struct OrientationEventTests {
         #expect(uint32(in: raw, at: 0x08) == 0)                       // input unchanged
     }
 }
+
+/// `OrientationEvent.send` is the pure orchestrator: lookup port,
+/// build + patch the buffer, hand it off. The two collaborators
+/// (`lookupPort`, `deliver`) abstract the irreducible mach IPC so the
+/// Domain layer stays free of `mach_msg_header_t` / `kern_return_t`.
+@Suite("OrientationEvent.send")
+struct OrientationEventSendTests {
+
+    private func uint32(in data: Data, at offset: Int) -> UInt32 {
+        data.withUnsafeBytes { raw in
+            raw.load(fromByteOffset: offset, as: UInt32.self)
+        }
+    }
+
+    @Test func `looks up PurpleWorkspacePort by exact service name`() {
+        var requestedName: String?
+        _ = OrientationEvent.send(
+            orientation: .portrait,
+            lookupPort: { name in requestedName = name; return 0xDEAD_BEEF },
+            deliver: { _ in true }
+        )
+        #expect(requestedName == "PurpleWorkspacePort")
+    }
+
+    @Test func `delivers a 112-byte buffer with the looked-up port patched at 0x08 and the orientation payload at 0x4C`() {
+        var delivered: Data?
+        _ = OrientationEvent.send(
+            orientation: .landscapeRight,
+            lookupPort: { _ in 0x1234_5678 },
+            deliver: { data in delivered = data; return true }
+        )
+        let buf = try! #require(delivered)
+        #expect(buf.count == 112)
+        #expect(uint32(in: buf, at: 0x08) == 0x1234_5678)
+        #expect(uint32(in: buf, at: 0x18) == (50 | 0x20000))
+        #expect(uint32(in: buf, at: 0x4C) == 3)
+    }
+
+    @Test func `returns false (without invoking deliver) when lookup yields nil`() {
+        var delivered = false
+        let ok = OrientationEvent.send(
+            orientation: .portrait,
+            lookupPort: { _ in nil },
+            deliver: { _ in delivered = true; return true }
+        )
+        #expect(!ok)
+        #expect(!delivered)
+    }
+
+    @Test func `returns false (without invoking deliver) when lookup yields a null port (0)`() {
+        var delivered = false
+        let ok = OrientationEvent.send(
+            orientation: .portrait,
+            lookupPort: { _ in 0 },
+            deliver: { _ in delivered = true; return true }
+        )
+        #expect(!ok)
+        #expect(!delivered)
+    }
+
+    @Test func `returns false when lookup succeeds but deliver fails`() {
+        let ok = OrientationEvent.send(
+            orientation: .portrait,
+            lookupPort: { _ in 42 },
+            deliver: { _ in false }
+        )
+        #expect(!ok)
+    }
+
+    @Test func `returns true when lookup yields a port and deliver succeeds`() {
+        let ok = OrientationEvent.send(
+            orientation: .portraitUpsideDown,
+            lookupPort: { _ in 42 },
+            deliver: { _ in true }
+        )
+        #expect(ok)
+    }
+}

@@ -20,6 +20,7 @@ struct CommandParsingTests {
             "tap", "swipe", "pinch", "pan", "press",
             "key", "type",
             "chrome", "screenshot", "describe-ui", "logs", "serve",
+            "orientation",
         ])
     }
 

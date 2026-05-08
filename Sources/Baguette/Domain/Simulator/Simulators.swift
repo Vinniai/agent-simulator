@@ -31,6 +31,11 @@ protocol Simulators: AnyObject, Sendable {
     /// a fresh handle; multiple parallel subscribers are supported
     /// (each spawns its own `/usr/bin/log stream` child).
     func logs(for simulator: Simulator) -> any LogStream
+
+    /// Produce an `Orientation` surface for the simulator.
+    /// Each call returns a fresh handle; the underlying GSEvent
+    /// dispatch is stateless, so allocations are trivial.
+    func orientation(for simulator: Simulator) -> any Orientation
 }
 
 extension Simulators {

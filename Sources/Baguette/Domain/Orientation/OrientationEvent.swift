@@ -55,6 +55,31 @@ public enum OrientationEvent {
         return copy
     }
 
+    /// Drive the full GSEvent send: look up the `PurpleWorkspacePort`
+    /// in the simulator's bootstrap namespace, patch the buffer, and
+    /// hand it to `deliver` for `mach_msg_send`. The two callbacks
+    /// abstract the irreducible system calls so this orchestrator
+    /// stays in Domain (no Darwin.Mach types leak in); the
+    /// Infrastructure adapter wraps `SimDevice.lookup(_:error:)` and
+    /// `mach_msg_send` to satisfy them.
+    ///
+    /// Returns `false` (without invoking `deliver`) when the port
+    /// lookup yields `nil` or `0` — both mean "the simulator hasn't
+    /// vended a PurpleWorkspacePort yet" (e.g. not booted, or booted
+    /// but pre-springboard). Otherwise returns whatever `deliver`
+    /// returns.
+    public static func send(
+        orientation: DeviceOrientation,
+        lookupPort: (String) -> UInt32?,
+        deliver: (Data) -> Bool
+    ) -> Bool {
+        guard let port = lookupPort("PurpleWorkspacePort"), port != 0 else {
+            return false
+        }
+        let buffer = patched(machMessage(orientation: orientation), remotePort: port)
+        return deliver(buffer)
+    }
+
     private static func write(_ value: UInt32, at offset: Int, into bytes: inout [UInt8]) {
         var le = value.littleEndian
         withUnsafeBytes(of: &le) { src in

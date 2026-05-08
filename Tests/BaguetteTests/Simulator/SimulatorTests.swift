@@ -115,6 +115,20 @@ struct SimulatorTests {
         _ = input  // silence unused
     }
 
+    @Test func `orientation delegates to the host and round-trips set(_:)`() {
+        let host = MockSimulators()
+        let stubOrientation = MockOrientation()
+        given(host).orientation(for: .any).willReturn(stubOrientation)
+        given(stubOrientation).set(.any).willReturn(true)
+        let s = Simulator(udid: "u1", name: "X", state: .booted, host: host)
+
+        let ok = s.orientation().set(.landscapeRight)
+
+        #expect(ok)
+        verify(host).orientation(for: .value(s)).called(1)
+        verify(stubOrientation).set(.value(.landscapeRight)).called(1)
+    }
+
     @Test func `chrome looks up assets by device name in the chromes aggregate`() {
         let host = MockSimulators()
         let chromes = MockChromes()

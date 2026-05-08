@@ -78,6 +78,10 @@ final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
         SimDeviceLogStream(udid: simulator.udid, host: self)
     }
 
+    func orientation(for simulator: Simulator) -> any Orientation {
+        PurpleEventOrientation(udid: simulator.udid, host: self)
+    }
+
     // MARK: - resolution
 
     /// Look up the underlying `SimDevice` ObjC object for a UDID.

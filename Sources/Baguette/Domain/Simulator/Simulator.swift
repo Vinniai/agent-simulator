@@ -102,6 +102,11 @@ struct Simulator: Sendable {
         host.logs(for: self)
     }
 
+    /// Drive this simulator's interface orientation.
+    func orientation() -> any Orientation {
+        host.orientation(for: self)
+    }
+
     /// Resolve the bezel layout + composite image for this simulator.
     /// Mirrors `tap.execute(on: input)` — chrome lookup is a separate
     /// concern from the runtime, so the aggregate is taken as a
