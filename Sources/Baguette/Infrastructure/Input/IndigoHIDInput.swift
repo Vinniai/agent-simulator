@@ -292,11 +292,17 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
     /// Synthesise the Face ID home-indicator gesture: a single-finger
     /// swipe up from the bottom edge with `IndigoHIDEdge.bottom`
     /// flagged on every event. `hold = false` flicks fast (lift at
-    /// `y = 0.35`) and lands as Home; `hold = true` settles for ~400
-    /// ms at the midpoint, which iOS recognises as App Switcher.
+    /// `y ≈ 0.30`) and lands as Home; `hold = true` settles for
+    /// ~400 ms at the midpoint, which iOS recognises as App Switcher.
     /// Coords are normalised; `IndigoHIDMessageForMouseNSEvent`
     /// scales by NSSize(1.0, 1.0) so the points are interpreted as
     /// unit fractions of the device screen.
+    ///
+    /// Move events use `nsEventType = 1` (LeftMouseDown), NOT 6
+    /// (LeftMouseDragged) — the edge variant of the C function
+    /// returns nil for any eventType ≠ {1, 2}, so passing 6 silently
+    /// drops every interpolated step and iOS only ever sees a
+    /// down + up at the same coordinate.
     private func swipeFromBottomEdge(on client: AnyObject, hold: Bool) -> Bool {
         guard mouseEdgeFn != nil else {
             log("[hid] swipe-from-bottom-edge — mouseEdgeFn unresolved")
@@ -320,7 +326,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
             let y = yStart + (yEnd - yStart) * t
             if sendMouseEdge(
                 client: client, p1: CGPoint(x: xN, y: y), p2: nil,
-                eventType: Self.nsEventDragged, edge: Self.edgeBottom
+                eventType: Self.nsEventDown, edge: Self.edgeBottom
             ) { ok += 1 }
             usleep(stepUs)
         }
@@ -334,7 +340,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
             for _ in 0..<5 {
                 _ = sendMouseEdge(
                     client: client, p1: CGPoint(x: xN, y: yEnd), p2: nil,
-                    eventType: Self.nsEventDragged, edge: Self.edgeBottom
+                    eventType: Self.nsEventDown, edge: Self.edgeBottom
                 )
                 usleep(80_000)
             }
