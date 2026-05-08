@@ -49,7 +49,8 @@ struct IndigoHIDInputErrorTests {
         let ok = input.touch1(
             phase: .down,
             at: Point(x: 10, y: 20),
-            size: Size(width: 100, height: 200)
+            size: Size(width: 100, height: 200),
+            edge: nil
         )
         #expect(!ok)
     }

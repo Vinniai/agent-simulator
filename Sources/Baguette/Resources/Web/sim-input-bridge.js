@@ -62,15 +62,22 @@
 
   // touchDown/Move/Up + N fingers → touch1-* / touch2-*. Other counts
   // are dropped (Baguette only supports 1 or 2 simultaneous fingers).
+  // An optional `edge` field on the SimInput payload (`bottom`,
+  // `top`, `left`, `right`) propagates to touch1 envelopes so the
+  // server-side digitizer dispatch can flag the touch as a system
+  // edge gesture and iOS animates the home / app-switcher preview
+  // live during the drag.
   function phasedTouch(p, base, px, py) {
     const phase = p.kind.replace('touch', '').toLowerCase();
     const fingers = p.fingers || [];
     if (fingers.length === 1) {
-      return {
+      const env = {
         type: `touch1-${phase}`,
         x: px(fingers[0].x), y: py(fingers[0].y),
         ...base
       };
+      if (p.edge) env.edge = p.edge;
+      return env;
     }
     if (fingers.length === 2) {
       return {

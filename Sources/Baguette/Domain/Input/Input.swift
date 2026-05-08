@@ -8,7 +8,7 @@ import Mockable
 protocol Input: Sendable {
     func tap(at point: Point, size: Size, duration: Double) -> Bool
     func swipe(from start: Point, to end: Point, size: Size, duration: Double) -> Bool
-    func touch1(phase: GesturePhase, at point: Point, size: Size) -> Bool
+    func touch1(phase: GesturePhase, at point: Point, size: Size, edge: DeviceEdge?) -> Bool
     func touch2(phase: GesturePhase, first: Point, second: Point, size: Size) -> Bool
     /// Press-and-hold a hardware button. `duration` is the hold time
     /// in seconds; pass `0` for a default short tap. The adapter

@@ -91,14 +91,43 @@ struct Touch1Tests {
 
     @Test func `executes against the input surface`() {
         let input = MockInput()
-        given(input).touch1(phase: .any, at: .any, size: .any).willReturn(true)
+        given(input).touch1(phase: .any, at: .any, size: .any, edge: .any).willReturn(true)
         let g = Touch1(phase: .up, at: Point(x: 5, y: 6), size: Size(width: 100, height: 200))
 
         _ = g.execute(on: input)
         verify(input).touch1(
             phase: .value(.up),
             at:    .value(Point(x: 5, y: 6)),
-            size:  .value(Size(width: 100, height: 200))
+            size:  .value(Size(width: 100, height: 200)),
+            edge:  .value(nil)
+        ).called(1)
+    }
+
+    @Test func `parses optional edge field`() throws {
+        let g = try Touch1.parse([
+            "phase": "down", "x": 0.5, "y": 0.99,
+            "width": 100, "height": 200, "edge": "bottom"
+        ])
+        #expect(g == Touch1(phase: .down,
+                            at: Point(x: 0.5, y: 0.99),
+                            size: Size(width: 100, height: 200),
+                            edge: .bottom))
+    }
+
+    @Test func `executes with edge passed through`() {
+        let input = MockInput()
+        given(input).touch1(phase: .any, at: .any, size: .any, edge: .any).willReturn(true)
+        let g = Touch1(phase: .down,
+                       at: Point(x: 0.5, y: 0.99),
+                       size: Size(width: 100, height: 200),
+                       edge: .bottom)
+
+        _ = g.execute(on: input)
+        verify(input).touch1(
+            phase: .value(.down),
+            at:    .value(Point(x: 0.5, y: 0.99)),
+            size:  .value(Size(width: 100, height: 200)),
+            edge:  .value(.bottom)
         ).called(1)
     }
 }

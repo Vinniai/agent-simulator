@@ -62,34 +62,35 @@
     // pending fingers instead of queueing, so we never lag behind the
     // cursor by more than ~one RTT.
 
-    touchDown(fingers) {
+    touchDown(fingers, opts) {
       return this._chainTouch(() =>
-        this._post({ kind: 'touchDown', fingers }, { size: true }));
+        this._post({ kind: 'touchDown', fingers, edge: opts?.edge }, { size: true }));
     }
 
-    touchMove(fingers) {
+    touchMove(fingers, opts) {
       if (this._pendingMove) {
         this._pendingMove.fingers = fingers;
+        this._pendingMove.edge    = opts?.edge;
         return this._touchChain;
       }
-      const slot = { fingers };
+      const slot = { fingers, edge: opts?.edge };
       this._pendingMove = slot;
       return this._chainTouch(() => {
         this._pendingMove = null;
-        return this._post({ kind: 'touchMove', fingers: slot.fingers }, { size: true });
+        return this._post({ kind: 'touchMove', fingers: slot.fingers, edge: slot.edge }, { size: true });
       });
     }
 
-    touchUp(fingers) {
+    touchUp(fingers, opts) {
       // Flush any pending move first so up never overtakes a coalesced move.
       if (this._pendingMove) {
         const slot = this._pendingMove;
         this._pendingMove = null;
         this._chainTouch(() =>
-          this._post({ kind: 'touchMove', fingers: slot.fingers }, { size: true }));
+          this._post({ kind: 'touchMove', fingers: slot.fingers, edge: slot.edge }, { size: true }));
       }
       return this._chainTouch(() =>
-        this._post({ kind: 'touchUp', fingers }, { size: true }));
+        this._post({ kind: 'touchUp', fingers, edge: opts?.edge }, { size: true }));
     }
 
     _chainTouch(thunk) {
@@ -294,30 +295,15 @@
       const DRAG_THRESHOLD_PX = 8;
       let lastMoveMs = 0;
 
-      // Edge-gesture thresholds. iOS's home-vs-app-switcher
-      // discriminator is gesture *duration*: fast flick from bottom
-      // → home, slow drag-and-hold from bottom → app switcher.
-      // We mirror that signal client-side and dispatch the matching
-      // button command on release. The server-side button handlers
-      // run real iOS gesture recognition via the IOHIDDigitizer
-      // dispatch path (parent + finger child + trackpad wrapper +
-      // target/edge byte patches), so the iOS preview animations
-      // play out for real once the button arrives — the JS layer
-      // just decides which button to fire, while the actual
-      // gesture happens on the server.
-      //   • EDGE_BAND_NORM    — bottom 7% of the screen counts as
-      //                         "started on the home indicator".
-      //   • SWITCHER_MIN_MS   — total gesture time above this flips
-      //                         home → app switcher.
-      //   • SWITCHER_MIN_UP   — minimum upward travel (norm) for the
-      //                         slow path to count as App Switcher.
-      //   • HOME_MIN_TRAVEL   — minimum upward travel for a quick
-      //                         flick to count as Home; shorter
-      //                         drags are cancelled.
-      const EDGE_BAND_NORM   = 0.93;
-      const SWITCHER_MIN_MS  = 350;
-      const SWITCHER_MIN_UP  = 0.10;
-      const HOME_MIN_TRAVEL  = 0.18;
+      // Drag from the bottom 7% of the screen streams `touch1-*`
+      // events with `edge: 'bottom'` so the server-side digitizer
+      // dispatch flags every event with `IndigoHIDEdge.bottom`. iOS
+      // sees a real edge-gesture stream and animates the home /
+      // app-switcher preview live as the user drags — same UX as
+      // dragging in Simulator.app, no buffering until release.
+      // iOS itself decides Home vs App Switcher from velocity /
+      // dwell, so we don't need a client-side discriminator.
+      const EDGE_BAND_NORM = 0.93;
 
       this._on(this.el, 'mousedown', (e) => {
         const r = this.el.getBoundingClientRect();
@@ -325,24 +311,18 @@
         const mode = modeOf(e);
         this._dragActive = true;
 
-        // Edge gesture from the bottom of the device screen — same
-        // input vocabulary as Simulator.app's drag-from-bottom.
-        // iOS itself decides home vs app switcher based on velocity
-        // / dwell, but the edge-flagged HID path doesn't surface the
-        // gesture in our headless setup (the SimDisplay registration
-        // handshake we'd need to replicate for IndigoHIDEdge to work
-        // is non-trivial). Instead, we replicate the *decision*
-        // client-side and fire the matching button press on release:
-        // quick flick → `home`; dwell at midpoint → `app-switcher`.
-        // Both ride proven `IndigoHIDMessageForButton` paths.
+        // Edge gesture from the bottom of the device screen.
+        // Stream `touch1-*` events with `edge: 'bottom'`; the
+        // server's `IOHIDDigitizerDispatch` patches the
+        // `IndigoHIDEdge` byte and iOS animates the home /
+        // app-switcher preview in real time.
         const yNorm = r.height ? (vy / r.height) : 0;
         if (mode === 'tap-or-swipe' && yNorm >= EDGE_BAND_NORM) {
-          state = {
-            mode: 'edge-bottom',
-            startNormY: yNorm,
-            tStart: performance.now(),
-          };
-          this.log('edge gesture armed');
+          const fx = vx / r.width;
+          const fy = vy / r.height;
+          state = { mode: 'edge-stream' };
+          this.input.touchDown([{ x: fx, y: fy }], { edge: 'bottom' });
+          this.log('edge stream begin');
           return;
         }
 
@@ -385,11 +365,14 @@
         const r = this.el.getBoundingClientRect();
         const vx = e.clientX - r.left, vy = e.clientY - r.top;
 
-        if (state.mode === 'edge-bottom') {
-          // No per-move work needed — the verdict is computed at
-          // release time from total duration + travel. Stops mouse
-          // events from leaking into the regular pinch / pan / drag
-          // branches below.
+        if (state.mode === 'edge-stream') {
+          // Stream the move at the user's actual drag speed — iOS
+          // sees a real touch sequence, not a canned one, so the
+          // home-card preview animates live. Coalescing in
+          // `touchMove` keeps backpressure low if the WS is slow.
+          const fx = vx / r.width;
+          const fy = vy / r.height;
+          this.input.touchMove([{ x: fx, y: fy }], { edge: 'bottom' });
           return;
         }
 
@@ -450,24 +433,11 @@
         const r = this.el.getBoundingClientRect();
         const vx = e.clientX - r.left, vy = e.clientY - r.top;
 
-        if (state.mode === 'edge-bottom') {
-          const endNormY = r.height ? (vy / r.height) : 0;
-          const traveledUp = state.startNormY - endNormY;  // +ve = moved up
-          const elapsedMs = performance.now() - state.tStart;
-          // Slow drag-and-hold (Apple's app-switcher signal) takes
-          // long enough that even a small upward travel counts —
-          // `SWITCHER_MIN_UP` keeps a slow-but-stationary press
-          // from accidentally firing it. Otherwise treat as a
-          // quick flick and require enough travel for Home.
-          if (elapsedMs >= SWITCHER_MIN_MS && traveledUp >= SWITCHER_MIN_UP) {
-            this.input.button('app-switcher');
-            this.log(`edge swipe → app switcher (${Math.round(elapsedMs)}ms, up=${traveledUp.toFixed(2)})`);
-          } else if (traveledUp >= HOME_MIN_TRAVEL) {
-            this.input.button('home');
-            this.log(`edge swipe → home (${Math.round(elapsedMs)}ms, up=${traveledUp.toFixed(2)})`);
-          } else {
-            this.log(`edge swipe cancelled (${Math.round(elapsedMs)}ms, up=${traveledUp.toFixed(2)})`);
-          }
+        if (state.mode === 'edge-stream') {
+          const fx = vx / r.width;
+          const fy = vy / r.height;
+          this.input.touchUp([{ x: fx, y: fy }], { edge: 'bottom' });
+          this.log('edge stream end');
           state = null;
           this._dragActive = false;
           this._updatePreview();

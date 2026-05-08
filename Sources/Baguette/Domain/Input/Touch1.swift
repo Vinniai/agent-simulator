@@ -11,16 +11,25 @@ struct Touch1: Gesture, Equatable {
     let phase: GesturePhase
     let at: Point
     let size: Size
+    let edge: DeviceEdge?
+
+    init(phase: GesturePhase, at: Point, size: Size, edge: DeviceEdge? = nil) {
+        self.phase = phase
+        self.at = at
+        self.size = size
+        self.edge = edge
+    }
 
     static func parse(_ dict: [String: Any]) throws -> Touch1 {
         Touch1(
             phase: try Field.requiredPhase(dict),
             at: try Field.requiredPoint(dict, "x", "y"),
-            size: try Field.requiredSize(dict)
+            size: try Field.requiredSize(dict),
+            edge: (dict["edge"] as? String).flatMap(DeviceEdge.init(rawValue:))
         )
     }
 
     func execute(on input: any Input) -> Bool {
-        input.touch1(phase: phase, at: at, size: size)
+        input.touch1(phase: phase, at: at, size: size, edge: edge)
     }
 }

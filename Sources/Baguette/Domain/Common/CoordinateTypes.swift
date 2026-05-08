@@ -45,6 +45,17 @@ struct HIDUsage: Equatable, Hashable, Sendable {
     let usage: UInt32
 }
 
+/// Screen-edge gesture region a streaming touch belongs to. When
+/// set on a `touch1-*` envelope, the Infrastructure adapter
+/// patches the `IndigoHIDEdge` byte slot in the message so iOS's
+/// system gesture recognizers (home indicator, control centre,
+/// notification centre) see the touch as an edge gesture rather
+/// than an interior pan. Empirical bitmask values verified against
+/// `IndigoHIDMessageForMouseNSEvent`'s 7-arg signature.
+public enum DeviceEdge: String, Sendable, Equatable, Hashable, CaseIterable {
+    case left, top, right, bottom
+}
+
 /// Hardware buttons routable via the host-HID path on iOS 26.4.
 ///
 /// `home` / `lock` ride `IndigoHIDMessageForButton`. The four

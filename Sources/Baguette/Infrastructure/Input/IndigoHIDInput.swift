@@ -137,7 +137,8 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         )
     }
 
-    func touch1(phase: GesturePhase, at point: Point, size: Size) -> Bool {
+    func touch1(phase: GesturePhase, at point: Point, size: Size,
+                edge: DeviceEdge?) -> Bool {
         guard let c = ensureWarm() else { return false }
         let dispatchPhase: IOHIDDigitizerDispatch.Phase
         switch phase {
@@ -153,9 +154,17 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         // until `up`.
         if phase == .down { stickyTouchIdentifier = nextTouchIdentifier() }
         let id = stickyTouchIdentifier ?? nextTouchIdentifier()
+        let dispatchEdge: IOHIDDigitizerDispatch.Edge
+        switch edge {
+        case .left:   dispatchEdge = .left
+        case .top:    dispatchEdge = .top
+        case .right:  dispatchEdge = .right
+        case .bottom: dispatchEdge = .bottom
+        case nil:     dispatchEdge = .none
+        }
         return IOHIDDigitizerDispatch.send(
             point: normalised, identifier: id,
-            phase: dispatchPhase, edge: .none, on: c
+            phase: dispatchPhase, edge: dispatchEdge, on: c
         )
     }
 
