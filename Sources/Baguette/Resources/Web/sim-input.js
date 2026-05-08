@@ -304,15 +304,18 @@
       const DRAG_THRESHOLD_PX = 8;
       let lastMoveMs = 0;
 
-      // Drag from the bottom 7% of the screen streams `touch1-*`
-      // events with `edge: 'bottom'` so the server-side digitizer
-      // dispatch flags every event with `IndigoHIDEdge.bottom`. iOS
-      // sees a real edge-gesture stream and animates the home /
-      // app-switcher preview live as the user drags — same UX as
-      // dragging in Simulator.app, no buffering until release.
-      // iOS itself decides Home vs App Switcher from velocity /
-      // dwell, so we don't need a client-side discriminator.
+      // Drag from a screen edge streams `touch1-*` events flagged
+      // with that edge so the server-side digitizer dispatch
+      // patches the matching `IndigoHIDEdge` bit. iOS sees a real
+      // edge-gesture stream and animates the system preview live
+      // (home / app-switcher card on bottom; lock-screen cover
+      // sheet / notification center on top) — same UX as dragging
+      // in Simulator.app, no buffering until release. iOS itself
+      // decides Home vs App Switcher (bottom) and Lock Screen vs
+      // Notification Center (top by start-x) from velocity / dwell
+      // / position, so we don't need a client-side discriminator.
       const EDGE_BAND_NORM = 0.93;
+      const TOP_BAND_NORM  = 0.07;
 
       this._on(this.el, 'mousedown', (e) => {
         const r = this.el.getBoundingClientRect();
@@ -334,15 +337,17 @@
         const yNorm = r.height ? (vy / r.height) : 0;
         const xNorm = r.width  ? (vx / r.width)  : 0;
         const ori = this.getOrientation();
-        const inEdgeBand = ori === 'portrait-upside-down'
+        const inBottomBand = ori === 'portrait-upside-down'
           ? xNorm <= (1 - EDGE_BAND_NORM)
           : yNorm >= EDGE_BAND_NORM;
-        if (mode === 'tap-or-swipe' && inEdgeBand) {
+        const inTopBand = yNorm <= TOP_BAND_NORM;
+        const startEdge = inBottomBand ? 'bottom' : (inTopBand ? 'top' : null);
+        if (mode === 'tap-or-swipe' && startEdge) {
           const fx = vx / r.width;
           const fy = vy / r.height;
-          state = { mode: 'edge-stream' };
-          this.input.touchDown([{ x: fx, y: fy }], { edge: 'bottom' });
-          this.log('edge stream begin (' + ori + ', xNorm=' + xNorm.toFixed(2) + ' yNorm=' + yNorm.toFixed(2) + ')');
+          state = { mode: 'edge-stream', edge: startEdge };
+          this.input.touchDown([{ x: fx, y: fy }], { edge: startEdge });
+          this.log('edge stream begin (' + ori + ', edge=' + startEdge + ', xNorm=' + xNorm.toFixed(2) + ' yNorm=' + yNorm.toFixed(2) + ')');
           return;
         }
 
@@ -397,7 +402,7 @@
           // `touchMove` keeps backpressure low if the WS is slow.
           const fx = vx / r.width;
           const fy = vy / r.height;
-          this.input.touchMove([{ x: fx, y: fy }], { edge: 'bottom' });
+          this.input.touchMove([{ x: fx, y: fy }], { edge: state.edge });
           return;
         }
 
@@ -461,7 +466,7 @@
         if (state.mode === 'edge-stream') {
           const fx = vx / r.width;
           const fy = vy / r.height;
-          this.input.touchUp([{ x: fx, y: fy }], { edge: 'bottom' });
+          this.input.touchUp([{ x: fx, y: fy }], { edge: state.edge });
           this.log('edge stream end');
           state = null;
           this._dragActive = false;
