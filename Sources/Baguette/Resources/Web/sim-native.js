@@ -186,18 +186,12 @@
     //   landscape-right (raw=3): bottom → top    (✅ home fires)
     //
     // Top edge (lock-screen / notification-center pull-down)
-    // mostly uses the CSS-rotation inverse — iOS's status-bar
+    // uses the strict CSS-rotation inverse — iOS's status-bar
     // recognizer rotates with the device:
     //   portrait              : top → top
     //   landscape-left  (raw=4): top → left
+    //   portrait-upside-down  : top → bottom
     //   landscape-right (raw=3): top → right
-    //   portrait-upside-down  : top → left   (symmetric inverse of
-    //                                          upside-down's home
-    //                                          quirk — home fires
-    //                                          at portrait-right,
-    //                                          so lock-screen is
-    //                                          expected at portrait-
-    //                                          left)
     switch (currentOrientation) {
       case 'landscape-left':
         if (edge === 'bottom') return 'right';
@@ -205,7 +199,7 @@
         return edge;
       case 'portrait-upside-down':
         if (edge === 'bottom') return 'right';
-        if (edge === 'top')    return 'left';
+        if (edge === 'top')    return 'bottom';
         return edge;
       case 'landscape-right':
         if (edge === 'bottom') return 'top';
@@ -254,7 +248,7 @@
     const html = await fetchTemplate();
     if (!html) {
       document.body.innerHTML =
-        '<pre style="color:#f87171;padding:24px;font-family:ui-monospace">sim-native.html not found</pre>';
+          '<pre style="color:#f87171;padding:24px;font-family:ui-monospace">sim-native.html not found</pre>';
       return;
     }
     document.body.insertAdjacentHTML('beforeend', html);
@@ -273,8 +267,8 @@
     // 3. Layout drives bezel + screen rect + corner radius. Same
     //    endpoint sim-stream.js uses.
     layout = await fetch(`/simulators/${encodeURIComponent(udid)}/chrome.json`)
-      .then((r) => (r.ok ? r.json() : null))
-      .catch(() => null);
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null);
 
     // 4. Mount frame. Actionable mode is opt-in (toolbar toggle,
     //    persisted to localStorage). When on, `bezel.png?buttons=
@@ -304,7 +298,7 @@
     // shows UI from the stale orientation, which looks upside
     // down to the user.
     fetch('/simulators/' + encodeURIComponent(udid) + '/orientation?value=portrait',
-          { method: 'POST' }).catch(() => { /* best-effort */ });
+        { method: 'POST' }).catch(() => { /* best-effort */ });
   }
 
   // Actionable-bezel toggle. Off by default — the bezel renders
@@ -340,7 +334,7 @@
     const pinned = root && root.getAttribute('data-theme');
     if (pinned === 'light' || pinned === 'dark') return pinned;
     return window.matchMedia('(prefers-color-scheme: light)').matches
-      ? 'light' : 'dark';
+        ? 'light' : 'dark';
   }
 
   function setTheme(theme) {
@@ -429,19 +423,19 @@
   function fetchTemplate() {
     if (_templatePromise) return _templatePromise;
     _templatePromise = fetch('/sim-native.html')
-      .then((r) => (r.ok ? r.text() : ''))
-      .then((html) => {
-        if (!html) return '';
-        const doc = new DOMParser().parseFromString(html, 'text/html');
-        // Carry the inline <style> blocks (they live in <body>) plus
-        // the #simNativeView root. The standalone-preview <script>
-        // is ignored — boot() owns the wiring instead.
-        const styles = Array.from(doc.body.querySelectorAll('style'))
-          .map((s) => s.outerHTML).join('\n');
-        const root = doc.getElementById('simNativeView');
-        return styles + (root ? root.outerHTML : '');
-      })
-      .catch(() => '');
+        .then((r) => (r.ok ? r.text() : ''))
+        .then((html) => {
+          if (!html) return '';
+          const doc = new DOMParser().parseFromString(html, 'text/html');
+          // Carry the inline <style> blocks (they live in <body>) plus
+          // the #simNativeView root. The standalone-preview <script>
+          // is ignored — boot() owns the wiring instead.
+          const styles = Array.from(doc.body.querySelectorAll('style'))
+              .map((s) => s.outerHTML).join('\n');
+          const root = doc.getElementById('simNativeView');
+          return styles + (root ? root.outerHTML : '');
+        })
+        .catch(() => '');
     return _templatePromise;
   }
 
@@ -456,7 +450,7 @@
         return {
           name: hit.name || 'Simulator',
           runtime: hit.displayRuntime
-                || formatRuntime(hit.runtime || hit.os || ''),
+              || formatRuntime(hit.runtime || hit.os || ''),
         };
       }
     } catch (_) { /* fall through */ }
@@ -465,16 +459,16 @@
 
   function formatRuntime(raw) {
     return String(raw || '')
-      .replace('com.apple.CoreSimulator.SimRuntime.', '')
-      .replace(/^iOS-/, 'iOS ')
-      .replace(/-/g, '.');
+        .replace('com.apple.CoreSimulator.SimRuntime.', '')
+        .replace(/^iOS-/, 'iOS ')
+        .replace(/-/g, '.');
   }
 
   function pickFormat() {
     const stored = localStorage.getItem('asc.simFormat');
     if (stored === 'avcc' || stored === 'mjpeg') return stored;
     return window.FrameDecoder && window.FrameDecoder.isHardwareAvailable()
-      ? 'avcc' : 'mjpeg';
+        ? 'avcc' : 'mjpeg';
   }
 
   function wireInput(targetUdid, screenSize) {
@@ -644,7 +638,7 @@
       // iOS element under the cursor.
       applyOrientation(value);
       const url = '/simulators/' + encodeURIComponent(udid)
-                + '/orientation?value=' + encodeURIComponent(value);
+          + '/orientation?value=' + encodeURIComponent(value);
       fetch(url, { method: 'POST' }).catch(() => { /* best-effort */ });
     };
   }
@@ -662,22 +656,22 @@
     }
     panel.setAttribute('data-open', 'true');
     panel.innerHTML =
-      '<div class="ax-host-head">' +
+        '<div class="ax-host-head">' +
         '<span>Element</span>' +
         '<button class="ax-host-close" data-role="ax-close" aria-label="Dismiss">×</button>' +
-      '</div>' +
-      '<div data-role="ax-body"></div>';
+        '</div>' +
+        '<div data-role="ax-body"></div>';
     panel.querySelector('[data-role="ax-close"]').addEventListener('click', () => {
       panel.removeAttribute('data-open');
       panel.innerHTML = '';
     });
     window.AXInspector.renderSelectionInto(
-      panel.querySelector('[data-role="ax-body"]'),
-      node,
-      {
-        send: (payload) => session && session.send(payload),
-        getDeviceSize: () => frame.screenSize(),
-      }
+        panel.querySelector('[data-role="ax-body"]'),
+        node,
+        {
+          send: (payload) => session && session.send(payload),
+          getDeviceSize: () => frame.screenSize(),
+        }
     );
   }
 
