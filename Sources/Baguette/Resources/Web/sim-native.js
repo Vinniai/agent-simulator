@@ -53,29 +53,60 @@
   // unconditionally — this trim is UI ergonomics only.
   // Starting index is `0` (portrait); we don't probe the guest
   // because the GSEvent path is write-only.
-  const ORIENTATION_CYCLE_PHONE  = ['portrait', 'landscape-right', 'landscape-left'];
-  const ORIENTATION_CYCLE_TABLET = ['portrait', 'landscape-right', 'portrait-upside-down', 'landscape-left'];
+  // Every wire-name `DeviceOrientation` accepts is reachable from
+  // the rotate-button cycle, on phones and tablets alike. The
+  // order matches a true 90°-clockwise visual rotation per click:
+  //   portrait              (CSS rotate(0))
+  //   landscape-left        (CSS rotate(90deg)   — home on left of visual)
+  //   portrait-upside-down  (CSS rotate(180deg))
+  //   landscape-right       (CSS rotate(-90deg)  — home on right of visual)
+  // Names refer to *home-button position* on the rotated bezel
+  // (Apple's UIDeviceOrientation convention), not direction of
+  // rotation — which is why `landscape-left` comes first in a
+  // clockwise cycle. iPhone UIKit silently ignores
+  // `portrait-upside-down` for apps that don't declare the
+  // interface orientation; the cycle still exposes it so apps
+  // that *do* honour it are reachable.
+  const ORIENTATION_CYCLE = [
+    'portrait', 'landscape-left', 'portrait-upside-down', 'landscape-right',
+  ];
   let orientationIndex = 0;
   let currentOrientation = 'portrait';
+  // Absolute rotation degrees, monotonically increasing — each
+  // rotate-button click adds 90. Applied inline so CSS transitions
+  // interpolate the *short* way (always +90° forward) instead of
+  // the long way around when the wire-name's canonical angle
+  // would have decreased (e.g. 180° → -90° = -270° animation
+  // would be visibly weird). Modulo 360 just keeps the number
+  // tidy; the transition driver doesn't care about absolute size.
+  let rotationDegrees = 0;
 
   function orientationCycle() {
-    // chrome.json's `identifier` is `phone12` / `tablet5` / etc.
-    // Anything that isn't an iPhone gets the full 4-step cycle.
-    const id = (layout && layout.identifier) || '';
-    return id.startsWith('phone') ? ORIENTATION_CYCLE_PHONE : ORIENTATION_CYCLE_TABLET;
+    return ORIENTATION_CYCLE;
   }
 
-  // Apply orientation visually: set `data-orientation` on the
-  // device-frame container so the CSS rotation rules in
-  // sim-native.html kick in. Coord transforms in the input
-  // transport + pinch overlay read `currentOrientation` so the
-  // user's clicks land at the right pixel regardless of rotation.
+  // Apply orientation visually: set the inline `transform` on the
+  // device-frame wrapper, plus a `data-orientation` attribute on
+  // the container so non-rotation CSS (max-height caps in
+  // landscape) and the input/overlay coord transforms can read
+  // `currentOrientation`.
   function applyOrientation(value) {
+    const previous = currentOrientation;
     currentOrientation = value;
     const root = document.getElementById('nativeDeviceFrame');
     if (root) {
       if (value === 'portrait') root.removeAttribute('data-orientation');
       else                      root.setAttribute('data-orientation', value);
+      // Advance the rotation by one cycle step (90° CW) when we
+      // move forward in the cycle. If the caller asked for the
+      // same orientation we already display (e.g. session restart
+      // after format swap), keep the existing degrees so the
+      // bezel doesn't re-animate.
+      if (value !== previous) {
+        rotationDegrees += 90;
+      }
+      const wrapper = root.querySelector(':scope > div');
+      if (wrapper) wrapper.style.transform = 'rotate(' + rotationDegrees + 'deg)';
     }
   }
 
