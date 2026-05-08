@@ -227,6 +227,30 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
                 edge: .bottom, identifier: nextTouchIdentifier(),
                 on: c
             ) ? true : false
+        case .pullDownToLockScreen:
+            // Slow drag down from top-LEFT (above the dynamic
+            // island, on the camera side) with edge=top flagged.
+            // iOS's status-bar gesture recognizer routes a
+            // top-left-origin pull to the lock-screen cover sheet.
+            return IOHIDDigitizerDispatch.swipe(
+                from: CGPoint(x: 0.25, y: 0.002),
+                to:   CGPoint(x: 0.25, y: 0.55),
+                steps: 24, stepMs: 25, dwellMs: 0,
+                edge: .top, identifier: nextTouchIdentifier(),
+                on: c
+            ) ? true : false
+        case .pullDownToNotificationCenter:
+            // Slow drag down from top-RIGHT (above the dynamic
+            // island, on the battery / time side) with edge=top
+            // flagged. iOS routes a top-right-origin pull to
+            // Notification Center.
+            return IOHIDDigitizerDispatch.swipe(
+                from: CGPoint(x: 0.75, y: 0.002),
+                to:   CGPoint(x: 0.75, y: 0.55),
+                steps: 24, stepMs: 25, dwellMs: 0,
+                edge: .top, identifier: nextTouchIdentifier(),
+                on: c
+            ) ? true : false
         }
     }
 
@@ -320,7 +344,8 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         case .home: return (0x0, 0x33)
         case .lock: return (0x1, 0x33)
         case .power, .volumeUp, .volumeDown, .action,
-             .appSwitcher, .swipeToHome:
+             .appSwitcher, .swipeToHome,
+             .pullDownToLockScreen, .pullDownToNotificationCenter:
             // Caller routes these through pressArbitraryHID or the
             // edge-gesture path instead; returning a sentinel keeps
             // the switch total without silently mis-dispatching.

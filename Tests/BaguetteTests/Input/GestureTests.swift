@@ -212,6 +212,16 @@ struct PressTests {
         #expect(g == Press(button: .swipeToHome))
     }
 
+    @Test func `parses pull-down-to-lock-screen button`() throws {
+        let g = try Press.parse(["button": "pull-down-to-lock-screen"])
+        #expect(g == Press(button: .pullDownToLockScreen))
+    }
+
+    @Test func `parses pull-down-to-notification-center button`() throws {
+        let g = try Press.parse(["button": "pull-down-to-notification-center"])
+        #expect(g == Press(button: .pullDownToNotificationCenter))
+    }
+
     @Test func `parses duration when present`() throws {
         let g = try Press.parse(["button": "action", "duration": 1.5])
         #expect(g == Press(button: .action, duration: 1.5))
@@ -225,7 +235,7 @@ struct PressTests {
     @Test func `rejects unknown button`() {
         #expect(throws: GestureError.invalidValue(
             "button",
-            expected: "home | lock | power | volume-up | volume-down | action | app-switcher | swipe-to-home"
+            expected: "home | lock | power | volume-up | volume-down | action | app-switcher | swipe-to-home | pull-down-to-lock-screen | pull-down-to-notification-center"
         )) {
             try Press.parse(["button": "siri"])
         }
