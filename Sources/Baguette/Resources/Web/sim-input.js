@@ -297,11 +297,14 @@
       // Edge-gesture thresholds. iOS's home-vs-app-switcher
       // discriminator is gesture *duration*: fast flick from bottom
       // → home, slow drag-and-hold from bottom → app switcher.
-      // We mirror that signal client-side since the edge-flagged
-      // HID path doesn't surface in our headless setup. Total
-      // gesture duration is more reliable than midpoint dwell —
-      // users naturally pause anywhere along the drag, not just
-      // in a narrow midpoint band.
+      // We mirror that signal client-side and dispatch the matching
+      // button command on release. The server-side button handlers
+      // run real iOS gesture recognition via the IOHIDDigitizer
+      // dispatch path (parent + finger child + trackpad wrapper +
+      // target/edge byte patches), so the iOS preview animations
+      // play out for real once the button arrives — the JS layer
+      // just decides which button to fire, while the actual
+      // gesture happens on the server.
       //   • EDGE_BAND_NORM    — bottom 7% of the screen counts as
       //                         "started on the home indicator".
       //   • SWITCHER_MIN_MS   — total gesture time above this flips
