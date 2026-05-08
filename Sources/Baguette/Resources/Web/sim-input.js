@@ -294,11 +294,54 @@
       const DRAG_THRESHOLD_PX = 8;
       let lastMoveMs = 0;
 
+      // Edge-gesture thresholds. iOS's home-vs-app-switcher
+      // discriminator is gesture *duration*: fast flick from bottom
+      // → home, slow drag-and-hold from bottom → app switcher.
+      // We mirror that signal client-side since the edge-flagged
+      // HID path doesn't surface in our headless setup. Total
+      // gesture duration is more reliable than midpoint dwell —
+      // users naturally pause anywhere along the drag, not just
+      // in a narrow midpoint band.
+      //   • EDGE_BAND_NORM    — bottom 7% of the screen counts as
+      //                         "started on the home indicator".
+      //   • SWITCHER_MIN_MS   — total gesture time above this flips
+      //                         home → app switcher.
+      //   • SWITCHER_MIN_UP   — minimum upward travel (norm) for the
+      //                         slow path to count as App Switcher.
+      //   • HOME_MIN_TRAVEL   — minimum upward travel for a quick
+      //                         flick to count as Home; shorter
+      //                         drags are cancelled.
+      const EDGE_BAND_NORM   = 0.93;
+      const SWITCHER_MIN_MS  = 350;
+      const SWITCHER_MIN_UP  = 0.10;
+      const HOME_MIN_TRAVEL  = 0.18;
+
       this._on(this.el, 'mousedown', (e) => {
         const r = this.el.getBoundingClientRect();
         const vx = e.clientX - r.left, vy = e.clientY - r.top;
         const mode = modeOf(e);
         this._dragActive = true;
+
+        // Edge gesture from the bottom of the device screen — same
+        // input vocabulary as Simulator.app's drag-from-bottom.
+        // iOS itself decides home vs app switcher based on velocity
+        // / dwell, but the edge-flagged HID path doesn't surface the
+        // gesture in our headless setup (the SimDisplay registration
+        // handshake we'd need to replicate for IndigoHIDEdge to work
+        // is non-trivial). Instead, we replicate the *decision*
+        // client-side and fire the matching button press on release:
+        // quick flick → `home`; dwell at midpoint → `app-switcher`.
+        // Both ride proven `IndigoHIDMessageForButton` paths.
+        const yNorm = r.height ? (vy / r.height) : 0;
+        if (mode === 'tap-or-swipe' && yNorm >= EDGE_BAND_NORM) {
+          state = {
+            mode: 'edge-bottom',
+            startNormY: yNorm,
+            tStart: performance.now(),
+          };
+          this.log('edge gesture armed');
+          return;
+        }
 
         if (mode === 'pinch') {
           const pDev = pivotDev();
@@ -338,6 +381,14 @@
         if (!state) return;
         const r = this.el.getBoundingClientRect();
         const vx = e.clientX - r.left, vy = e.clientY - r.top;
+
+        if (state.mode === 'edge-bottom') {
+          // No per-move work needed — the verdict is computed at
+          // release time from total duration + travel. Stops mouse
+          // events from leaking into the regular pinch / pan / drag
+          // branches below.
+          return;
+        }
 
         if (state.mode === 'pinch') {
           const pDev = pivotDev();
@@ -395,6 +446,30 @@
         if (!state) return;
         const r = this.el.getBoundingClientRect();
         const vx = e.clientX - r.left, vy = e.clientY - r.top;
+
+        if (state.mode === 'edge-bottom') {
+          const endNormY = r.height ? (vy / r.height) : 0;
+          const traveledUp = state.startNormY - endNormY;  // +ve = moved up
+          const elapsedMs = performance.now() - state.tStart;
+          // Slow drag-and-hold (Apple's app-switcher signal) takes
+          // long enough that even a small upward travel counts —
+          // `SWITCHER_MIN_UP` keeps a slow-but-stationary press
+          // from accidentally firing it. Otherwise treat as a
+          // quick flick and require enough travel for Home.
+          if (elapsedMs >= SWITCHER_MIN_MS && traveledUp >= SWITCHER_MIN_UP) {
+            this.input.button('app-switcher');
+            this.log(`edge swipe → app switcher (${Math.round(elapsedMs)}ms, up=${traveledUp.toFixed(2)})`);
+          } else if (traveledUp >= HOME_MIN_TRAVEL) {
+            this.input.button('home');
+            this.log(`edge swipe → home (${Math.round(elapsedMs)}ms, up=${traveledUp.toFixed(2)})`);
+          } else {
+            this.log(`edge swipe cancelled (${Math.round(elapsedMs)}ms, up=${traveledUp.toFixed(2)})`);
+          }
+          state = null;
+          this._dragActive = false;
+          this._updatePreview();
+          return;
+        }
 
         if (state.mode === 'pinch' || state.mode === 'pan') {
           send2('up', state.f1, state.f2);
