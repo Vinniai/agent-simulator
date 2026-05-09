@@ -54,13 +54,13 @@ struct GestureDispatcherTests {
 
     @Test func `dispatches phased touch1-down via registry suffix`() {
         let input = MockInput()
-        given(input).touch1(phase: .any, at: .any, size: .any).willReturn(true)
+        given(input).touch1(phase: .any, at: .any, size: .any, edge: .any).willReturn(true)
         let dispatcher = GestureDispatcher(input: input)
 
         let ack = dispatcher.dispatch(line: #"{"type":"touch1-down","x":0,"y":0,"width":1,"height":1}"#)
 
         #expect(ack == #"{"ok":true}"#)
-        verify(input).touch1(phase: .value(.down), at: .any, size: .any).called(1)
+        verify(input).touch1(phase: .value(.down), at: .any, size: .any, edge: .any).called(1)
     }
 
     @Test func `wraps non-GestureError thrown by a parser into the ack`() {

@@ -166,16 +166,17 @@
     transform-origin: center center;
     transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
   }
-  /* Rotation direction matches what iOS draws into the portrait
-     framebuffer: UI's "up" runs along the buffer's right edge for
-     `landscape-right` (home on right) and the buffer's left edge
-     for `landscape-left`, so the host has to rotate CCW / CW
-     respectively to land the content upright. The bezel goes the
-     same way and ends up with the home indicator on the side the
-     wire name advertises. */
-  #simNativeView #nativeDeviceFrame[data-orientation="landscape-right"] > div { transform: rotate(-90deg); }
-  #simNativeView #nativeDeviceFrame[data-orientation="portrait-upside-down"] > div { transform: rotate(180deg); }
-  #simNativeView #nativeDeviceFrame[data-orientation="landscape-left"] > div { transform: rotate(90deg); }
+  /* Rotation is applied as an *inline* transform via JS so each
+     rotate-button click is a monotonically increasing 90° step
+     (0 → 90 → 180 → 270 → 360 → 450 → …). Per-orientation CSS
+     rules would interpolate the numeric difference between the
+     OLD value and the NEW value; jumping from
+     `portrait-upside-down (180)` to `landscape-right (-90)`
+     animates -270° backward instead of +90° forward, which is
+     visibly wrong. The CSS only sets `transform-origin` and the
+     transition curve; the actual rotation degree comes from
+     `rotation-deg` set inline by `applyOrientation` in
+     `sim-native.js`. */
 
   #simNativeView #nativeDeviceFrame[data-orientation="landscape-right"] > div,
   #simNativeView #nativeDeviceFrame[data-orientation="landscape-left"] > div,
@@ -576,10 +577,13 @@
                 onclick="window.__nativeAppSwitcher && window.__nativeAppSwitcher()">
           <!-- "App-switcher" glyph mirroring the native Simulator
                toolbar's third icon — two overlapping rounded squares.
-               The click streams a single-finger swipe up from the
-               bottom edge that pauses near the middle of the screen,
-               which is iOS's recipe for surfacing the app switcher
-               (a quick swipe goes home instead). -->
+               The click fires the `app-switcher` virtual button,
+               which the Swift `IndigoHIDInput` decomposes into two
+               consecutive home `IndigoHIDMessageForButton` presses
+               ~150 ms apart — the recipe SpringBoard listens for
+               (works on Face ID iPhones with no physical home
+               button). The slower swipe-and-hold gesture is still
+               available on the wire as `swipe-to-app-switcher`. -->
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
                stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
             <rect x="3"  y="7"  width="13" height="13" rx="2.2"/>
