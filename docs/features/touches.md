@@ -16,19 +16,22 @@ byte slots the SimulatorKit wrapper leaves uninitialised.
 If you're routing hardware buttons (home / lock / power / volume /
 action) that's a separate path — see
 [buttons.md](buttons.md). Anything that travels as `tap` / `swipe` /
-`touch1-*` / `swipe-to-home` / `app-switcher` lives here.
+`touch1-*` / `swipe-to-app-switcher` / `swipe-to-home` lives here.
+(The `app-switcher` button itself rides the home-button event source —
+two `IndigoHIDMessageForButton` presses ~150 ms apart — so it lives in
+[buttons.md](buttons.md), not on the digitizer dispatch path.)
 
 ## Three entry points, one dispatch
 
 | Surface | How it arrives |
 |---------|----------------|
-| **CLI** | `baguette tap --x … --y …`, `baguette swipe …`, `baguette press --button swipe-to-home / app-switcher / pull-down-to-lock-screen / pull-down-to-notification-center` |
+| **CLI** | `baguette tap --x … --y …`, `baguette swipe …`, `baguette press --button swipe-to-app-switcher / swipe-to-home / pull-down-to-lock-screen / pull-down-to-notification-center` (the canned `app-switcher` button uses the home-press recipe — see [buttons.md](buttons.md)) |
 | **Wire** | `{"type":"tap"}` / `{"type":"swipe"}` / `{"type":"touch1-down","edge":"bottom",…}` on `baguette serve` WS or `baguette input` stdin. `edge` accepts `bottom` (home / app switcher) or `top` (lock screen / notification center). |
 | **Browser** | Click / drag on the focus-mode canvas. Drag from the bottom 7 % streams `touch1-*` with `edge: 'bottom'` (iOS animates the home / app-switcher preview live); drag from the top 7 % streams with `edge: 'top'` (iOS pulls the lock-screen cover sheet from a top-left origin or Notification Center from a top-right origin). |
 
 Everything ends up in `Input.touch1(phase:at:size:edge:)` (streaming)
 or in the `IndigoHIDInput` button cases for the canned
-`swipe-to-home` / `app-switcher` / `pull-down-to-lock-screen` /
+`swipe-to-app-switcher` / `swipe-to-home` / `pull-down-to-lock-screen` /
 `pull-down-to-notification-center` shortcuts. From there the
 `IOHIDDigitizerDispatch.send(...)` helper builds + patches +
 dispatches a single touch event.
@@ -158,11 +161,16 @@ Simulator.app:
 All four shapes are exposed as wire buttons:
 
 ```
+baguette press --button swipe-to-app-switcher
 baguette press --button swipe-to-home
-baguette press --button app-switcher
 baguette press --button pull-down-to-lock-screen
 baguette press --button pull-down-to-notification-center
 ```
+
+The canonical `app-switcher` button doesn't live on this gesture
+path — it dispatches as two `IndigoHIDMessageForButton` home presses
+~150 ms apart instead (cleaner and more reliable on Face ID
+iPhones; see [buttons.md](buttons.md)).
 
 The browser canvas auto-detects edge drags on mousedown — bottom
 band (`y / r.height ≥ 0.93`) streams with `edge: "bottom"`; top
@@ -210,8 +218,8 @@ omit for an interior touch.
 ### Edge-gesture button shortcuts
 
 ```json
+{ "type": "button", "button": "swipe-to-app-switcher" }
 { "type": "button", "button": "swipe-to-home" }
-{ "type": "button", "button": "app-switcher" }
 ```
 
 These run the canned shapes from the table above. Use them when
@@ -263,10 +271,12 @@ production path — taps / swipes / touches go through
   CLI / wire callers passing `edge: bottom` directly while the
   device is rotated will *not* fire the home gesture — they need
   to send the orientation-appropriate edge name from the table
-  above, or use the `swipe-to-home` / `app-switcher` button
-  shortcuts (which always run their canned shapes from the
+  above, or use the `swipe-to-app-switcher` / `swipe-to-home`
+  button shortcuts (which always run their canned shapes from the
   device's portrait bottom regardless of current orientation,
-  then iOS handles the rotation internally).
+  then iOS handles the rotation internally). The canonical
+  `app-switcher` button is rotation-agnostic by design — it's a
+  pair of home-button events, no coordinates involved.
 - **No carplay / external display targets** — `target = 0x32`
   (touch digitizer) is hard-coded. The dispatch helper would need
   a target parameter to support those, plus a way to route
