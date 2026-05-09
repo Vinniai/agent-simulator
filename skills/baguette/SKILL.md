@@ -156,16 +156,17 @@ Wired (use freely):
   Notification Center from a top-right drag). Omit `edge` for
   ordinary interior touches.
 - `button`: `home`, `lock`, `power`, `volume-up`, `volume-down`,
-  `action`, `swipe-to-home`, `app-switcher`,
+  `action`, `app-switcher`, `swipe-to-app-switcher`, `swipe-to-home`,
   `pull-down-to-lock-screen`, `pull-down-to-notification-center`.
   Optional `--duration` / `"duration"` for long-press semantics
-  (action button "Hold for Ring", power → Siri / SOS, …). The four
-  swipe / pull names are virtual buttons that synthesize the
-  canned system-gesture shapes — fast edge-flick → Home, slow
-  drag-and-hold → app switcher, slow drag down from top-left →
-  Lock Screen, slow drag down from top-right → Notification
-  Center. They land iOS gesture recognition without any
-  client-side stream management.
+  (action button "Hold for Ring", power → Siri / SOS, …). The five
+  virtual buttons land iOS gesture recognition without any
+  client-side stream management. `app-switcher` fires two home
+  presses ~150 ms apart (SpringBoard's own multitasking recipe);
+  `swipe-to-app-switcher` is the slow drag-and-hold variant on
+  the gesture path; `swipe-to-home` is the fast edge-flick → Home;
+  `pull-down-to-lock-screen` and `pull-down-to-notification-center`
+  drag down from top-left and top-right respectively.
 - `key` (single keystroke) and `type` (US-ASCII string). CLI:
   `baguette key --code KeyA --modifiers shift,command --duration 0.2`
   and `baguette type --text "hello"`. `code` is a W3C

@@ -125,25 +125,30 @@ Negative `deltaY` scrolls content up (same convention as macOS). No
 {"type":"button","button":"volume-up"}
 {"type":"button","button":"volume-down"}
 {"type":"button","button":"action","duration":1.2}
-{"type":"button","button":"swipe-to-home"}
 {"type":"button","button":"app-switcher"}
+{"type":"button","button":"swipe-to-app-switcher"}
+{"type":"button","button":"swipe-to-home"}
 {"type":"button","button":"pull-down-to-lock-screen"}
 {"type":"button","button":"pull-down-to-notification-center"}
 ```
 
-Allowed names: `home | lock | power | volume-up | volume-down | action | swipe-to-home | app-switcher | pull-down-to-lock-screen | pull-down-to-notification-center`.
+Allowed names: `home | lock | power | volume-up | volume-down | action | app-switcher | swipe-to-app-switcher | swipe-to-home | pull-down-to-lock-screen | pull-down-to-notification-center`.
 `duration` is the optional hold time in seconds — `0`/absent → ~100 ms
 short tap; longer holds drive iOS long-press semantics ("Hold for
 Ring" on `action`, Siri / SOS on `power`, etc.). The browser bezel
 overlay measures real `mousedown` → `mouseup` and forwards the
 elapsed time, so click-and-hold on a side button just works.
 
-`swipe-to-home`, `app-switcher`, `pull-down-to-lock-screen`, and
-`pull-down-to-notification-center` are *virtual* buttons — they
-synthesize the canned system-gesture shapes (fast edge-swipe up;
-slow drag-with-dwell up; slow drag down from top-left; slow drag
-down from top-right). Use them when the agent wants the gesture
-vocabulary without managing a streaming `touch1-*` chain manually.
+`app-switcher`, `swipe-to-app-switcher`, `swipe-to-home`,
+`pull-down-to-lock-screen`, and `pull-down-to-notification-center`
+are *virtual* buttons. `app-switcher` rides the home-button event
+source (two `IndigoHIDMessageForButton` presses ~150 ms apart —
+SpringBoard's own multitasking trigger, works on Face ID iPhones);
+the other four synthesize canned system-gesture shapes
+(slow drag-with-dwell up; fast edge-swipe up; slow drag down from
+top-left; slow drag down from top-right). Use them when the agent
+wants the gesture vocabulary without managing a streaming
+`touch1-*` chain manually.
 For live-preview UX, stream `touch1-*` with `edge: "bottom"` (drag
 from canvas bottom — iOS animates home / app-switcher preview) or
 `edge: "top"` (drag from canvas top — iOS pulls the lock-screen /
