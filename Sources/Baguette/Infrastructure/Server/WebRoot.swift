@@ -30,6 +30,7 @@ struct WebRoot {
     /// Read a file by name (e.g. `"simulators.html"`). Returns nil
     /// when the asset is missing across every lookup path.
     static func data(named filename: String) -> Data? {
+        guard let filename = safeRelativeAssetPath(filename) else { return nil }
         if let path = ProcessInfo.processInfo.environment["BAGUETTE_WEB_DIR"],
            let data = read(URL(fileURLWithPath: path).appendingPathComponent(filename)) {
             return data
@@ -46,6 +47,26 @@ struct WebRoot {
     }
 
     // MARK: - private
+
+    /// Keep static asset lookups inside the web root even when a route
+    /// passes a percent-decoded path segment such as `..%2FPackage.swift`.
+    private static func safeRelativeAssetPath(_ filename: String) -> String? {
+        guard !filename.isEmpty, !filename.hasPrefix("/") else { return nil }
+        let scalars = filename.unicodeScalars
+        guard scalars.allSatisfy({ scalar in
+            scalar == "/" || scalar == "." || scalar == "-" || scalar == "_"
+                || ("a"..."z").contains(scalar)
+                || ("A"..."Z").contains(scalar)
+                || ("0"..."9").contains(scalar)
+        }) else { return nil }
+
+        let parts = filename.split(separator: "/", omittingEmptySubsequences: false)
+        guard !parts.isEmpty else { return nil }
+        for part in parts {
+            guard !part.isEmpty, part != ".", part != ".." else { return nil }
+        }
+        return parts.joined(separator: "/")
+    }
 
     private static func read(_ url: URL) -> Data? {
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }

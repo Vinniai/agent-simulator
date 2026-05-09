@@ -7,7 +7,7 @@ import Foundation
 /// instead of bloating the flat root. These tests pin the lookup
 /// behavior so a future refactor of `Bundle.url(forResource:…)` or the
 /// source-tree fallback can't silently break the `/farm` route.
-@Suite("WebRoot subdirectory lookup")
+@Suite("WebRoot subdirectory lookup", .serialized)
 struct WebRootSubdirTests {
 
     @Test("resolves a file in a subdirectory via BAGUETTE_WEB_DIR")
@@ -36,6 +36,27 @@ struct WebRootSubdirTests {
         defer { unsetenv("BAGUETTE_WEB_DIR") }
 
         #expect(WebRoot.data(named: "farm/does-not-exist.js") == nil)
+    }
+
+    @Test("rejects traversal outside BAGUETTE_WEB_DIR")
+    func rejectsTraversalOutsideEnvOverride() throws {
+        let tmp = try makeTempWebTree(files: [
+            "farm/farm.html": "<!doctype html><title>farm</title>",
+        ])
+        let outside = tmp.deletingLastPathComponent()
+            .appendingPathComponent("baguette-outside-\(UUID().uuidString).txt")
+        defer {
+            try? FileManager.default.removeItem(at: tmp)
+            try? FileManager.default.removeItem(at: outside)
+        }
+        try "outside".write(to: outside, atomically: true, encoding: .utf8)
+
+        setenv("BAGUETTE_WEB_DIR", tmp.path, 1)
+        defer { unsetenv("BAGUETTE_WEB_DIR") }
+
+        #expect(WebRoot.string(named: "../\(outside.lastPathComponent)") == nil)
+        #expect(WebRoot.string(named: "farm/../../\(outside.lastPathComponent)") == nil)
+        #expect(WebRoot.string(named: "farm/%2e%2e/\(outside.lastPathComponent)") == nil)
     }
 
     // MARK: - helpers
