@@ -200,6 +200,19 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
             guard let usage = button.standardHIDUsage else { return false }
             return pressArbitraryHID(button, usage: usage, holdUs: holdUs, on: c)
         case .appSwitcher:
+            // Two consecutive home-button presses ~150 ms apart.
+            // SpringBoard listens to the home `IndigoHIDMessageForButton`
+            // event source regardless of whether the device has a
+            // physical home button, so this works on Face ID iPhones
+            // (iPhone X+) too. Recipe matches idb's
+            // FBSimulatorPurpleHID app-switcher path. Cleaner than
+            // synthesising the slow swipe-and-hold gesture and
+            // doesn't depend on the mouse-event signature.
+            let downA = pressLegacyButton(.home, holdUs: holdUs, on: c)
+            usleep(150_000)
+            let downB = pressLegacyButton(.home, holdUs: holdUs, on: c)
+            return downA && downB
+        case .swipeToAppSwitcher:
             // Slow edge-flagged drag from the home indicator with
             // a long dwell at the midpoint. iOS's home-indicator
             // gesture recognizer fires App Switcher when the
@@ -207,6 +220,8 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
             // a fast flick goes Home instead. Empirical recipe
             // verified on iPhone 17 Pro Max / iOS 26.4: 30 steps
             // × 35 ms + 900 ms dwell at y=0.58 fires cards.
+            // Kept as a wire-only fallback for callers that need
+            // the gesture path rather than the home-press recipe.
             return IOHIDDigitizerDispatch.swipe(
                 from: CGPoint(x: 0.5, y: 0.998),
                 to:   CGPoint(x: 0.5, y: 0.58),
@@ -344,7 +359,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         case .home: return (0x0, 0x33)
         case .lock: return (0x1, 0x33)
         case .power, .volumeUp, .volumeDown, .action,
-             .appSwitcher, .swipeToHome,
+             .appSwitcher, .swipeToAppSwitcher, .swipeToHome,
              .pullDownToLockScreen, .pullDownToNotificationCenter:
             // Caller routes these through pressArbitraryHID or the
             // edge-gesture path instead; returning a sentinel keeps

@@ -64,16 +64,19 @@ public enum DeviceEdge: String, Sendable, Equatable, Hashable, CaseIterable {
 /// usagePage / usage codes from each device's chrome.json. `siri`
 /// remains rejected — it crashes backboardd through every known path.
 ///
-/// `appSwitcher`, `swipeToHome`, `pullDownToLockScreen`, and
-/// `pullDownToNotificationCenter` are *virtual* buttons — they have
-/// no physical counterpart on any iPhone, but the wire surface keeps
-/// the API uniform with the real ones. `appSwitcher` decomposes into
-/// two consecutive home `IndigoHIDMessageForButton` presses
-/// (SpringBoard's own recipe; works on Face ID devices that have no
-/// home button hardware). The three pull / swipe gestures all ride
-/// `IOHIDDigitizerDispatch` with an `IndigoHIDEdge` flag set, which is
-/// what tells the iOS HID stack to route the touches to the
+/// `appSwitcher`, `swipeToAppSwitcher`, `swipeToHome`,
+/// `pullDownToLockScreen`, and `pullDownToNotificationCenter` are
+/// *virtual* buttons — they have no physical counterpart on any
+/// iPhone, but the wire surface keeps the API uniform with the real
+/// ones. `appSwitcher` decomposes into two consecutive home
+/// `IndigoHIDMessageForButton` presses ~150 ms apart (SpringBoard's
+/// own recipe; works on Face ID devices that have no home button
+/// hardware — cleaner and more reliable than synthesising the slow
+/// swipe-and-hold gesture). The four swipe / pull variants all ride
+/// `IOHIDDigitizerDispatch` with an `IndigoHIDEdge` flag set, which
+/// is what tells the iOS HID stack to route the touches to the
 /// system-gesture recognizer rather than to whatever app is foreground:
+///   - `swipeToAppSwitcher` — slow drag-and-hold from the bottom edge
 ///   - `swipeToHome` — fast flick from the device's bottom edge
 ///   - `pullDownToLockScreen` — slow drag from top-left
 ///   - `pullDownToNotificationCenter` — slow drag from top-right
@@ -83,6 +86,7 @@ enum DeviceButton: String, Sendable, Equatable, Hashable {
     case volumeUp = "volume-up"
     case volumeDown = "volume-down"
     case appSwitcher = "app-switcher"
+    case swipeToAppSwitcher = "swipe-to-app-switcher"
     case swipeToHome = "swipe-to-home"
     case pullDownToLockScreen = "pull-down-to-lock-screen"
     case pullDownToNotificationCenter = "pull-down-to-notification-center"
@@ -97,7 +101,7 @@ extension DeviceButton {
     /// shipping iPhone's chrome.json.
     var standardHIDUsage: HIDUsage? {
         switch self {
-        case .home, .lock, .appSwitcher, .swipeToHome,
+        case .home, .lock, .appSwitcher, .swipeToAppSwitcher, .swipeToHome,
              .pullDownToLockScreen, .pullDownToNotificationCenter: return nil
         case .power:      return HIDUsage(page: 12, usage: 48)
         case .volumeUp:   return HIDUsage(page: 12, usage: 233)

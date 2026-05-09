@@ -577,10 +577,13 @@
                 onclick="window.__nativeAppSwitcher && window.__nativeAppSwitcher()">
           <!-- "App-switcher" glyph mirroring the native Simulator
                toolbar's third icon — two overlapping rounded squares.
-               The click streams a single-finger swipe up from the
-               bottom edge that pauses near the middle of the screen,
-               which is iOS's recipe for surfacing the app switcher
-               (a quick swipe goes home instead). -->
+               The click fires the `app-switcher` virtual button,
+               which the Swift `IndigoHIDInput` decomposes into two
+               consecutive home `IndigoHIDMessageForButton` presses
+               ~150 ms apart — the recipe SpringBoard listens for
+               (works on Face ID iPhones with no physical home
+               button). The slower swipe-and-hold gesture is still
+               available on the wire as `swipe-to-app-switcher`. -->
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
                stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
             <rect x="3"  y="7"  width="13" height="13" rx="2.2"/>
