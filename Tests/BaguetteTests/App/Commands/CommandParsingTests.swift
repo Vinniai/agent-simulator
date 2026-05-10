@@ -20,7 +20,7 @@ struct CommandParsingTests {
             "tap", "swipe", "pinch", "pan", "press",
             "key", "type",
             "chrome", "screenshot", "describe-ui", "logs", "serve",
-            "orientation",
+            "orientation", "review-tasks",
         ])
     }
 
@@ -303,5 +303,60 @@ struct CommandParsingTests {
         #expect(cmd.host == "0.0.0.0")
         #expect(cmd.port == 9000)
         #expect(cmd.deviceSet == "/tmp/sims")
+    }
+
+    // MARK: - review-tasks
+
+    @Test func `review-tasks exposes agent queue subcommands`() {
+        let names = ReviewTasksCommand.configuration.subcommands.map { $0.configuration.commandName }
+        #expect(Set(names) == ["list", "next", "show", "claim", "event", "result", "verify", "watch"])
+    }
+
+    @Test func `review-tasks next parses agent id`() throws {
+        let cmd = try ReviewTasksCommand.Next.parse(["--agent-id", "agent-a"])
+        #expect(cmd.agentId == "agent-a")
+    }
+
+    @Test func `review-tasks event parses streaming payload options`() throws {
+        let cmd = try ReviewTasksCommand.Event.parse([
+            "task-1",
+            "--type", "capture",
+            "--actor", "agent-a",
+            "--message", "Captured screenshot",
+            "--metadata-json", #"{"snapshotId":"snap-1"}"#,
+        ])
+        #expect(cmd.id == "task-1")
+        #expect(cmd.type == "capture")
+        #expect(cmd.actor == "agent-a")
+        #expect(cmd.message == "Captured screenshot")
+        #expect(cmd.metadataJSON == #"{"snapshotId":"snap-1"}"#)
+    }
+
+    @Test func `review-tasks result parses status and summary`() throws {
+        let cmd = try ReviewTasksCommand.Result.parse([
+            "task-1",
+            "--status", "readyForVerify",
+            "--actor", "agent-a",
+            "--summary", "Implemented change",
+            "--verification-snapshot-id", "snap-2",
+        ])
+        #expect(cmd.id == "task-1")
+        #expect(cmd.status == "readyForVerify")
+        #expect(cmd.actor == "agent-a")
+        #expect(cmd.summary == "Implemented change")
+        #expect(cmd.verificationSnapshotId == "snap-2")
+    }
+
+    @Test func `review-tasks watch parses poll filters`() throws {
+        let cmd = try ReviewTasksCommand.Watch.parse([
+            "--session-id", "review-1",
+            "--status", "open",
+            "--interval", "0.25",
+            "--once",
+        ])
+        #expect(cmd.sessionId == "review-1")
+        #expect(cmd.status == "open")
+        #expect(cmd.interval == 0.25)
+        #expect(cmd.once == true)
     }
 }

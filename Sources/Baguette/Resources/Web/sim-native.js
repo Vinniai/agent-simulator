@@ -78,6 +78,9 @@
     // it tracks the user's prefers-color-scheme via CSS variables,
     // so hardcoding a colour here would defeat the theme switch.
     document.body.innerHTML = '';
+    if (window.BaguetteReviewClient) {
+      window.BaguetteReviewClient.install({ getUdid: () => udid });
+    }
     document.body.style.cssText = 'margin:0;padding:0;overflow:hidden';
     // Match <body> background to the active focus-mode page bg so
     // the page never flashes white during theme transitions or

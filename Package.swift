@@ -45,6 +45,7 @@ let package = Package(
                 .define("MOCKING", .when(configuration: .debug)),
             ],
             linkerSettings: [
+                .linkedLibrary("sqlite3"),
                 .linkedFramework("IOSurface"),
                 .linkedFramework("CoreGraphics"),
                 .linkedFramework("CoreVideo"),

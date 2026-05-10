@@ -123,10 +123,24 @@
           <input data-role="search" placeholder="Search by name, runtime, group…" value="${ctx.search}">
           <kbd>⌘ K</kbd>
         </div>
+        <div class="review-toolbar">
+          <select data-review-session title="Review session">
+            <option value="">Review session</option>
+            ${ctx.review.sessions.map(s => `
+              <option value="${escapeHTML(s.id)}" ${ctx.review.session && ctx.review.session.id === s.id ? 'selected' : ''}>
+                ${escapeHTML(s.name)} · ${s.snapshots.length}
+              </option>`).join('')}
+          </select>
+          <button data-review="new" title="New review session">＋</button>
+          <button data-review="capture" ${ctx.selectedUdid ? '' : 'disabled'} title="Capture focused simulator state">◉</button>
+          <button data-review="bundle" ${ctx.review.selectedCount ? '' : 'disabled'} title="Bundle selected review screens">⇪</button>
+          <button data-review="queue-task" ${ctx.review.selectedCount ? '' : 'disabled'} title="Queue selected review context">☑</button>
+        </div>
         <div class="view-toggle">
           <button data-view="grid" ${ctx.view === 'grid' ? 'class="active"' : ''}>Grid</button>
           <button data-view="wall" ${ctx.view === 'wall' ? 'class="active"' : ''}>Wall</button>
           <button data-view="list" ${ctx.view === 'list' ? 'class="active"' : ''}>List</button>
+          <button data-view="review" ${ctx.view === 'review' ? 'class="active"' : ''}>Review</button>
         </div>
       </div>`;
   }
@@ -249,6 +263,233 @@
     });
   }
 
+  // ---- review map view ----------------------------------------------
+  function renderReview(host, review, ctx) {
+    const session = review.session;
+    if (!session) {
+      host.innerHTML = `
+        <div class="review-empty">
+          <div class="big">No review session.</div>
+          <div class="sm">Create a review from the rail, focus a live device, then capture states into this map.</div>
+        </div>`;
+      return;
+    }
+
+    const positions = new Map();
+    const cols = 4;
+    session.snapshots.forEach((snap, i) => {
+      positions.set(snap.id, {
+        x: 36 + (i % cols) * 290,
+        y: 40 + Math.floor(i / cols) * 470,
+      });
+    });
+
+    const edges = session.edges.map(e => {
+      const a = e.fromSnapshotId && positions.get(e.fromSnapshotId);
+      const b = positions.get(e.toSnapshotId);
+      if (!a || !b) return '';
+      const x1 = a.x + 220, y1 = a.y + 180, x2 = b.x, y2 = b.y + 180;
+      const dx = x2 - x1, dy = y2 - y1;
+      const len = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+      const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+      return `<div class="review-edge" style="left:${x1}px;top:${y1}px;width:${len}px;transform:rotate(${angle}deg)">
+        <span>${escapeHTML(e.actionType)}</span>
+      </div>`;
+    }).join('');
+
+    const nodes = session.snapshots.map(snap => {
+      const p = positions.get(snap.id);
+      const selected = review.selectedSnapshotId === snap.id;
+      const picked = review.selectedSnapshotIds.has(snap.id);
+      const markers = (snap.markers || []).map(m =>
+        `<span class="review-marker ${escapeHTML(m.kind)}">${escapeHTML(m.kind)}</span>`
+      ).join('');
+      return `<article class="review-node ${selected ? 'selected' : ''} ${picked ? 'picked' : ''}"
+          data-review-snapshot="${escapeHTML(snap.id)}" style="left:${p.x}px;top:${p.y}px">
+        <img src="${reviewArtifactURL(session.id, snap.screenshotPath)}" alt="">
+        <div class="review-node-meta">
+          <div>${markers || '<span class="review-marker">screen</span>'}</div>
+          <strong>${escapeHTML(shortId(snap.id))}</strong>
+          <span>${escapeHTML(shortDeviceName(ctx.devicesByUdid[snap.udid]?.name || snap.udid))}</span>
+        </div>
+      </article>`;
+    }).join('');
+
+    host.innerHTML = `<div class="review-map">${edges}${nodes}</div>`;
+  }
+
+  function renderReviewFocus(host, review, axText) {
+    const session = review.session;
+    const snap = review.selectedSnapshot;
+    const streamStatus = review.taskStreamStatus || 'offline';
+    const streamLabel = streamStatus === 'live'
+      ? 'Live task stream'
+      : streamStatus === 'reconnecting'
+        ? 'Reconnecting task stream'
+        : streamStatus === 'connecting'
+          ? 'Connecting task stream'
+          : streamStatus === 'error'
+            ? 'Task stream error'
+            : 'Task stream offline';
+    if (!session || !snap) {
+      const tasks = review.tasks || [];
+      host.innerHTML = `
+        <div class="focus-empty">
+          <pre class="ascii">┌─ review ─┐
+│   map    │
+│    ◉     │
+└──────────┘</pre>
+          <div class="big">No screen selected.</div>
+          <div class="sm">Select a captured screen in Review view to inspect its screenshot, AX tree, comments, and bundle state.</div>
+        </div>
+        ${session ? `
+          <div class="controls">
+            <h4>Task Queue</h4>
+            <div class="review-selection-summary">
+              <span>${tasks.length} queued</span>
+              <span>${review.lastTask ? `Last ${escapeHTML(shortId(review.lastTask.id))} · ${escapeHTML(review.lastTask.status)}` : escapeHTML(streamLabel)}</span>
+            </div>
+            <div class="review-stream-status ${escapeHTML(streamStatus)}">${escapeHTML(streamLabel)}</div>
+            <div class="review-selected-list">
+              ${tasks.slice(0, 6).map(task => `
+                <div class="review-selected-row">
+                  <span>${escapeHTML(task.status)}</span>
+                  <strong>${escapeHTML(task.title)}</strong>
+                  <code>${escapeHTML(shortId(task.id))}</code>
+                </div>`).join('') || '<div class="review-muted">No queued tasks for this review yet.</div>'}
+            </div>
+          </div>` : ''}`;
+      return;
+    }
+    const comments = (session.comments || []).filter(c => c.snapshotId === snap.id);
+    const elements = review.currentAxElements || [];
+    const rootFrame = review.currentAxRootFrame || elements[0]?.frame || null;
+    const visibleElements = elements
+      .filter(e => e.path !== '/' && e.frame && rootFrame)
+      .slice(0, 160);
+    const selectedElementKeys = review.selectedElementKeys || new Set();
+    const selectedElement = elements.find(e => e.path === review.selectedElementPath);
+    const selectedContexts = review.selectedElementContexts || [];
+    const tasks = review.tasks || [];
+    const lastTask = review.lastTask;
+    const elementBoxes = visibleElements.map(e => {
+      const f = relativeFrame(e.frame, rootFrame);
+      if (!f) return '';
+      const picked = selectedElementKeys.has(`${snap.id}::${e.path}`);
+      const active = review.selectedElementPath === e.path;
+      return `<button class="review-ax-box ${picked ? 'picked' : ''} ${active ? 'active' : ''}"
+          data-review-element="${escapeHTML(e.path)}"
+          title="${escapeHTML(elementLabel(e))}"
+          style="left:${f.left}%;top:${f.top}%;width:${f.width}%;height:${f.height}%"></button>`;
+    }).join('');
+    const elementList = visibleElements.slice(0, 40).map(e => {
+      const picked = selectedElementKeys.has(`${snap.id}::${e.path}`);
+      const active = review.selectedElementPath === e.path;
+      return `<button class="review-element-row ${picked ? 'picked' : ''} ${active ? 'active' : ''}"
+          data-review-element="${escapeHTML(e.path)}">
+        <span>${escapeHTML(elementLabel(e))}</span>
+        <code>${escapeHTML(e.path)}</code>
+      </button>`;
+    }).join('');
+    const selectionList = selectedContexts.map(ctx => `
+      <div class="review-selected-row">
+        <span>${escapeHTML(shortId(ctx.snapshot.id))}</span>
+        <strong>${escapeHTML(elementLabel(ctx.element))}</strong>
+        <code>${escapeHTML(ctx.element.path)}</code>
+      </div>`).join('');
+    host.innerHTML = `
+      <div class="focus-head">
+        <div class="row1">
+          <div class="tag">Review&nbsp;Snapshot</div>
+          <button class="close" data-review-action="clear" title="Clear">✕</button>
+        </div>
+        <h2>${escapeHTML(shortId(snap.id))}</h2>
+        <div class="meta">
+          <span>${escapeHTML(snap.udid)}</span>
+          <span>${escapeHTML(snap.screenFingerprint)}</span>
+        </div>
+      </div>
+
+      <div class="review-preview">
+        <img src="${reviewArtifactURL(session.id, snap.screenshotPath)}" alt="">
+        <div class="review-ax-overlay">
+          ${elementBoxes || '<div class="review-no-ax">No selectable AX elements captured for this screen.</div>'}
+        </div>
+      </div>
+
+      <div class="controls">
+        <h4>Element Comment</h4>
+        <div class="review-selection-summary">
+          <span>${selectedElementKeys.size} selected</span>
+          <span>${escapeHTML(selectedElement ? elementLabel(selectedElement) : 'No element selected')}</span>
+        </div>
+        <label class="review-field">AX path
+          <input data-review-path placeholder="/children/0" value="${escapeHTML(review.selectedElementPath || '')}">
+        </label>
+        <label class="review-field">Comment
+          <textarea data-review-comment rows="4"></textarea>
+        </label>
+        <div class="preset-row" style="margin-top:8px">
+          <button class="preset" data-review-action="save-comment">Save</button>
+          <button class="preset" data-review-action="save-comment-all">Save Selected</button>
+          <button class="preset" data-review-action="toggle-pick">${review.selectedSnapshotIds.has(snap.id) ? 'Unpick' : 'Pick'}</button>
+          <button class="preset" data-review-action="bundle">Bundle</button>
+        </div>
+        <div class="preset-row" style="margin-top:6px">
+          <button class="preset" data-review-action="copy-context">Copy Context</button>
+          <button class="preset" data-review-action="queue-task" ${selectedElementKeys.size || review.selectedSnapshotIds.size ? '' : 'disabled'}>Queue Task</button>
+          <button class="preset" data-review-action="clear-elements">Clear Elements</button>
+        </div>
+      </div>
+
+      <div class="controls">
+        <h4>Task Queue</h4>
+        <div class="review-selection-summary">
+          <span>${tasks.length} queued</span>
+          <span>${lastTask ? `Last ${escapeHTML(shortId(lastTask.id))} · ${escapeHTML(lastTask.status)}` : 'No task queued this pass'}</span>
+        </div>
+        <div class="review-stream-status ${escapeHTML(streamStatus)}">${escapeHTML(streamLabel)}</div>
+        <div class="review-selected-list">
+          ${tasks.slice(0, 5).map(task => `
+            <div class="review-selected-row">
+              <span>${escapeHTML(task.status)}</span>
+              <strong>${escapeHTML(task.title)}</strong>
+              <code>${escapeHTML(shortId(task.id))}</code>
+            </div>`).join('') || '<div class="review-muted">Queued tasks are stored in SQLite for agents and humans to claim.</div>'}
+        </div>
+      </div>
+
+      <div class="controls">
+        <h4>Selected Set</h4>
+        <div class="review-selected-list">
+          ${selectionList || '<div class="review-muted">Select elements across screens. Hold Command/Ctrl while clicking to add to the set.</div>'}
+        </div>
+      </div>
+
+      <div class="controls">
+        <h4>Elements</h4>
+        <div class="review-element-list">
+          ${elementList || '<div class="review-muted">No elements available. Capture again with a foreground app active.</div>'}
+        </div>
+      </div>
+
+      <div class="controls">
+        <h4>Comments</h4>
+        <div class="review-comments">
+          ${comments.length ? comments.map(c => `
+            <div class="review-comment">
+              <div class="path">${escapeHTML(c.axNodePath)}</div>
+              <div>${escapeHTML(c.text)}</div>
+            </div>`).join('') : '<div class="review-muted">No comments yet.</div>'}
+        </div>
+      </div>
+
+      <div class="controls">
+        <h4>Accessibility</h4>
+        <pre class="review-ax">${escapeHTML(axText || 'Loading…')}</pre>
+      </div>`;
+  }
+
   // ---- empty focus ---------------------------------------------------
   function renderFocusEmpty(host) {
     host.innerHTML = `
@@ -306,11 +547,30 @@
     return String(s ?? '').replace(/[&<>"']/g, c =>
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
+  function reviewArtifactURL(sessionId, path) {
+    return `/reviews/${encodeURIComponent(sessionId)}/artifact?path=${encodeURIComponent(path)}`;
+  }
+  function shortId(id) { return String(id || '').replace(/^(snap|review|bundle)-/, '').slice(0, 12); }
+  function shortDeviceName(name) { return String(name || '').replace(/^iPhone\s+/, '').replace(/^Apple\s+/, ''); }
+  function relativeFrame(frame, root) {
+    if (!frame || !root || root.width <= 0 || root.height <= 0) return null;
+    return {
+      left: clamp((frame.x - root.x) / root.width * 100, 0, 100),
+      top: clamp((frame.y - root.y) / root.height * 100, 0, 100),
+      width: clamp(frame.width / root.width * 100, 0.6, 100),
+      height: clamp(frame.height / root.height * 100, 0.6, 100)
+    };
+  }
+  function elementLabel(e) {
+    const bits = [e.role, e.label || e.identifier].filter(Boolean);
+    return bits.join(' · ') || e.path;
+  }
+  function clamp(n, min, max) { return Math.min(max, Math.max(min, n)); }
 
   window.FarmViews = {
     renderHeader, renderRail, renderGridHead,
-    renderGrid, renderWall, renderList,
-    renderFocusEmpty, renderCli,
+    renderGrid, renderWall, renderList, renderReview,
+    renderFocusEmpty, renderReviewFocus, renderCli,
     stateLabel, shapeFor, escapeHTML
   };
 })();

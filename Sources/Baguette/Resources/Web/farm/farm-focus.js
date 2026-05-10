@@ -34,6 +34,7 @@
   FarmFocus.prototype.show = function (device, tile, callbacks) {
     this.device = device;
     this.tile = tile;
+    this.callbacks = callbacks || {};
     this.host.innerHTML = `
       <div class="focus-head">
         <div class="row1">
@@ -100,6 +101,23 @@
           <span data-readout="record-timer" style="margin-left:auto;font-variant-numeric:tabular-nums"></span>
         </button>
         <div data-readout="record-list" class="record-list" style="margin-top:8px;display:flex;flex-direction:column;gap:4px"></div>
+      </div>
+
+      <div class="controls">
+        <h4>Review Mapping</h4>
+        <div class="preset-row">
+          <button class="preset" data-action="review-new">New</button>
+          <button class="preset" data-action="review-capture">Capture</button>
+          <button class="preset" data-action="review-open">Map</button>
+        </div>
+        <div class="preset-row" style="margin-top:6px">
+          <button class="preset" data-action="review-bundle">Bundle</button>
+          <button class="preset" data-action="review-ax">AX Screen</button>
+          <button class="preset" data-action="review-history">History</button>
+        </div>
+        <div class="review-focus-note" data-role="review-status">
+          Capture stores the current screenshot, accessibility tree, markers, and path edge in the selected review session.
+        </div>
       </div>`;
 
     // FarmApp re-parents the live canvas into `previewScreen` after
@@ -115,11 +133,20 @@
     // Wire actions back to the orchestrator.
     this.host.querySelector('[data-action="close"]').onclick     = () => callbacks.onClose();
     this.host.querySelector('[data-action="force-idr"]').onclick = () => tile?.forceIdr();
-    this.host.querySelector('[data-action="snapshot"]').onclick  = () => tile?.snapshot();
+    this.host.querySelector('[data-action="snapshot"]').onclick  = () => {
+      tile?.snapshot();
+      callbacks.onReviewCapture?.(device, 'snapshot');
+    };
     this.host.querySelector('[data-action="open-tab"]').onclick  = () => callbacks.onOpenTab(device);
     this.host.querySelector('[data-action="boot"]').onclick      = () => callbacks.onLifecycle(device, 'boot');
     this.host.querySelector('[data-action="shutdown"]').onclick  = () => callbacks.onLifecycle(device, 'shutdown');
     this.host.querySelector('[data-action="restart"]').onclick   = () => callbacks.onLifecycle(device, 'restart');
+    this.host.querySelector('[data-action="review-new"]').onclick     = () => callbacks.onReviewNew?.(device);
+    this.host.querySelector('[data-action="review-capture"]').onclick = () => callbacks.onReviewCapture?.(device);
+    this.host.querySelector('[data-action="review-open"]').onclick    = () => callbacks.onReviewOpen?.(device);
+    this.host.querySelector('[data-action="review-bundle"]').onclick  = () => callbacks.onReviewBundle?.(device);
+    this.host.querySelector('[data-action="review-ax"]').onclick      = () => callbacks.onReviewCapture?.(device, 'accessibility');
+    this.host.querySelector('[data-action="review-history"]').onclick = () => callbacks.onReviewOpen?.(device);
 
     // Hardware buttons — UI exposes the full set (home, lock, volume,
     // screenshot, rotate). Today only `home` and `lock` reach
@@ -180,6 +207,7 @@
     const ctx = this._getRecorderContext();
     if (!ctx || !ctx.canvas) { this._onRecordError(new Error('no live canvas')); return; }
     try {
+      this.callbacks.onReviewCapture?.(this.device, 'record-start');
       const rec = new window.BrowserRecorder({
         canvas:      ctx.canvas,
         frameImg:    ctx.frameImg,

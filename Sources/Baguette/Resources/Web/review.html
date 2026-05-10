@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Baguette · Review Map</title>
+<link rel="stylesheet" href="/review.css">
+</head>
+<body>
+<div class="review-shell">
+  <header class="topbar">
+    <div>
+      <div class="eyebrow">Baguette Review</div>
+      <h1 id="review-title">Screen Map</h1>
+    </div>
+    <div class="actions">
+      <button id="new-review">New Review</button>
+      <button id="bundle-selected" disabled>Bundle Selected</button>
+    </div>
+  </header>
+  <main>
+    <aside class="sessions">
+      <h2>Sessions</h2>
+      <div id="session-list"></div>
+    </aside>
+    <section class="canvas-wrap">
+      <div id="canvas"></div>
+    </section>
+    <aside class="inspector">
+      <h2>Inspector</h2>
+      <div id="inspector-empty">Select a captured screen.</div>
+      <div id="inspector" hidden>
+        <img id="shot" alt="">
+        <div class="meta" id="meta"></div>
+        <label>
+          Element path
+          <input id="comment-path" placeholder="AX path or identifier">
+        </label>
+        <label>
+          Comment
+          <textarea id="comment-text" rows="4"></textarea>
+        </label>
+        <button id="save-comment">Save Comment</button>
+        <h3>Comments</h3>
+        <div id="comment-list"></div>
+        <h3>Accessibility</h3>
+        <pre id="ax-tree"></pre>
+      </div>
+    </aside>
+  </main>
+</div>
+<script src="/review.js"></script>
+</body>
+</html>
+

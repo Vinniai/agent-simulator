@@ -25,6 +25,7 @@ struct Baguette: AsyncParsableCommand {
             LogsCommand.self,
             ServeCommand.self,
             OrientationCommand.self,
+            ReviewTasksCommand.self,
         ]
     )
 }

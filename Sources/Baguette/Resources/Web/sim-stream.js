@@ -222,6 +222,10 @@
         getDeviceSize: () => frame.screenSize(),
       });
     }
+
+    if (window.BaguetteReviewClient) {
+      window.BaguetteReviewClient.install({ getUdid: () => activeUdid });
+    }
   }
 
   function stopStream() {

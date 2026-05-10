@@ -34,17 +34,23 @@ import NIOCore
 struct Server: Sendable {
     let simulators: any Simulators
     let chromes: any Chromes
+    let reviewStore: any ReviewStore
+    let reviewTaskStore: any ReviewTaskStore
     let host: String
     let port: Int
 
     init(
         simulators: any Simulators,
         chromes: any Chromes,
+        reviewStore: any ReviewStore = FileReviewStore(),
+        reviewTaskStore: any ReviewTaskStore = SQLiteReviewTaskStore(),
         host: String = "127.0.0.1",
         port: Int = 8421
     ) {
         self.simulators = simulators
         self.chromes = chromes
+        self.reviewStore = reviewStore
+        self.reviewTaskStore = reviewTaskStore
         self.host = host
         self.port = port
     }
@@ -174,10 +180,145 @@ struct Server: Sendable {
         // JS) resolve against `/farm/<file>`. Registered before the
         // catch-all `/:file` so `/farm` doesn't get hijacked.
         router.get("/farm") { _, _ in Self.staticAsset("farm/farm.html") }
+        router.head("/farm") { _, _ in Self.staticAsset("farm/farm.html") }
+        router.get("/m") { _, _ in Self.staticAsset("farm/farm.html") }
+        router.head("/m") { _, _ in Self.staticAsset("farm/farm.html") }
         router.get("/farm/:file") { r, _ in
             let name = String(r.uri.path.split(separator: "/").last ?? "")
                 .removingPercentEncoding ?? ""
             return Self.staticAsset("farm/\(name)")
+        }
+        router.head("/farm/:file") { r, _ in
+            let name = String(r.uri.path.split(separator: "/").last ?? "")
+                .removingPercentEncoding ?? ""
+            return Self.staticAsset("farm/\(name)")
+        }
+
+        // Review map — durable point-in-time screenshots + AX trees
+        // arranged as a screen graph. The live simulator pages use
+        // these endpoints when Review Mode is enabled; /reviews/:id is
+        // the persistent viewer for markup and evidence bundles.
+        router.get("/reviews") { _, _ in Self.staticAsset("review.html") }
+        router.get("/reviews/:id") { _, _ in Self.staticAsset("review.html") }
+        router.get("/reviews.json") { [reviewStore] _, _ in
+            Self.reviewListJSON(store: reviewStore)
+        }
+        router.post("/reviews") { [reviewStore] r, _ in
+            await Self.createReview(request: r, store: reviewStore)
+        }
+        router.get("/reviews/:id/manifest.json") { [reviewStore] r, _ in
+            Self.reviewManifestJSON(id: Self.reviewIdParam(r), store: reviewStore)
+        }
+        router.post("/reviews/:id/capture") { [simulators, reviewStore] r, _ in
+            await Self.captureReview(
+                id: Self.reviewIdParam(r),
+                request: r,
+                simulators: simulators,
+                store: reviewStore
+            )
+        }
+        router.post("/reviews/:id/edge") { [reviewStore] r, _ in
+            await Self.addReviewEdge(
+                id: Self.reviewIdParam(r),
+                request: r,
+                store: reviewStore
+            )
+        }
+        router.post("/reviews/:id/comments") { [reviewStore] r, _ in
+            await Self.addReviewComment(
+                id: Self.reviewIdParam(r),
+                request: r,
+                store: reviewStore
+            )
+        }
+        router.post("/reviews/:id/bundles") { [reviewStore] r, _ in
+            await Self.createReviewBundle(
+                id: Self.reviewIdParam(r),
+                request: r,
+                store: reviewStore
+            )
+        }
+        router.post("/reviews/:id/tasks") { [reviewStore, reviewTaskStore] r, _ in
+            await Self.createReviewTask(
+                id: Self.reviewIdParam(r),
+                request: r,
+                store: reviewStore,
+                taskStore: reviewTaskStore
+            )
+        }
+        router.post("/reviews/source-search") { r, _ in
+            await Self.reviewSourceSearch(request: r)
+        }
+        router.get("/review-tasks.json") { [reviewTaskStore] r, _ in
+            Self.reviewTaskListJSON(
+                sessionId: r.uri.queryParameters.get("sessionId"),
+                status: r.uri.queryParameters.get("status"),
+                taskStore: reviewTaskStore
+            )
+        }
+        router.get("/review-task/:id.json") { [reviewTaskStore] r, _ in
+            Self.reviewTaskJSON(id: Self.trailingIDParam(r), taskStore: reviewTaskStore)
+        }
+        router.post("/review-tasks/:id/claim") { [reviewTaskStore] r, _ in
+            await Self.claimReviewTask(
+                id: Self.taskIdParam(r),
+                request: r,
+                taskStore: reviewTaskStore
+            )
+        }
+        router.post("/review-tasks/:id/status") { [reviewTaskStore] r, _ in
+            await Self.updateReviewTask(
+                id: Self.taskIdParam(r),
+                request: r,
+                taskStore: reviewTaskStore
+            )
+        }
+        router.post("/review-tasks/:id/events") { [reviewTaskStore] r, _ in
+            await Self.appendReviewTaskEvent(
+                id: Self.taskIdParam(r),
+                request: r,
+                taskStore: reviewTaskStore
+            )
+        }
+        router.post("/review-tasks/:id/verify") { [reviewTaskStore] r, _ in
+            await Self.verifyReviewTask(
+                id: Self.taskIdParam(r),
+                request: r,
+                taskStore: reviewTaskStore
+            )
+        }
+        router.post("/agent/tasks/next") { [reviewTaskStore] r, _ in
+            await Self.claimNextReviewTask(request: r, taskStore: reviewTaskStore)
+        }
+        router.post("/agent/tasks/:id/result") { [reviewTaskStore] r, _ in
+            await Self.updateReviewTask(
+                id: Self.agentTaskIdParam(r),
+                request: r,
+                taskStore: reviewTaskStore
+            )
+        }
+        router.post("/agent/tasks/:id/events") { [reviewTaskStore] r, _ in
+            await Self.appendReviewTaskEvent(
+                id: Self.agentTaskIdParam(r),
+                request: r,
+                taskStore: reviewTaskStore
+            )
+        }
+        router.ws("/review-tasks/stream") { [reviewTaskStore] inbound, outbound, context in
+            await Self.reviewTasksWS(
+                sessionId: context.request.uri.queryParameters.get("sessionId"),
+                status: context.request.uri.queryParameters.get("status"),
+                taskStore: reviewTaskStore,
+                inbound: inbound,
+                outbound: outbound
+            )
+        }
+        router.get("/reviews/:id/artifact") { [reviewStore] r, _ in
+            Self.reviewArtifact(
+                id: Self.reviewIdParam(r),
+                path: r.uri.queryParameters.get("path") ?? "",
+                store: reviewStore
+            )
         }
 
         // Live stream — encoded frames downstream as binary; upstream
@@ -729,6 +870,644 @@ struct Server: Sendable {
         _ = dispatcher.dispatch(line: line)
     }
 
+    // MARK: - review handlers
+
+    private static func reviewListJSON(store: any ReviewStore) -> Response {
+        do {
+            let data = try jsonEncoder.encode(store.listSessions())
+            return jsonResponse(data)
+        } catch {
+            return errorJSON(String(describing: error), status: .internalServerError)
+        }
+    }
+
+    private static func createReview(
+        request: Request,
+        store: any ReviewStore
+    ) async -> Response {
+        do {
+            let body = try await decodeJSON(CreateReviewBody.self, from: request)
+            let session = try store.createSession(name: body.name ?? "")
+            return jsonResponse(try jsonEncoder.encode(session))
+        } catch {
+            return errorJSON(String(describing: error), status: .badRequest)
+        }
+    }
+
+    private static func reviewManifestJSON(id: String, store: any ReviewStore) -> Response {
+        do {
+            let session = try store.loadSession(id: id)
+            return jsonResponse(try jsonEncoder.encode(session))
+        } catch ReviewStoreError.notFound {
+            return errorJSON("unknown review: \(id)", status: .notFound)
+        } catch {
+            return errorJSON(String(describing: error), status: .internalServerError)
+        }
+    }
+
+    private static func captureReview(
+        id: String,
+        request: Request,
+        simulators: any Simulators,
+        store: any ReviewStore
+    ) async -> Response {
+        do {
+            let input = try await decodeJSON(ReviewCaptureInput.self, from: request)
+            let result = try await ReviewCaptureService.capture(
+                input: input,
+                sessionId: id,
+                simulators: simulators,
+                store: store
+            )
+            return jsonResponse(try jsonEncoder.encode(result))
+        } catch SimulatorError.notFound(let udid) {
+            return errorJSON("unknown udid: \(udid)", status: .notFound)
+        } catch ReviewStoreError.notFound {
+            return errorJSON("unknown review: \(id)", status: .notFound)
+        } catch {
+            return errorJSON(String(describing: error), status: .badRequest)
+        }
+    }
+
+    private static func addReviewEdge(
+        id: String,
+        request: Request,
+        store: any ReviewStore
+    ) async -> Response {
+        do {
+            let body = try await decodeJSON(ReviewEdgeInput.self, from: request)
+            let edge = ReviewEdge(
+                id: FileReviewStore.makeID(prefix: "edge"),
+                fromSnapshotId: body.fromSnapshotId,
+                toSnapshotId: body.toSnapshotId,
+                actionType: body.actionType,
+                axNodePath: body.axNodePath,
+                gestureJSON: body.gestureJSON,
+                timestamp: Date()
+            )
+            var session = try store.loadSession(id: id)
+            session.edges.append(edge)
+            try store.saveSession(session)
+            return jsonResponse(try jsonEncoder.encode(edge))
+        } catch ReviewStoreError.notFound {
+            return errorJSON("unknown review: \(id)", status: .notFound)
+        } catch {
+            return errorJSON(String(describing: error), status: .badRequest)
+        }
+    }
+
+    private static func addReviewComment(
+        id: String,
+        request: Request,
+        store: any ReviewStore
+    ) async -> Response {
+        do {
+            let body = try await decodeJSON(ReviewCommentInput.self, from: request)
+            let comment = ReviewElementComment(
+                id: FileReviewStore.makeID(prefix: "comment"),
+                snapshotId: body.snapshotId,
+                axNodePath: body.axNodePath,
+                frame: body.frame,
+                text: body.text,
+                status: body.status ?? "open",
+                createdAt: Date()
+            )
+            var session = try store.loadSession(id: id)
+            session.comments.append(comment)
+            try store.saveSession(session)
+            return jsonResponse(try jsonEncoder.encode(comment))
+        } catch ReviewStoreError.notFound {
+            return errorJSON("unknown review: \(id)", status: .notFound)
+        } catch {
+            return errorJSON(String(describing: error), status: .badRequest)
+        }
+    }
+
+    private static func createReviewBundle(
+        id: String,
+        request: Request,
+        store: any ReviewStore
+    ) async -> Response {
+        do {
+            let body = try await decodeJSON(ReviewBundleInput.self, from: request)
+            var session = try store.loadSession(id: id)
+            let bundle = try makeReviewBundle(input: body, session: session, store: store)
+            session.bundles.append(bundle)
+            try store.saveSession(session)
+            return jsonResponse(try jsonEncoder.encode(bundle))
+        } catch ReviewStoreError.notFound {
+            return errorJSON("unknown review: \(id)", status: .notFound)
+        } catch {
+            return errorJSON(String(describing: error), status: .badRequest)
+        }
+    }
+
+    private static func reviewSourceSearch(request: Request) async -> Response {
+        do {
+            let input = try await decodeJSON(ReviewSourceSearchInput.self, from: request)
+            let result = try ReviewSourceSearcher.search(input)
+            return jsonResponse(try jsonEncoder.encode(result))
+        } catch {
+            return errorJSON(String(describing: error), status: .badRequest)
+        }
+    }
+
+    private static func createReviewTask(
+        id: String,
+        request: Request,
+        store: any ReviewStore,
+        taskStore: any ReviewTaskStore
+    ) async -> Response {
+        do {
+            let input = try await decodeJSON(ReviewTaskCreateInput.self, from: request)
+            var session = try store.loadSession(id: id)
+            let bundle = try ensureBundle(input: input, session: &session, store: store)
+            try store.saveSession(session)
+
+            let taskId = FileReviewStore.makeID(prefix: "task")
+            let contextPath = "tasks/\(taskId)/context.md"
+            let snapshotIds = input.snapshotIds.isEmpty ? bundle?.snapshotIds ?? [] : input.snapshotIds
+            let elements = taskElements(
+                taskId: taskId,
+                input: input,
+                session: session
+            )
+            let contextMarkdown = input.contextMarkdown ?? taskContextMarkdown(
+                session: session,
+                bundle: bundle,
+                snapshotIds: snapshotIds,
+                elements: elements
+            )
+            try store.writeArtifact(
+                sessionId: session.id,
+                relativePath: contextPath,
+                data: Data(contextMarkdown.utf8)
+            )
+            let now = Date()
+            let title = input.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let instructions = input.instructions?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let task = ReviewTask(
+                id: taskId,
+                sessionId: session.id,
+                bundleId: bundle?.id,
+                title: title?.isEmpty == false ? title! : "Review selected AX elements",
+                instructions: instructions?.isEmpty == false
+                    ? instructions!
+                    : "Use the attached review context, screenshot, AX tree, comments, and source references to make the requested UI change and verify it against a fresh capture.",
+                status: "open",
+                priority: input.priority ?? "normal",
+                assignee: input.assignee,
+                contextPath: contextPath,
+                bundleJSONPath: bundle?.jsonPath,
+                bundleMarkdownPath: bundle?.markdownPath,
+                resultSummary: nil,
+                verificationSnapshotId: nil,
+                createdAt: now,
+                updatedAt: now,
+                claimedAt: nil,
+                completedAt: nil,
+                elements: elements,
+                events: [
+                    ReviewTaskEvent(
+                        id: FileReviewStore.makeID(prefix: "event"),
+                        taskId: taskId,
+                        type: "created",
+                        actor: input.assignee,
+                        message: "Created from review selection",
+                        metadataJSON: nil,
+                        createdAt: now
+                    )
+                ]
+            )
+            return jsonResponse(try jsonEncoder.encode(try taskStore.createTask(task)))
+        } catch ReviewStoreError.notFound {
+            return errorJSON("unknown review: \(id)", status: .notFound)
+        } catch {
+            return errorJSON(String(describing: error), status: .badRequest)
+        }
+    }
+
+    private static func reviewTaskListJSON(
+        sessionId: String?,
+        status: String?,
+        taskStore: any ReviewTaskStore
+    ) -> Response {
+        do {
+            return jsonResponse(try jsonEncoder.encode(
+                try taskStore.listTasks(sessionId: sessionId, status: status)
+            ))
+        } catch {
+            return errorJSON(String(describing: error), status: .internalServerError)
+        }
+    }
+
+    private static func reviewTaskJSON(id: String, taskStore: any ReviewTaskStore) -> Response {
+        do {
+            return jsonResponse(try jsonEncoder.encode(try taskStore.loadTask(id: id)))
+        } catch ReviewTaskStoreError.notFound {
+            return errorJSON("unknown task: \(id)", status: .notFound)
+        } catch {
+            return errorJSON(String(describing: error), status: .internalServerError)
+        }
+    }
+
+    private static func claimNextReviewTask(
+        request: Request,
+        taskStore: any ReviewTaskStore
+    ) async -> Response {
+        do {
+            let input = try await decodeJSON(ReviewTaskClaimInput.self, from: request)
+            guard let task = try taskStore.claimNext(agentId: input.agentId) else {
+                return jsonResponse(Data("null".utf8))
+            }
+            return jsonResponse(try jsonEncoder.encode(task))
+        } catch {
+            return errorJSON(String(describing: error), status: .badRequest)
+        }
+    }
+
+    private static func claimReviewTask(
+        id: String,
+        request: Request,
+        taskStore: any ReviewTaskStore
+    ) async -> Response {
+        do {
+            let input = try await decodeJSON(ReviewTaskClaimInput.self, from: request)
+            return jsonResponse(try jsonEncoder.encode(
+                try taskStore.claimTask(id: id, agentId: input.agentId)
+            ))
+        } catch ReviewTaskStoreError.notFound {
+            return errorJSON("unknown task: \(id)", status: .notFound)
+        } catch {
+            return errorJSON(String(describing: error), status: .badRequest)
+        }
+    }
+
+    private static func updateReviewTask(
+        id: String,
+        request: Request,
+        taskStore: any ReviewTaskStore
+    ) async -> Response {
+        do {
+            let input = try await decodeJSON(ReviewTaskUpdateInput.self, from: request)
+            return jsonResponse(try jsonEncoder.encode(
+                try taskStore.updateTask(id: id, input: input)
+            ))
+        } catch ReviewTaskStoreError.notFound {
+            return errorJSON("unknown task: \(id)", status: .notFound)
+        } catch {
+            return errorJSON(String(describing: error), status: .badRequest)
+        }
+    }
+
+    private static func appendReviewTaskEvent(
+        id: String,
+        request: Request,
+        taskStore: any ReviewTaskStore
+    ) async -> Response {
+        do {
+            let input = try await decodeJSON(ReviewTaskEventInput.self, from: request)
+            return jsonResponse(try jsonEncoder.encode(
+                try taskStore.appendEvent(taskId: id, input: input)
+            ))
+        } catch ReviewTaskStoreError.notFound {
+            return errorJSON("unknown task: \(id)", status: .notFound)
+        } catch {
+            return errorJSON(String(describing: error), status: .badRequest)
+        }
+    }
+
+    private static func verifyReviewTask(
+        id: String,
+        request: Request,
+        taskStore: any ReviewTaskStore
+    ) async -> Response {
+        do {
+            let input = try await decodeJSON(ReviewTaskVerificationInput.self, from: request)
+            let verification = ReviewTaskVerification(
+                id: FileReviewStore.makeID(prefix: "verify"),
+                taskId: id,
+                beforeSnapshotIds: input.beforeSnapshotIds ?? [],
+                afterSnapshotId: input.afterSnapshotId,
+                status: input.status,
+                notes: input.notes,
+                createdAt: Date()
+            )
+            return jsonResponse(try jsonEncoder.encode(
+                try taskStore.addVerification(taskId: id, verification: verification)
+            ))
+        } catch ReviewTaskStoreError.notFound {
+            return errorJSON("unknown task: \(id)", status: .notFound)
+        } catch {
+            return errorJSON(String(describing: error), status: .badRequest)
+        }
+    }
+
+    private static func reviewTasksWS(
+        sessionId: String?,
+        status: String?,
+        taskStore: any ReviewTaskStore,
+        inbound: WebSocketInboundStream,
+        outbound: WebSocketOutboundWriter
+    ) async {
+        try? await outbound.write(.text(#"{"type":"task_stream_started"}"#))
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                var lastPayload = Data()
+                var lastTasksByID: [String: ReviewTask] = [:]
+                var hasSeenTasks = false
+                while !Task.isCancelled {
+                    do {
+                        let tasks = try taskStore.listTasks(sessionId: sessionId, status: status)
+                        let currentTasksByID = Dictionary(uniqueKeysWithValues: tasks.map { ($0.id, $0) })
+                        if hasSeenTasks {
+                            for task in tasks where lastTasksByID[task.id] != task {
+                                let update = try jsonEncoder.encode(TaskStreamTask(type: "task_update", task: task))
+                                try await outbound.write(.text(String(decoding: update, as: UTF8.self)))
+                            }
+                        }
+                        lastTasksByID = currentTasksByID
+                        hasSeenTasks = true
+                        let payload = try jsonEncoder.encode(TaskStreamSnapshot(tasks: tasks))
+                        if payload != lastPayload {
+                            lastPayload = payload
+                            try await outbound.write(.text(String(decoding: payload, as: UTF8.self)))
+                        }
+                    } catch {
+                        try? await outbound.write(.text(
+                            #"{"type":"task_stream_error","error":"\#(jsonEscape(String(describing: error)))"}"#
+                        ))
+                    }
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                }
+            }
+            group.addTask {
+                do {
+                    for try await frame in inbound {
+                        guard frame.opcode == .text else { continue }
+                        let line = String(buffer: frame.data)
+                        if Self.isReviewTaskWSStop(line) { break }
+                        if await handleReviewTaskWSLine(
+                            line: line,
+                            taskStore: taskStore,
+                            outbound: outbound
+                        ) {
+                            continue
+                        }
+                    }
+                } catch {
+                    // socket closed; sibling task is cancelled below
+                }
+            }
+            await group.next()
+            group.cancelAll()
+        }
+        try? await outbound.write(.text(#"{"type":"task_stream_stopped"}"#))
+    }
+
+    private static func handleReviewTaskWSLine(
+        line: String,
+        taskStore: any ReviewTaskStore,
+        outbound: WebSocketOutboundWriter
+    ) async -> Bool {
+        guard let data = line.data(using: .utf8),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let type = dict["type"] as? String else {
+            return false
+        }
+        do {
+            let task: ReviewTask?
+            switch type {
+            case "stop":
+                try? await outbound.write(.text(#"{"type":"task_stream_stopped","reason":"client"}"#))
+                return true
+            case "claim_next":
+                guard let agentId = dict["agentId"] as? String else { throw ReviewTaskWSError.missing("agentId") }
+                task = try taskStore.claimNext(agentId: agentId)
+            case "claim":
+                guard let agentId = dict["agentId"] as? String else { throw ReviewTaskWSError.missing("agentId") }
+                task = try taskStore.claimTask(id: try requiredString("taskId", dict), agentId: agentId)
+            case "event":
+                task = try taskStore.appendEvent(
+                    taskId: try requiredString("taskId", dict),
+                    input: ReviewTaskEventInput(
+                        type: (dict["eventType"] as? String) ?? "progress",
+                        actor: dict["actor"] as? String,
+                        message: try requiredString("message", dict),
+                        metadataJSON: dict["metadataJSON"] as? String
+                    )
+                )
+            case "result":
+                task = try taskStore.updateTask(
+                    id: try requiredString("taskId", dict),
+                    input: ReviewTaskUpdateInput(
+                        status: (dict["status"] as? String) ?? "readyForVerify",
+                        assignee: dict["assignee"] as? String,
+                        resultSummary: try requiredString("summary", dict),
+                        verificationSnapshotId: dict["verificationSnapshotId"] as? String,
+                        notes: dict["notes"] as? String,
+                        actor: dict["actor"] as? String
+                    )
+                )
+            case "verify":
+                let before = dict["beforeSnapshotIds"] as? [String]
+                let verification = ReviewTaskVerification(
+                    id: FileReviewStore.makeID(prefix: "verify"),
+                    taskId: try requiredString("taskId", dict),
+                    beforeSnapshotIds: before ?? [],
+                    afterSnapshotId: dict["afterSnapshotId"] as? String,
+                    status: (dict["status"] as? String) ?? "pending",
+                    notes: dict["notes"] as? String,
+                    createdAt: Date()
+                )
+                task = try taskStore.addVerification(taskId: verification.taskId, verification: verification)
+            default:
+                return false
+            }
+            if let task {
+                let payload = try jsonEncoder.encode(TaskStreamTask(type: "task_update", task: task))
+                try await outbound.write(.text(String(decoding: payload, as: UTF8.self)))
+            } else {
+                try await outbound.write(.text(#"{"type":"task_update","task":null}"#))
+            }
+            return true
+        } catch {
+            try? await outbound.write(.text(
+                #"{"type":"task_stream_error","error":"\#(jsonEscape(String(describing: error)))"}"#
+            ))
+            return true
+        }
+    }
+
+    private static func isReviewTaskWSStop(_ line: String) -> Bool {
+        guard let data = line.data(using: .utf8),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return false
+        }
+        return (dict["type"] as? String) == "stop"
+    }
+
+    static func makeReviewBundle(
+        input: ReviewBundleInput,
+        session: ReviewSession,
+        store: any ReviewStore
+    ) throws -> ReviewBundle {
+        let snapshotIds = Set(input.snapshotIds)
+        let commentIds = Set(input.commentIds ?? [])
+        let edgeIds = Set(input.edgeIds ?? [])
+        let snapshots = session.snapshots.filter { snapshotIds.contains($0.id) }
+        let comments = session.comments.filter {
+            commentIds.isEmpty ? snapshotIds.contains($0.snapshotId) : commentIds.contains($0.id)
+        }
+        let edges = session.edges.filter {
+            edgeIds.isEmpty
+                ? snapshotIds.contains($0.toSnapshotId)
+                    || ($0.fromSnapshotId.map { snapshotIds.contains($0) } ?? false)
+                : edgeIds.contains($0.id)
+        }
+        let bundleId = FileReviewStore.makeID(prefix: "bundle")
+        let jsonPath = "bundles/\(bundleId)/bundle.json"
+        let markdownPath = "bundles/\(bundleId)/brief.md"
+        let bundle = ReviewBundle(
+            id: bundleId,
+            createdAt: Date(),
+            snapshotIds: snapshots.map(\.id),
+            commentIds: comments.map(\.id),
+            edgeIds: edges.map(\.id),
+            jsonPath: jsonPath,
+            markdownPath: markdownPath
+        )
+        let payload = ReviewBundlePayload(
+            session: session,
+            snapshots: snapshots,
+            comments: comments,
+            edges: edges
+        )
+        try store.writeArtifact(
+            sessionId: session.id,
+            relativePath: jsonPath,
+            data: try jsonEncoder.encode(payload)
+        )
+        try store.writeArtifact(
+            sessionId: session.id,
+            relativePath: markdownPath,
+            data: Data(markdownBrief(
+                session: session,
+                snapshots: snapshots,
+                comments: comments,
+                edges: edges
+            ).utf8)
+        )
+        return bundle
+    }
+
+    private static func ensureBundle(
+        input: ReviewTaskCreateInput,
+        session: inout ReviewSession,
+        store: any ReviewStore
+    ) throws -> ReviewBundle? {
+        if let bundleId = input.bundleId,
+           let bundle = session.bundles.first(where: { $0.id == bundleId }) {
+            return bundle
+        }
+        let snapshotIds = input.snapshotIds
+        guard !snapshotIds.isEmpty else { return nil }
+        let bundle = try makeReviewBundle(
+            input: ReviewBundleInput(snapshotIds: snapshotIds, commentIds: nil, edgeIds: nil),
+            session: session,
+            store: store
+        )
+        session.bundles.append(bundle)
+        return bundle
+    }
+
+    private static func taskElements(
+        taskId: String,
+        input: ReviewTaskCreateInput,
+        session: ReviewSession
+    ) -> [ReviewTaskElement] {
+        (input.elements ?? []).map { item in
+            let element = session.snapshots
+                .first { $0.id == item.snapshotId }?
+                .elements?
+                .first { $0.axNodePath == item.axNodePath }
+            let comments = session.comments
+                .filter { $0.snapshotId == item.snapshotId && $0.axNodePath == item.axNodePath }
+                .map(\.text)
+                .joined(separator: "\n")
+            return ReviewTaskElement(
+                id: FileReviewStore.makeID(prefix: "taskel"),
+                taskId: taskId,
+                snapshotId: item.snapshotId,
+                axNodePath: item.axNodePath,
+                role: element?.role,
+                label: element?.label ?? element?.title ?? element?.value,
+                frame: element?.frame,
+                commentText: item.commentText ?? (comments.isEmpty ? nil : comments)
+            )
+        }
+    }
+
+    private static func taskContextMarkdown(
+        session: ReviewSession,
+        bundle: ReviewBundle?,
+        snapshotIds: [String],
+        elements: [ReviewTaskElement]
+    ) -> String {
+        var out: [String] = []
+        out.append("# Queued review task")
+        out.append("")
+        out.append("Session: `\(session.id)`")
+        if let bundle {
+            out.append("Bundle: `\(bundle.id)`")
+            out.append("Bundle JSON: `\(bundle.jsonPath)`")
+            out.append("Bundle brief: `\(bundle.markdownPath)`")
+        }
+        out.append("")
+        out.append("## Screens")
+        for id in snapshotIds {
+            guard let snapshot = session.snapshots.first(where: { $0.id == id }) else { continue }
+            out.append("- `\(snapshot.id)` on `\(snapshot.udid)`")
+            out.append("  - screenshot: `\(snapshot.screenshotPath)`")
+            out.append("  - accessibility: `\(snapshot.axPath)`")
+        }
+        out.append("")
+        out.append("## Elements")
+        if elements.isEmpty {
+            out.append("- No element-level selection supplied.")
+        } else {
+            for element in elements {
+                out.append("- `\(element.snapshotId)` `\(element.axNodePath)` \(element.label ?? element.role ?? "")")
+                if let frame = element.frame {
+                    out.append("  - frame: x=\(frame.origin.x) y=\(frame.origin.y) w=\(frame.size.width) h=\(frame.size.height)")
+                }
+                if let comment = element.commentText {
+                    out.append("  - comment: \(comment)")
+                }
+            }
+        }
+        return out.joined(separator: "\n")
+    }
+
+    private static func reviewArtifact(
+        id: String,
+        path: String,
+        store: any ReviewStore
+    ) -> Response {
+        do {
+            let data = try store.readArtifact(sessionId: id, relativePath: path)
+            return Response(
+                status: .ok,
+                headers: [.contentType: contentType(for: path), .cacheControl: "no-cache"],
+                body: .init(byteBuffer: ByteBuffer(data: data))
+            )
+        } catch ReviewStoreError.notFound {
+            return errorJSON("missing artifact: \(path)", status: .notFound)
+        } catch {
+            return errorJSON(String(describing: error), status: .badRequest)
+        }
+    }
+
     /// Pull the UDID out of a `/simulators/<udid>/<verb>` request.
     /// `<verb>` is the last segment, `<udid>` the one before.
     private static func udidParam(_ request: Request) -> String {
@@ -737,6 +1516,38 @@ struct Server: Sendable {
         return String(parts[parts.count - 2]).removingPercentEncoding ?? ""
     }
 
+    private static func reviewIdParam(_ request: Request) -> String {
+        let parts = request.uri.path.split(separator: "/")
+        guard parts.count >= 2 else { return "" }
+        return String(parts[1]).removingPercentEncoding ?? ""
+    }
+
+    private static func taskIdParam(_ request: Request) -> String {
+        let parts = request.uri.path.split(separator: "/")
+        guard parts.count >= 2 else { return "" }
+        return String(parts[1]).removingPercentEncoding ?? ""
+    }
+
+    private static func trailingIDParam(_ request: Request) -> String {
+        let parts = request.uri.path.split(separator: "/")
+        guard let last = parts.last else { return "" }
+        return String(last)
+            .replacingOccurrences(of: ".json", with: "")
+            .removingPercentEncoding ?? ""
+    }
+
+    private static func agentTaskIdParam(_ request: Request) -> String {
+        let parts = request.uri.path.split(separator: "/")
+        guard parts.count >= 3 else { return "" }
+        return String(parts[2]).removingPercentEncoding ?? ""
+    }
+
+    private static func requiredString(_ key: String, _ dict: [String: Any]) throws -> String {
+        guard let value = dict[key] as? String, !value.isEmpty else {
+            throw ReviewTaskWSError.missing(key)
+        }
+        return value
+    }
 
     private static func redirect(to path: String) -> Response {
         Response(
@@ -755,6 +1566,27 @@ private let jsonOK = Response(
     body: .init(byteBuffer: ByteBuffer(string: "{\"ok\":true}"))
 )
 
+private let jsonEncoder: JSONEncoder = {
+    let e = JSONEncoder()
+    e.outputFormatting = [.prettyPrinted, .sortedKeys]
+    e.dateEncodingStrategy = .iso8601
+    return e
+}()
+
+private let jsonDecoder: JSONDecoder = {
+    let d = JSONDecoder()
+    d.dateDecodingStrategy = .iso8601
+    return d
+}()
+
+private func jsonResponse(_ data: Data, status: HTTPResponse.Status = .ok) -> Response {
+    Response(
+        status: status,
+        headers: [.contentType: "application/json", .cacheControl: "no-cache"],
+        body: .init(byteBuffer: ByteBuffer(data: data))
+    )
+}
+
 private func errorJSON(_ message: String, status: HTTPResponse.Status) -> Response {
     let escaped = message.replacingOccurrences(of: "\"", with: "\\\"")
     return Response(
@@ -764,6 +1596,104 @@ private func errorJSON(_ message: String, status: HTTPResponse.Status) -> Respon
             "{\"ok\":false,\"error\":\"\(escaped)\"}"
         ))
     )
+}
+
+private func decodeJSON<T: Decodable>(_ type: T.Type, from request: Request) async throws -> T {
+    var buffer = try await request.body.collect(upTo: 5_242_880)
+    let data = buffer.readData(length: buffer.readableBytes) ?? Data()
+    if data.isEmpty, T.self == CreateReviewBody.self {
+        return CreateReviewBody(name: nil) as! T
+    }
+    return try jsonDecoder.decode(T.self, from: data)
+}
+
+private struct CreateReviewBody: Codable, Sendable {
+    var name: String?
+}
+
+private struct ReviewEdgeInput: Codable, Sendable {
+    var fromSnapshotId: String?
+    var toSnapshotId: String
+    var actionType: String
+    var axNodePath: String?
+    var gestureJSON: String?
+}
+
+private struct ReviewBundlePayload: Codable, Sendable {
+    var session: ReviewSession
+    var snapshots: [ReviewScreenSnapshot]
+    var comments: [ReviewElementComment]
+    var edges: [ReviewEdge]
+}
+
+private struct TaskStreamSnapshot: Codable, Sendable {
+    var type = "task_snapshot"
+    var tasks: [ReviewTask]
+}
+
+private struct TaskStreamTask: Codable, Sendable {
+    var type: String
+    var task: ReviewTask
+}
+
+private enum ReviewTaskWSError: Error, CustomStringConvertible {
+    case missing(String)
+
+    var description: String {
+        switch self {
+        case .missing(let key): return "missing \(key)"
+        }
+    }
+}
+
+private func markdownBrief(
+    session: ReviewSession,
+    snapshots: [ReviewScreenSnapshot],
+    comments: [ReviewElementComment],
+    edges: [ReviewEdge]
+) -> String {
+    var out: [String] = []
+    out.append("# \(session.name)")
+    out.append("")
+    out.append("Review session: `\(session.id)`")
+    out.append("")
+    out.append("## Screens")
+    if snapshots.isEmpty {
+        out.append("- No snapshots selected.")
+    } else {
+        for snapshot in snapshots {
+            let markers = snapshot.markers.map { $0.kind.rawValue }.joined(separator: ", ")
+            out.append("- `\(snapshot.id)` on `\(snapshot.udid)` fingerprint `\(snapshot.screenFingerprint)`\(markers.isEmpty ? "" : " markers: \(markers)")")
+            out.append("  - screenshot: `\(snapshot.screenshotPath)`")
+            out.append("  - accessibility: `\(snapshot.axPath)`")
+        }
+    }
+    out.append("")
+    out.append("## Path")
+    if edges.isEmpty {
+        out.append("- No path edges selected.")
+    } else {
+        for edge in edges {
+            out.append("- \(edge.actionType): `\(edge.fromSnapshotId ?? "start")` -> `\(edge.toSnapshotId)`")
+        }
+    }
+    out.append("")
+    out.append("## Comments")
+    if comments.isEmpty {
+        out.append("- No comments selected.")
+    } else {
+        for comment in comments {
+            let frame: String
+            if let rect = comment.frame {
+                frame = " frame x:\(Int(rect.origin.x)) y:\(Int(rect.origin.y)) w:\(Int(rect.size.width)) h:\(Int(rect.size.height))"
+            } else {
+                frame = ""
+            }
+            out.append("- `\(comment.snapshotId)` `\(comment.axNodePath)`\(frame): \(comment.text)")
+        }
+    }
+    out.append("")
+    return out.joined(separator: "\n")
 }
 
 /// Plain-old-data carrier for the `/simulators/:udid/logs` query
