@@ -322,6 +322,51 @@ flow keeps the bundle machinery. Use bulk-create for external
 ingestion (route walker, sitemap, manifest); use single-create when
 the operator is interactively marking up live captures.
 
+## Importing external snapshots
+
+Sometimes the artefacts arrive from somewhere other than baguette
+itself — a route walker that owns its own screenshotter, an offline
+manifest, a manual drop. Push them in with:
+
+```
+POST /reviews/:sessionId/snapshots/import
+content-type: application/json
+
+{ "udid":          "imported-agent-canvas",
+  "deviceName":    "Synthetic Device",
+  "runtime":       "imported",
+  "imageBase64":   "<base64 JPEG or PNG bytes>",
+  "imageMimeType": "image/jpeg",
+  "axJSON":        "{\"role\":\"AXApplication\",…}",   // optional verbatim AX tree
+  "elements": [
+    { "axNodePath": "/", "role": "AXApplication", "label": "Home",
+      "frame": { "x": 0, "y": 0, "width": 393, "height": 852 } },
+    { "axNodePath": "/children/0", "role": "AXButton", "label": "Continue",
+      "frame": { "x": 24, "y": 700, "width": 345, "height": 50 } }
+  ],
+  "sourceLabel": "agent-canvas",
+  "externalId":  "route:/home" }
+```
+
+The response is the same `ReviewCaptureResult` shape as the live
+capture path — `{session, snapshot, edge:null}`. The snapshot is
+written to `~/.baguette/reviews/<sessionId>/screenshots/<id>.jpg` and
+`<id>.json` for AX, just like a live capture, so the review browser
+renders them identically.
+
+- **`externalId` makes the import idempotent.** Re-posting with the
+  same `externalId` reuses the previously-imported snapshot's id
+  instead of creating a duplicate. Useful when the same agent-canvas
+  manifest is replayed.
+- **`elements` is queryable**; `axJSON` is verbatim archival. Supply
+  both for the richest review surface. `axJSON` alone is allowed (the
+  drawing tools won't have per-element hit-tests but the verbatim
+  tree is still on disk for reference).
+- **`udid`** is synthesised from `sourceLabel` if absent
+  (e.g. `imported-agent-canvas`). The review map shows one synthetic
+  "device" tile per source so external snapshots don't collide with
+  live ones.
+
 CLI mirror — pipe a JSON file or stream from stdin:
 
 ```bash

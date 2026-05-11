@@ -249,6 +249,13 @@ struct Server: Sendable {
                 store: reviewStore
             )
         }
+        router.post("/reviews/:id/snapshots/import") { [reviewStore] r, _ in
+            await Self.importReviewSnapshot(
+                id: Self.reviewIdParam(r),
+                request: r,
+                store: reviewStore
+            )
+        }
         router.post("/reviews/:id/edge") { [reviewStore] r, _ in
             await Self.addReviewEdge(
                 id: Self.reviewIdParam(r),
@@ -1271,6 +1278,32 @@ struct Server: Sendable {
             let input = try await decodeJSON(ReviewSourceSearchInput.self, from: request)
             let result = try ReviewSourceSearcher.search(input)
             return jsonResponse(try jsonEncoder.encode(result))
+        } catch {
+            return errorJSON(String(describing: error), status: .badRequest)
+        }
+    }
+
+    /// External snapshot ingestion. Lets a non-simulator source push
+    /// a screenshot + (optionally) AX elements into a review session.
+    /// Used by `examples/agent/agent_canvas_to_baguette.py` and any
+    /// other tool that has artefacts but doesn't drive the simulator.
+    /// Returns the same `ReviewCaptureResult` shape as the live capture
+    /// route; `edge` is always nil here.
+    private static func importReviewSnapshot(
+        id: String,
+        request: Request,
+        store: any ReviewStore
+    ) async -> Response {
+        do {
+            let input = try await decodeJSON(ReviewSnapshotImportInput.self, from: request)
+            let result = try ReviewSnapshotImportService.importSnapshot(
+                input: input, sessionId: id, store: store
+            )
+            return jsonResponse(try jsonEncoder.encode(result))
+        } catch ReviewStoreError.notFound(_) {
+            return errorJSON("unknown review: \(id)", status: .notFound)
+        } catch let error as ReviewSnapshotImportError {
+            return errorJSON(String(describing: error), status: .badRequest)
         } catch {
             return errorJSON(String(describing: error), status: .badRequest)
         }
