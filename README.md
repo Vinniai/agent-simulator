@@ -202,7 +202,7 @@ served root for live-iteration without rebuilding.
 | `GET`  | `/simulators/:udid/chrome.json`            | DeviceKit bezel layout       |
 | `GET`  | `/simulators/:udid/bezel.png`              | rasterized bezel PNG         |
 | `GET`  | `/simulators/:udid/screenshot.jpg`         | one-shot JPEG of the framebuffer (`?quality=&scale=`) |
-| `WS`   | `/simulators/:udid/stream?format=mjpeg|avcc` | live frames + control + input + `describe_ui` |
+| `WS`   | `/simulators/:udid/stream?format=mjpeg\|avcc` | live frames + control + input + `describe_ui` |
 | `WS`   | `/simulators/:udid/logs?level=&style=&predicate=&bundleId=` | live unified-log stream (one `{"type":"log","line":…}` text frame per entry) |
 | `GET`  | `/farm`                                    | device-farm HTML             |
 | `GET`  | `/farm/:file`                              | farm UI asset (`farm.css`, `farm-*.js`, …) |
