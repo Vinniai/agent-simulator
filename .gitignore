@@ -5,3 +5,4 @@ DerivedData/
 *.xcodeproj
 *.xcworkspace
 /Baguette
+.claude/scheduled_tasks.lock
