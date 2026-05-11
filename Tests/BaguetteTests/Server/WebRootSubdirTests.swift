@@ -59,6 +59,14 @@ struct WebRootSubdirTests {
         #expect(WebRoot.string(named: "farm/%2e%2e/\(outside.lastPathComponent)") == nil)
     }
 
+    @Test("prefers the agent-sim resource bundle while keeping legacy fallback")
+    func sidecarBundleNameOrder() {
+        #expect(WebRoot.sidecarBundleNames == [
+            "agent-sim_Baguette.bundle",
+            "Baguette_Baguette.bundle",
+        ])
+    }
+
     // MARK: - helpers
 
     private func makeTempWebTree(files: [String: String]) throws -> URL {

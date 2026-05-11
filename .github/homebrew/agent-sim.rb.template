@@ -3,12 +3,12 @@
 
 class AgentSim < Formula
   desc "Agent-driven iOS simulator control, capture, markup, and review"
-  homepage "https://github.com/tddworks/baguette"
+  homepage "https://github.com/josh-vincent/agent-sim"
   version "__VERSION__"
   license "Apache-2.0"
 
   on_arm do
-    url "https://github.com/tddworks/baguette/releases/download/__VERSION__/agent-sim___VERSION___macOS_arm64.tar.gz"
+    url "https://github.com/josh-vincent/agent-sim/releases/download/__VERSION__/agent-sim___VERSION___macOS_arm64.tar.gz"
     sha256 "__SHA256_ARM64__"
   end
 
@@ -22,7 +22,7 @@ class AgentSim < Formula
     # executable's directory. Install both into libexec and symlink
     # the binary into bin.
     libexec.install "agent-sim"
-    libexec.install "Baguette_Baguette.bundle"
+    libexec.install "agent-sim_Baguette.bundle"
     bin.install_symlink libexec/"agent-sim"
   end
 

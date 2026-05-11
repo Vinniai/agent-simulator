@@ -46,29 +46,11 @@ jobs:
 
       - name: Update version in source
         run: |
-          sed -i '' "s/let baguetteVersion = \".*\"/let baguetteVersion = \"${{ steps.version.outputs.version }}\"/" Sources/Baguette/App/Version.swift
-          grep baguetteVersion Sources/Baguette/App/Version.swift
+          sed -i '' "s/let agentSimVersion = \".*\"/let agentSimVersion = \"${{ steps.version.outputs.version }}\"/" Sources/Baguette/App/Version.swift
+          grep agentSimVersion Sources/Baguette/App/Version.swift
 
-      - name: Build arm64
-        run: |
-          swift build -c release --arch arm64 --disable-sandbox
-          strip -rSTx .build/arm64-apple-macosx/release/Baguette
-
-      - name: Package binary + resource bundle
-        run: |
-          BUILD_DIR=.build/arm64-apple-macosx/release
-          STAGING=baguette-${{ steps.version.outputs.tag }}-macOS-arm64
-          mkdir -p "$STAGING"
-          cp "$BUILD_DIR/Baguette" "$STAGING/Baguette"
-          # Resource bundle holds Sources/Baguette/Resources/Web for `serve`.
-          # Must sit next to the executable at runtime.
-          cp -R "$BUILD_DIR/Baguette_Baguette.bundle" "$STAGING/Baguette_Baguette.bundle"
-          tar czf "release/baguette_${{ steps.version.outputs.tag }}_macOS_arm64.tar.gz" "$STAGING"
-
-      - name: Create checksums
-        run: |
-          cd release
-          shasum -a 256 * > baguette_${{ steps.version.outputs.tag }}_checksums.txt
+      - name: Package arm64 binary + resource bundle
+        run: scripts/package-agent-sim.sh "${{ steps.version.outputs.version }}" release
 
       - name: Extract release notes from CHANGELOG
         id: changelog
@@ -88,7 +70,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: baguette ${{ steps.version.outputs.tag }}
+          name: agent-sim ${{ steps.version.outputs.tag }}
           body: ${{ env.RELEASE_NOTES }}
           files: release/*
         env:

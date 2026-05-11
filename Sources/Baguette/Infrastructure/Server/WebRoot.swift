@@ -1,7 +1,7 @@
 import Foundation
 
 /// Locator for the static web assets (`simulators.html` and friends)
-/// that `baguette serve` serves. Files live at
+/// that `agent-sim serve` serves. Files live at
 /// `Sources/Baguette/Resources/Web/` and are bundled into the
 /// executable as SPM resources for release.
 ///
@@ -12,8 +12,9 @@ import Foundation
 ///      inside the package's `.build/`, walk up to the package root
 ///      and read directly from `Sources/Baguette/Resources/Web/`.
 ///      Edits show on the next browser refresh; no rebuild.
-///   3. Sidecar `Baguette_Baguette.bundle` next to the executable —
-///      the SPM-generated resource bundle. We resolve it manually
+///   3. Sidecar `agent-sim_Baguette.bundle` next to the executable,
+///      with `Baguette_Baguette.bundle` kept as a legacy fallback.
+///      These are SPM-generated resource bundles. We resolve manually
 ///      via `dladdr` instead of `Bundle.module` because the latter
 ///      `fatalError`s when the bundle is missing (e.g. a Homebrew
 ///      install that didn't ship the bundle).
@@ -21,6 +22,10 @@ import Foundation
 /// `data(named:)` is used by the route handlers; the resolution logic
 /// runs once per call which is fine — the OS caches the file pages.
 struct WebRoot {
+    static let sidecarBundleNames = [
+        "agent-sim_Baguette.bundle",
+        "Baguette_Baguette.bundle",
+    ]
 
     /// Read a file as UTF-8 text, with the same lookup as `data`.
     static func string(named filename: String) -> String? {
@@ -93,9 +98,9 @@ struct WebRoot {
         return nil
     }
 
-    /// Resolve a file inside the SPM-generated `Baguette_Baguette.bundle`
+    /// Resolve a file inside the SPM-generated sidecar resource bundle
     /// expected to sit next to the running executable. Returns nil when
-    /// the bundle isn't there (e.g. a binary-only install that forgot
+    /// no supported bundle is there (e.g. a binary-only install that forgot
     /// to ship the bundle). Crucially, this avoids `Bundle.module`,
     /// which `fatalError`s on miss.
     ///
@@ -108,9 +113,11 @@ struct WebRoot {
         guard dladdr(#dsohandle, &info) != 0,
               let cstr = info.dli_fname else { return nil }
         let exeDir = URL(fileURLWithPath: String(cString: cstr)).deletingLastPathComponent()
-        let bundleURL = exeDir.appendingPathComponent("Baguette_Baguette.bundle")
-        guard FileManager.default.fileExists(atPath: bundleURL.path),
-              let bundle = Bundle(url: bundleURL) else { return nil }
+        let bundle = sidecarBundleNames.lazy
+            .map { exeDir.appendingPathComponent($0) }
+            .first { FileManager.default.fileExists(atPath: $0.path) }
+            .flatMap { Bundle(url: $0) }
+        guard let bundle else { return nil }
         let parts = filename.split(separator: "/", omittingEmptySubsequences: true)
         let subdir: String = parts.count > 1
             ? "Web/" + parts.dropLast().joined(separator: "/")

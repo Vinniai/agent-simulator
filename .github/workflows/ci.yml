@@ -50,6 +50,6 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          slug: tddworks/baguette
+          slug: josh-vincent/agent-sim
           files: coverage.lcov
           fail_ci_if_error: true

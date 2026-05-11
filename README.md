@@ -11,11 +11,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/tddworks/baguette/actions/workflows/ci.yml"><img src="https://github.com/tddworks/baguette/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://codecov.io/gh/tddworks/baguette"><img src="https://codecov.io/gh/tddworks/baguette/branch/main/graph/badge.svg" alt="Coverage"></a>
-  <a href="https://github.com/tddworks/baguette/releases/latest"><img src="https://img.shields.io/github/v/release/tddworks/baguette?sort=semver" alt="Latest release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/tddworks/baguette" alt="License"></a>
-  <img src="https://img.shields.io/badge/Swift-6.1-orange?logo=swift" alt="Swift 6.2">
+  <a href="https://github.com/josh-vincent/agent-sim/actions/workflows/ci.yml"><img src="https://github.com/josh-vincent/agent-sim/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://codecov.io/gh/josh-vincent/agent-sim"><img src="https://codecov.io/gh/josh-vincent/agent-sim/branch/main/graph/badge.svg" alt="Coverage"></a>
+  <a href="https://github.com/josh-vincent/agent-sim/releases/latest"><img src="https://img.shields.io/github/v/release/josh-vincent/agent-sim?sort=semver" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/josh-vincent/agent-sim" alt="License"></a>
+  <img src="https://img.shields.io/badge/Swift-6.2-orange?logo=swift" alt="Swift 6.2">
   <img src="https://img.shields.io/badge/macOS-15%2B-blue?logo=apple" alt="macOS 15+">
   <img src="https://img.shields.io/badge/Xcode-26-1575F9?logo=xcode" alt="Xcode 26">
 </p>
@@ -82,7 +82,7 @@ https://github.com/user-attachments/assets/65dc62ee-f0c7-48fb-9c57-5bd267c8c02f
 ## Install
 
 ```bash
-brew install tddworks/tap/agent-sim
+brew install josh-vincent/tap/agent-sim
 ```
 
 Apple Silicon only. Requires Xcode 26 — `agent-sim` links against private
@@ -185,7 +185,7 @@ agent-sim <command> [options]
 
   # Diagnostics. Reports CLI version, build mode, booted-sim count,
   # whether the server is reachable, and surfaces version drift
-  # between this CLI binary and the running `baguette serve` binary
+  # between this CLI binary and the running `agent-sim serve` binary
   # (status: healthy | drift | stale | offline). Add --json for
   # scriptable output.
   doctor   [--base http://127.0.0.1:8421] [--timeout 2.0] [--json]
@@ -240,7 +240,7 @@ The same WS carries everything for a viewing session:
   - Stream control: `{"type":"set_bitrate","bps":N}` /
     `{"type":"set_fps","fps":N}` / `{"type":"set_scale","scale":N}` /
     `{"type":"force_idr"}` / `{"type":"snapshot"}`.
-  - Gesture input: same wire format as `baguette input` (see below).
+  - Gesture input: same wire format as `agent-sim input` (see below).
 
 No `/event` POST, no UDID-keyed registry — the WS handler closure owns
 the live stream + simulator handle for the duration.
@@ -248,7 +248,7 @@ the live stream + simulator handle for the duration.
 ## Device farm
 
 ```bash
-baguette serve
+agent-sim serve
 open http://localhost:8421/farm
 ```
 
@@ -292,7 +292,7 @@ loads five IIFE component scripts from `/farm/<name>.js`:
 farm UI without rebuilding — point it at `Sources/Baguette/Resources/Web`
 on disk and reload the browser.
 
-## Wire protocol — `baguette input`
+## Wire protocol — `agent-sim input`
 
 Newline-delimited JSON on stdin → `{"ok":true}` / `{"ok":false,"error":…}`
 on stdout, one ack per line.
@@ -341,10 +341,10 @@ coordinates by `width` / `height` before serialising.
   recipe still WIP). Routes through external tools today.
 - `siri` button — crashes `backboardd` via every known Indigo path.
 
-## `baguette stream` — frame streaming
+## `agent-sim stream` — frame streaming
 
 ```bash
-baguette stream --udid <UDID> --format avcc --fps 60 | ffplay -
+agent-sim stream --udid <UDID> --format avcc --fps 60 | ffplay -
 ```
 
 Outputs length-prefixed binary frames on stdout. AVCC carries a 1-byte
@@ -368,11 +368,11 @@ stdin to retune without restarting.
 {"type":"snapshot"}
 ```
 
-## `baguette chrome` — DeviceKit bezel data
+## `agent-sim chrome` — DeviceKit bezel data
 
 ```bash
-baguette chrome layout --device-name "iPhone 17 Pro" | jq .
-baguette chrome composite --device-name "iPhone 17 Pro" > iphone17pro.png
+agent-sim chrome layout --device-name "iPhone 17 Pro" | jq .
+agent-sim chrome composite --device-name "iPhone 17 Pro" > iphone17pro.png
 ```
 
 Reads Apple's own DeviceKit chrome bundles
@@ -451,7 +451,7 @@ feature lives in one place across both layers.
 │       ├── sim-stream.js             stream-page orchestrator
 │       ├── sim-stream.html           stream view markup
 │       ├── sim-input.js              SimInput / MouseGestureSource / PinchOverlay
-│       ├── sim-input-bridge.js       SimInput → baguette wire-format mapper
+│       ├── sim-input-bridge.js       SimInput → agent-sim wire-format mapper
 │       ├── sim-native.js             focus-mode (single-sim fullscreen) view
 │       ├── frame-decoder.js          MJPEG / AVCC strategy
 │       ├── device-frame.js           bezel + screen DOM
@@ -520,7 +520,7 @@ builds (via `./build.sh`) carry no mock code.
 iOS 26 changed `SimulatorHID`'s wire format. Public tools like `idb` and
 `AXe` call `IndigoHIDMessageForMouseNSEvent` with the old 5-argument
 signature; those messages now route to a pointer-service target that
-silently drops or crashes `backboardd`. Baguette uses the **9-argument
+silently drops or crashes `backboardd`. Agent Sim uses the **9-argument
 signature from Xcode 26's preview-kit**, which routes through digitizer
 target `0x32` — the target iOS 26 still honours.
 
