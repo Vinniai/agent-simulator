@@ -49,7 +49,7 @@ The naming bar is the same for both: **collaborators are domain nouns, never pat
 ```bash
 make                                          # release build via ./build.sh → ./Baguette
 swift build                                   # debug build (carries MOCKING flag + mocks)
-swift test                                    # full Swift Testing suite (110+ tests, no booted sim required)
+swift test                                    # full Swift Testing suite (440+ tests, no booted sim required)
 swift test --filter Simulators                # one suite
 swift test --filter "GestureRegistry/parses tap"   # one test
 ```

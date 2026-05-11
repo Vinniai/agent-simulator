@@ -12,6 +12,10 @@ For releases prior to this changelog, see the
 
 ### Added
 - **Code-change tracking on review tasks.** Agents now report what files they modified for a task via `POST /agent/tasks/:id/code-changes` (mirror operator route at `POST /review-tasks/:id/code-changes`, CLI mirror `baguette review-tasks add-code-change <task-id>`). Each `ReviewTaskCodeChange` carries `path`, `summary`, `startLine` / `endLine`, `commitSha`, `branch`, `language`, and a bounded `diffText` (capped at 256 KB; longer payloads truncate with a marker). The review browser surfaces them under each task card with a clickable `vscode://file/<path>:<startLine>` link and an expandable inline diff, so a reviewer sees the original operator instructions, the before / after snapshots, AND the diff that produced the after-state in one place. Persisted in a new `review_task_code_changes` SQLite table (idempotent migration) and broadcast as a `code_changes` event on `WS /review-tasks/stream` so the existing task-stream consumers light up without new wiring. See [`docs/features/review-code-changes.md`](docs/features/review-code-changes.md).
+- **Reference verifier loop.** `examples/agent/baguette_verifier.py` complements the existing worker: polls `readyForVerify` submissions from a given `--agent-prefix`, snapshot-diffs the before / after JPEGs, and posts `pass` / `fail` / leaves ambiguous tasks for the operator. Snapshot-only — never drives the simulator — so it runs safely alongside an active worker without contending for the device. Pure stdlib (~150 LOC). Documented in [`docs/AGENT-API.md`](docs/AGENT-API.md#reference-agents).
+
+### Changed
+- **`baguette review-tasks next` and `claim` accept `--actor` as an alias for `--agent-id`.** Same identity flag now works across every `review-tasks` subcommand (`event` / `result` / `add-code-change` already used `--actor`). Either spelling parses identically; existing scripts that pass `--agent-id` keep working. Eliminates the per-subcommand flag-name lookup that was a recurring foot-gun for agent integrators.
 
 ---
 

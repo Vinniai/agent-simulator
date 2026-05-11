@@ -274,16 +274,36 @@ baguette review-tasks result <task-id> --status readyForVerify --summary "…" \
 baguette review-tasks watch  --status open             # one JSON line per change
 ```
 
+`next` and `claim` accept **`--actor` as an alias for `--agent-id`** so
+the same identity flag works across every subcommand (`event`, `result`,
+and `add-code-change` all use `--actor`). Either spelling is accepted on
+the claim path:
+
+```
+baguette review-tasks next  --actor <id>      # same as --agent-id <id>
+baguette review-tasks claim <task-id> --actor <id>
+```
+
 The HTTP and CLI paths share storage (`SQLiteReviewTaskStore`), so a
 mixed setup — agent over HTTP, operator over CLI — is fine.
 
-## Reference agent
+## Reference agents
 
-A self-contained Python loop lives at
-[`../examples/agent/baguette_worker.py`](../examples/agent/baguette_worker.py).
-Copy it as a starting point for an MCP server, a CI hook, or an
-autonomous-test runner. The logic is intentionally <120 lines so it's
-straightforward to port to TypeScript / Go / your language of choice.
+Two self-contained Python loops ship in the repo:
+
+- [`../examples/agent/baguette_worker.py`](../examples/agent/baguette_worker.py)
+  — claims a task, drives the simulator over WebSocket, captures the
+  after-state, submits a result. <200 LOC, stdlib + `websocket-client`.
+- [`../examples/agent/baguette_verifier.py`](../examples/agent/baguette_verifier.py)
+  — polls `readyForVerify` submissions from a chosen worker prefix,
+  compares before/after snapshots, and records a `pass` / `fail`
+  verdict. Snapshot-only — never drives the simulator, so it can run
+  alongside a worker without contending for the device. Pure stdlib.
+
+Copy either as a starting point for an MCP server, a CI hook, or an
+autonomous-test runner. The logic is intentionally <200 LOC each so
+it's straightforward to port to TypeScript / Go / your language of
+choice.
 
 ## Operational notes
 

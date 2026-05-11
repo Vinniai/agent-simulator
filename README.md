@@ -65,7 +65,7 @@ https://github.com/user-attachments/assets/65dc62ee-f0c7-48fb-9c57-5bd267c8c02f
   full-quality streaming + gesture and hardware-button input through the
   same `GestureDispatcher` → `IndigoHIDInput` pipeline as the CLI.
 - **TDD non-negotiable, layered, mock-injected** — bounded-context
-  Domain / Infrastructure / App split; ~290 Swift Testing cases backed
+  Domain / Infrastructure / App split; 440+ Swift Testing cases backed
   by auto-generated `MockXxx` fakes for every external port (`Input`,
   `Screen`, `Accessibility`, `LogStream`, `Chromes`, `DeviceHost`).
   Adapters take `any DeviceHost` rather than the concrete
@@ -468,7 +468,7 @@ Read `CLAUDE.md`'s "TDD is non-negotiable" pre-implementation gate
 before contributing — that's the project's primary rule and it
 overrides "the change is small" / "I'll add the test after".
 
-~290 tests using **Swift Testing** (`@Suite`, `@Test`, `#expect`),
+440+ tests using **Swift Testing** (`@Suite`, `@Test`, `#expect`),
 not XCTest. Chicago-school state-based: every external boundary is
 an `@Mockable` protocol (`Input`, `Screen`, `Accessibility`,
 `LogStream`, `Chromes`, `DeviceHost`); tests substitute

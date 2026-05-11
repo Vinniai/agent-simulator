@@ -360,6 +360,17 @@ struct CommandParsingTests {
         #expect(cmd.agentId == "agent-a")
     }
 
+    @Test func `review-tasks next accepts --actor as alias for --agent-id`() throws {
+        let cmd = try ReviewTasksCommand.Next.parse(["--actor", "agent-a"])
+        #expect(cmd.agentId == "agent-a")
+    }
+
+    @Test func `review-tasks claim accepts --actor as alias for --agent-id`() throws {
+        let cmd = try ReviewTasksCommand.Claim.parse(["task-1", "--actor", "agent-a"])
+        #expect(cmd.id == "task-1")
+        #expect(cmd.agentId == "agent-a")
+    }
+
     @Test func `review-tasks event parses streaming payload options`() throws {
         let cmd = try ReviewTasksCommand.Event.parse([
             "task-1",

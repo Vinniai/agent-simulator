@@ -35,7 +35,10 @@ struct ReviewTasksCommand: ParsableCommand {
     struct Next: ParsableCommand {
         static let configuration = CommandConfiguration(commandName: "next")
 
-        @Option(name: .long, help: "Agent id that should claim the next open task")
+        @Option(
+            name: [.customLong("agent-id"), .customLong("actor")],
+            help: "Agent id (or --actor) that should claim the next open task"
+        )
         var agentId: String
 
         func run() throws {
@@ -60,7 +63,10 @@ struct ReviewTasksCommand: ParsableCommand {
         @Argument(help: "Task id")
         var id: String
 
-        @Option(name: .long, help: "Agent id")
+        @Option(
+            name: [.customLong("agent-id"), .customLong("actor")],
+            help: "Agent id (or --actor) recorded as the task's assignee"
+        )
         var agentId: String
 
         func run() throws {
