@@ -150,6 +150,43 @@
     max-width: 100% !important;
   }
 
+  /* Device-frame rotation. The wrapper inside #nativeDeviceFrame
+     mirrors the simulator's interface orientation as a CSS
+     transform; sim-native.js sets `data-orientation` on the
+     container after each rotate-button click. Rotation is purely
+     visual — pixel positions inside the screen area stay in the
+     device's portrait coord system, and JS wraps the input
+     transport + pinch overlay so coords still land where the
+     user's cursor is.
+
+     In landscape, the rotated visual width = portrait device
+     height; cap the unrotated max-height by viewport width too so
+     the rotated bbox fits horizontally on narrow viewports. */
+  #simNativeView #nativeDeviceFrame > div {
+    transform-origin: center center;
+    transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  /* Rotation is applied as an *inline* transform via JS so each
+     rotate-button click is a monotonically increasing 90° step
+     (0 → 90 → 180 → 270 → 360 → 450 → …). Per-orientation CSS
+     rules would interpolate the numeric difference between the
+     OLD value and the NEW value; jumping from
+     `portrait-upside-down (180)` to `landscape-right (-90)`
+     animates -270° backward instead of +90° forward, which is
+     visibly wrong. The CSS only sets `transform-origin` and the
+     transition curve; the actual rotation degree comes from
+     `rotation-deg` set inline by `applyOrientation` in
+     `sim-native.js`. */
+
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-right"] > div,
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-left"] > div,
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-right"] img,
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-right"] canvas,
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-left"] img,
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-left"] canvas {
+    max-height: min(calc(100vh - 68px), calc(100vw - 32px)) !important;
+  }
+
   /* Label group — clickable, returns to the simulator list. The
      chevron + device name + OS subtitle read as one breadcrumb. */
   #simNativeView .tb-label {
@@ -551,9 +588,18 @@
             <circle cx="12" cy="13" r="3.5"/>
           </svg>
         </button>
-        <button class="ico-btn" title="Lock" onclick="window.__nativeLock && window.__nativeLock()">
+        <button class="ico-btn" title="App switcher"
+                aria-label="Open app switcher"
+                onclick="window.__nativeAppSwitcher && window.__nativeAppSwitcher()">
           <!-- "App-switcher" glyph mirroring the native Simulator
-               toolbar's third icon — two overlapping rounded squares. -->
+               toolbar's third icon — two overlapping rounded squares.
+               The click fires the `app-switcher` virtual button,
+               which the Swift `IndigoHIDInput` decomposes into two
+               consecutive home `IndigoHIDMessageForButton` presses
+               ~150 ms apart — the recipe SpringBoard listens for
+               (works on Face ID iPhones with no physical home
+               button). The slower swipe-and-hold gesture is still
+               available on the wire as `swipe-to-app-switcher`. -->
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
                stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
             <rect x="3"  y="7"  width="13" height="13" rx="2.2"/>

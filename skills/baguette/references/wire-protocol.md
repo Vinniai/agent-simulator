@@ -53,6 +53,24 @@ intermediate samples come from a UI loop (mouse-move handler, etc.).
 Pair every `down` with an `up`. `move` is optional but typically
 streamed at ~60 Hz from the input source.
 
+#### Optional `edge` field — system gesture flag
+
+```json
+{"type":"touch1-down","x":219,"y":950,"width":438,"height":954,"edge":"bottom"}
+{"type":"touch1-move","x":219,"y":700,"width":438,"height":954,"edge":"bottom"}
+{"type":"touch1-move","x":219,"y":500,"width":438,"height":954,"edge":"bottom"}
+{"type":"touch1-up",  "x":219,"y":500,"width":438,"height":954,"edge":"bottom"}
+```
+
+`edge` accepts `bottom` / `top` / `left` / `right`. When set, every
+event in the chain is flagged as an `IndigoHIDEdge` system gesture.
+`bottom` engages iOS's home-indicator gesture recognizer — fast
+swipe → Home, slow drag-and-hold near midpoint → App Switcher,
+with iOS animating the live preview as the events stream. Omit
+`edge` for ordinary interior touches. See
+[`docs/features/touches.md`](../../../docs/features/touches.md) for
+the full dispatch recipe.
+
 ### Two fingers (the primary pinch / pan path)
 
 ```json
@@ -107,14 +125,34 @@ Negative `deltaY` scrolls content up (same convention as macOS). No
 {"type":"button","button":"volume-up"}
 {"type":"button","button":"volume-down"}
 {"type":"button","button":"action","duration":1.2}
+{"type":"button","button":"app-switcher"}
+{"type":"button","button":"swipe-to-app-switcher"}
+{"type":"button","button":"swipe-to-home"}
+{"type":"button","button":"pull-down-to-lock-screen"}
+{"type":"button","button":"pull-down-to-notification-center"}
 ```
 
-Allowed names: `home | lock | power | volume-up | volume-down | action`.
+Allowed names: `home | lock | power | volume-up | volume-down | action | app-switcher | swipe-to-app-switcher | swipe-to-home | pull-down-to-lock-screen | pull-down-to-notification-center`.
 `duration` is the optional hold time in seconds — `0`/absent → ~100 ms
 short tap; longer holds drive iOS long-press semantics ("Hold for
 Ring" on `action`, Siri / SOS on `power`, etc.). The browser bezel
 overlay measures real `mousedown` → `mouseup` and forwards the
 elapsed time, so click-and-hold on a side button just works.
+
+`app-switcher`, `swipe-to-app-switcher`, `swipe-to-home`,
+`pull-down-to-lock-screen`, and `pull-down-to-notification-center`
+are *virtual* buttons. `app-switcher` rides the home-button event
+source (two `IndigoHIDMessageForButton` presses ~150 ms apart —
+SpringBoard's own multitasking trigger, works on Face ID iPhones);
+the other four synthesize canned system-gesture shapes
+(slow drag-with-dwell up; fast edge-swipe up; slow drag down from
+top-left; slow drag down from top-right). Use them when the agent
+wants the gesture vocabulary without managing a streaming
+`touch1-*` chain manually.
+For live-preview UX, stream `touch1-*` with `edge: "bottom"` (drag
+from canvas bottom — iOS animates home / app-switcher preview) or
+`edge: "top"` (drag from canvas top — iOS pulls the lock-screen /
+notification-center cover sheet) instead — see "One finger" above.
 
 **Do not propose `button:"siri"`** — it crashes `backboardd` via
 every known Indigo path and is rejected by the CLI before reaching

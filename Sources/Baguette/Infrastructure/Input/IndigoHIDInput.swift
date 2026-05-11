@@ -25,6 +25,23 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         Double, Double,        // unused1, unused2 — pass 1.0
         Double, Double         // widthPoints, heightPoints
     ) -> UnsafeMutableRawPointer?
+    /// `IndigoHIDMessageForMouseNSEvent` — *real* 7-arg shape derived
+    /// from disassembling SimulatorKit on Xcode 26. Used only for
+    /// system-edge gestures (swipe-to-home, app switcher) where the
+    /// `edge` flag is what tells iOS to route the touch to the
+    /// home-indicator gesture recognizer instead of the foreground
+    /// app's pan handlers. Reading the prologue at `0x11270` shows
+    /// `cmp x24, #0x4` — bounds-checking x4 against `IndigoHIDEdge`'s
+    /// max value (4 = right). ARM64 ABI: ints in x0..x4, CGFloats in
+    /// d0/d1, so the C signature is
+    ///   (CGPoint*, CGPoint*, target, eventType, edge, NSSize.w, NSSize.h)
+    /// Confirmed against `SimDigitizerInputView.TouchEvent.edge`'s
+    /// public Swift surface, which carries this exact flag per touch.
+    private typealias MouseEdgeFn = @convention(c) (
+        UnsafePointer<CGPoint>, UnsafePointer<CGPoint>?,
+        UInt32, UInt32, UInt32,        // target, eventType, edge
+        Double, Double                 // NSSize.width, NSSize.height
+    ) -> UnsafeMutableRawPointer?
     private typealias ButtonFn = @convention(c) (UInt32, UInt32, UInt32) -> UnsafeMutableRawPointer?
     // IndigoHIDMessageForHIDArbitrary — routes any (page, usage) HID
     // event through the digitizer target. iOS 26 signature is
@@ -37,6 +54,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
     private typealias ServiceFn = @convention(c) () -> UnsafeMutableRawPointer?
 
     private var mouseFn: MouseFn?
+    private var mouseEdgeFn: MouseEdgeFn?
     private var buttonFn: ButtonFn?
     private var hidArbFn: HIDArbitraryFn?
     private var scrollFn: ScrollFn?
@@ -52,6 +70,17 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
     private static let dirDown: UInt32 = 1
     private static let dirMove: UInt32 = 0
     private static let dirUp:   UInt32 = 2
+    /// `IndigoHIDEdge` values — passed in x4 of the 7-arg
+    /// `IndigoHIDMessageForMouseNSEvent`. Only `bottom` is used in
+    /// production today (home-indicator swipe path); the others are
+    /// kept here as documentation of the enum's full range so future
+    /// edge gestures (control-centre top, notification-centre top
+    /// for older devices, etc.) have a named landing spot.
+    private static let edgeNone:   UInt32 = 0
+    private static let edgeLeft:   UInt32 = 1
+    private static let edgeTop:    UInt32 = 2
+    private static let edgeBottom: UInt32 = 3
+    private static let edgeRight:  UInt32 = 4
 
     init(udid: String, host: any DeviceHost) {
         self.udid = udid
@@ -74,39 +103,91 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
 
     func tap(at point: Point, size: Size, duration: Double) -> Bool {
         guard let c = ensureWarm() else { return false }
-        guard sendMouse(client: c, p1: point, p2: nil, eventType: Self.nsEventDown, direction: Self.dirDown, size: size) else { return false }
-        usleep(UInt32((duration > 0 ? duration : 0.05) * 1_000_000))
-        return sendMouse(client: c, p1: point, p2: nil, eventType: Self.nsEventUp, direction: Self.dirUp, size: size)
+        // New path: build IOHIDEvent digitizer parent + finger
+        // child, run through trackpad-from-HIDEventRef wrapper,
+        // patch target + edge slots. Bypasses the iOS 26 / Xcode
+        // 26 mouse-event regression where 9-arg
+        // `IndigoHIDMessageForMouseNSEvent` taps either get
+        // misinterpreted as Home gestures or silently drop. See
+        // `IOHIDDigitizerDispatch` for the full recipe.
+        let normalised = CGPoint(x: clamp01(point.x / size.width),
+                                 y: clamp01(point.y / size.height))
+        return IOHIDDigitizerDispatch.tap(
+            point: normalised,
+            holdSeconds: duration > 0 ? duration : 0.05,
+            edge: .none, identifier: nextTouchIdentifier(),
+            on: c
+        )
     }
 
     func swipe(from start: Point, to end: Point, size: Size, duration: Double) -> Bool {
         guard let c = ensureWarm() else { return false }
         let total = duration > 0 ? duration : 0.25
         let steps = 10
-        let stepUs = UInt32((total / Double(steps + 2)) * 1_000_000)
-
-        guard sendMouse(client: c, p1: start, p2: nil, eventType: Self.nsEventDown, direction: Self.dirDown, size: size) else { return false }
-        var ok = 0
-        for i in 1...steps {
-            let t = Double(i) / Double(steps)
-            let p = Point(x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t)
-            usleep(stepUs)
-            if sendMouse(client: c, p1: p, p2: nil, eventType: Self.nsEventDragged, direction: Self.dirMove, size: size) { ok += 1 }
-        }
-        _ = sendMouse(client: c, p1: end, p2: nil, eventType: Self.nsEventUp, direction: Self.dirUp, size: size)
-        return ok >= steps / 2
+        let stepMs = UInt32((total * 1000) / Double(steps + 2))
+        let normStart = CGPoint(x: clamp01(start.x / size.width),
+                                y: clamp01(start.y / size.height))
+        let normEnd = CGPoint(x: clamp01(end.x / size.width),
+                              y: clamp01(end.y / size.height))
+        return IOHIDDigitizerDispatch.swipe(
+            from: normStart, to: normEnd,
+            steps: steps, stepMs: max(8, stepMs),
+            edge: .none, identifier: nextTouchIdentifier(),
+            on: c
+        )
     }
 
-    func touch1(phase: GesturePhase, at point: Point, size: Size) -> Bool {
+    func touch1(phase: GesturePhase, at point: Point, size: Size,
+                edge: DeviceEdge?) -> Bool {
         guard let c = ensureWarm() else { return false }
-        let (et, dir) = mouseEvent(for: phase)
-        return sendMouse(client: c, p1: point, p2: nil, eventType: et, direction: dir, size: size)
+        let dispatchPhase: IOHIDDigitizerDispatch.Phase
+        switch phase {
+        case .down: dispatchPhase = .down
+        case .move: dispatchPhase = .move
+        case .up:   dispatchPhase = .up
+        }
+        let normalised = CGPoint(x: clamp01(point.x / size.width),
+                                 y: clamp01(point.y / size.height))
+        // touch1 streaming uses a sticky identifier so iOS sees
+        // one continuous touch sequence across the down/move/up
+        // chain. The identifier is reset on `down` and reused
+        // until `up`.
+        if phase == .down { stickyTouchIdentifier = nextTouchIdentifier() }
+        let id = stickyTouchIdentifier ?? nextTouchIdentifier()
+        let dispatchEdge: IOHIDDigitizerDispatch.Edge
+        switch edge {
+        case .left:   dispatchEdge = .left
+        case .top:    dispatchEdge = .top
+        case .right:  dispatchEdge = .right
+        case .bottom: dispatchEdge = .bottom
+        case nil:     dispatchEdge = .none
+        }
+        return IOHIDDigitizerDispatch.send(
+            point: normalised, identifier: id,
+            phase: dispatchPhase, edge: dispatchEdge, on: c
+        )
     }
 
     func touch2(phase: GesturePhase, first: Point, second: Point, size: Size) -> Bool {
+        // Two-finger streaming kept on the legacy mouse-event
+        // signature for now — pinch/pan continue to work via the
+        // existing path (they use coincident-finger streaming
+        // which the digitizer recipe doesn't model yet).
         guard let c = ensureWarm() else { return false }
         let (et, dir) = mouseEvent(for: phase)
         return sendMouse(client: c, p1: first, p2: second, eventType: et, direction: dir, size: size)
+    }
+
+    /// Monotonic per-instance touch identifier. iOS uses the
+    /// identifier to thread a touch sequence through the HID
+    /// stack; reusing one across distinct touches confuses the
+    /// recogniser. We reset to 1 on overflow rather than wrapping.
+    private var touchIdentifierCounter: UInt32 = 0
+    private var stickyTouchIdentifier: UInt32?
+    private func nextTouchIdentifier() -> UInt32 {
+        touchIdentifierCounter &+= 1
+        if touchIdentifierCounter == 0 { touchIdentifierCounter = 1 }
+        return touchIdentifierCounter
     }
 
     func button(_ button: DeviceButton, duration: Double) -> Bool {
@@ -118,6 +199,73 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         case .power, .volumeUp, .volumeDown, .action:
             guard let usage = button.standardHIDUsage else { return false }
             return pressArbitraryHID(button, usage: usage, holdUs: holdUs, on: c)
+        case .appSwitcher:
+            // Two consecutive home-button presses ~150 ms apart.
+            // SpringBoard listens to the home `IndigoHIDMessageForButton`
+            // event source regardless of whether the device has a
+            // physical home button, so this works on Face ID iPhones
+            // (iPhone X+) too. Recipe matches idb's
+            // FBSimulatorPurpleHID app-switcher path. Cleaner than
+            // synthesising the slow swipe-and-hold gesture and
+            // doesn't depend on the mouse-event signature.
+            let downA = pressLegacyButton(.home, holdUs: holdUs, on: c)
+            usleep(150_000)
+            let downB = pressLegacyButton(.home, holdUs: holdUs, on: c)
+            return downA && downB
+        case .swipeToAppSwitcher:
+            // Slow edge-flagged drag from the home indicator with
+            // a long dwell at the midpoint. iOS's home-indicator
+            // gesture recognizer fires App Switcher when the
+            // finger settles below ~y=0.6 for more than ~500 ms;
+            // a fast flick goes Home instead. Empirical recipe
+            // verified on iPhone 17 Pro Max / iOS 26.4: 30 steps
+            // × 35 ms + 900 ms dwell at y=0.58 fires cards.
+            // Kept as a wire-only fallback for callers that need
+            // the gesture path rather than the home-press recipe.
+            return IOHIDDigitizerDispatch.swipe(
+                from: CGPoint(x: 0.5, y: 0.998),
+                to:   CGPoint(x: 0.5, y: 0.58),
+                steps: 30, stepMs: 35, dwellMs: 900,
+                edge: .bottom, identifier: nextTouchIdentifier(),
+                on: c
+            ) ? true : false
+        case .swipeToHome:
+            // Fast edge-flagged flick from the home indicator up
+            // to ~mid screen. iOS's home-indicator recognizer
+            // routes a quick swipe to Home (no dwell, ends below
+            // halfway). Empirical: 12 steps × 16 ms reaching
+            // y=0.30 lands on the home screen reliably.
+            return IOHIDDigitizerDispatch.swipe(
+                from: CGPoint(x: 0.5, y: 0.998),
+                to:   CGPoint(x: 0.5, y: 0.30),
+                steps: 12, stepMs: 16, dwellMs: 0,
+                edge: .bottom, identifier: nextTouchIdentifier(),
+                on: c
+            ) ? true : false
+        case .pullDownToLockScreen:
+            // Slow drag down from top-LEFT (above the dynamic
+            // island, on the camera side) with edge=top flagged.
+            // iOS's status-bar gesture recognizer routes a
+            // top-left-origin pull to the lock-screen cover sheet.
+            return IOHIDDigitizerDispatch.swipe(
+                from: CGPoint(x: 0.25, y: 0.002),
+                to:   CGPoint(x: 0.25, y: 0.55),
+                steps: 24, stepMs: 25, dwellMs: 0,
+                edge: .top, identifier: nextTouchIdentifier(),
+                on: c
+            ) ? true : false
+        case .pullDownToNotificationCenter:
+            // Slow drag down from top-RIGHT (above the dynamic
+            // island, on the battery / time side) with edge=top
+            // flagged. iOS routes a top-right-origin pull to
+            // Notification Center.
+            return IOHIDDigitizerDispatch.swipe(
+                from: CGPoint(x: 0.75, y: 0.002),
+                to:   CGPoint(x: 0.75, y: 0.55),
+                steps: 24, stepMs: 25, dwellMs: 0,
+                edge: .top, identifier: nextTouchIdentifier(),
+                on: c
+            ) ? true : false
         }
     }
 
@@ -210,10 +358,12 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         switch button {
         case .home: return (0x0, 0x33)
         case .lock: return (0x1, 0x33)
-        case .power, .volumeUp, .volumeDown, .action:
-            // Caller routes these through pressArbitraryHID instead;
-            // returning a sentinel keeps the switch total without
-            // silently mis-dispatching.
+        case .power, .volumeUp, .volumeDown, .action,
+             .appSwitcher, .swipeToAppSwitcher, .swipeToHome,
+             .pullDownToLockScreen, .pullDownToNotificationCenter:
+            // Caller routes these through pressArbitraryHID or the
+            // edge-gesture path instead; returning a sentinel keeps
+            // the switch total without silently mis-dispatching.
             return (0, 0)
         }
     }
@@ -237,6 +387,103 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
             return false
         }
         send(message: up, to: client)
+        return true
+    }
+
+    /// Synthesise the Face ID home-indicator gesture: a single-finger
+    /// swipe up from the bottom edge with `IndigoHIDEdge.bottom`
+    /// flagged on every event. `hold = false` flicks fast (lift at
+    /// `y ≈ 0.30`) and lands as Home; `hold = true` settles for
+    /// ~400 ms at the midpoint, which iOS recognises as App Switcher.
+    /// Coords are normalised; `IndigoHIDMessageForMouseNSEvent`
+    /// scales by NSSize(1.0, 1.0) so the points are interpreted as
+    /// unit fractions of the device screen.
+    ///
+    /// Move events use `nsEventType = 1` (LeftMouseDown), NOT 6
+    /// (LeftMouseDragged) — the edge variant of the C function
+    /// returns nil for any eventType ≠ {1, 2}, so passing 6 silently
+    /// drops every interpolated step and iOS only ever sees a
+    /// down + up at the same coordinate.
+    private func swipeFromBottomEdge(on client: AnyObject, hold: Bool) -> Bool {
+        guard mouseEdgeFn != nil else {
+            log("[hid] swipe-from-bottom-edge — mouseEdgeFn unresolved")
+            return false
+        }
+        let xN = 0.5
+        let yStart = 0.95
+        let yEnd: Double = hold ? 0.40 : 0.30
+        let steps = 10
+        let stepUs: UInt32 = 16_000   // ~16 ms per step
+
+        guard sendMouseEdge(
+            client: client, p1: CGPoint(x: xN, y: yStart), p2: nil,
+            eventType: Self.nsEventDown, edge: Self.edgeBottom
+        ) else { return false }
+        usleep(stepUs)
+
+        var ok = 0
+        for i in 1...steps {
+            let t = Double(i) / Double(steps)
+            let y = yStart + (yEnd - yStart) * t
+            if sendMouseEdge(
+                client: client, p1: CGPoint(x: xN, y: y), p2: nil,
+                eventType: Self.nsEventDragged, edge: Self.edgeBottom
+            ) { ok += 1 }
+            usleep(stepUs)
+        }
+
+        if hold {
+            // Linger at the midpoint so the gesture recogniser commits
+            // to App Switcher rather than slingshotting back to Home.
+            // Resending the same point keeps the touch state alive
+            // through the recognition window even if a single move
+            // event drops.
+            for _ in 0..<5 {
+                _ = sendMouseEdge(
+                    client: client, p1: CGPoint(x: xN, y: yEnd), p2: nil,
+                    eventType: Self.nsEventDragged, edge: Self.edgeBottom
+                )
+                usleep(80_000)
+            }
+        }
+
+        _ = sendMouseEdge(
+            client: client, p1: CGPoint(x: xN, y: yEnd), p2: nil,
+            eventType: Self.nsEventUp, edge: Self.edgeBottom
+        )
+        return ok >= steps / 2
+    }
+
+    /// Build + dispatch one edge-flagged mouse event via the 7-arg
+    /// signature. Uses the same retry-on-nil pattern as `sendMouse`
+    /// but is intentionally separate so the legacy 9-arg path stays
+    /// untouched — only edge gestures route here.
+    private func sendMouseEdge(
+        client: AnyObject,
+        p1: CGPoint, p2: CGPoint?,
+        eventType: UInt32, edge: UInt32
+    ) -> Bool {
+        guard let mfn = mouseEdgeFn else { return false }
+        var pt1 = p1
+        var msg: UnsafeMutableRawPointer?
+        for _ in 0..<3 {
+            if let p2 {
+                var pt2 = p2
+                msg = withUnsafePointer(to: &pt1) { p1Ref in
+                    withUnsafePointer(to: &pt2) { p2Ref in
+                        mfn(p1Ref, p2Ref, Self.touchDigitizer, eventType, edge, 1.0, 1.0)
+                    }
+                }
+            } else {
+                msg = withUnsafePointer(to: &pt1) { p1Ref in
+                    mfn(p1Ref, nil, Self.touchDigitizer, eventType, edge, 1.0, 1.0)
+                }
+            }
+            if msg != nil { break }
+            usleep(5_000)
+        }
+        guard let msg else { return false }
+        send(message: msg, to: client)
         return true
     }
 
@@ -369,14 +616,22 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
             logErr("SimulatorKit dlopen failed: \(dlerrorString())")
             return
         }
-        mouseFn    = dlsym(handle, "IndigoHIDMessageForMouseNSEvent").map { unsafeBitCast($0, to: MouseFn.self) }
+        let mouseSym = dlsym(handle, "IndigoHIDMessageForMouseNSEvent")
+        // Same C function, two Swift typedefs — `MouseFn` is the
+        // legacy 9-arg shape used for taps/pans/pinches (verified in
+        // production); `MouseEdgeFn` is the *real* 7-arg ABI used
+        // for edge gestures where iOS reads x4 as `IndigoHIDEdge`.
+        // Loading both lets the existing dispatcher stay untouched
+        // while edge-aware paths get the right argument layout.
+        mouseFn     = mouseSym.map { unsafeBitCast($0, to: MouseFn.self) }
+        mouseEdgeFn = mouseSym.map { unsafeBitCast($0, to: MouseEdgeFn.self) }
         buttonFn   = dlsym(handle, "IndigoHIDMessageForButton").map { unsafeBitCast($0, to: ButtonFn.self) }
         hidArbFn   = dlsym(handle, "IndigoHIDMessageForHIDArbitrary").map { unsafeBitCast($0, to: HIDArbitraryFn.self) }
         scrollFn   = dlsym(handle, "IndigoHIDMessageForScrollEvent").map { unsafeBitCast($0, to: ScrollFn.self) }
         createPointerSvc = dlsym(handle, "IndigoHIDMessageToCreatePointerService").map { unsafeBitCast($0, to: ServiceFn.self) }
         createMouseSvc   = dlsym(handle, "IndigoHIDMessageToCreateMouseService").map { unsafeBitCast($0, to: ServiceFn.self) }
         removePointerSvc = dlsym(handle, "IndigoHIDMessageToRemovePointerService").map { unsafeBitCast($0, to: ServiceFn.self) }
-        log("[hid] symbols resolved — mouse:\(mouseFn != nil) button:\(buttonFn != nil) hidArb:\(hidArbFn != nil) scroll:\(scrollFn != nil)")
+        log("[hid] symbols resolved — mouse:\(mouseFn != nil) mouseEdge:\(mouseEdgeFn != nil) button:\(buttonFn != nil) hidArb:\(hidArbFn != nil) scroll:\(scrollFn != nil)")
     }
 
     private func warmServices(on client: AnyObject) {

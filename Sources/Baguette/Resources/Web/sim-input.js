@@ -62,34 +62,35 @@
     // pending fingers instead of queueing, so we never lag behind the
     // cursor by more than ~one RTT.
 
-    touchDown(fingers) {
+    touchDown(fingers, opts) {
       return this._chainTouch(() =>
-        this._post({ kind: 'touchDown', fingers }, { size: true }));
+        this._post({ kind: 'touchDown', fingers, edge: opts?.edge }, { size: true }));
     }
 
-    touchMove(fingers) {
+    touchMove(fingers, opts) {
       if (this._pendingMove) {
         this._pendingMove.fingers = fingers;
+        this._pendingMove.edge    = opts?.edge;
         return this._touchChain;
       }
-      const slot = { fingers };
+      const slot = { fingers, edge: opts?.edge };
       this._pendingMove = slot;
       return this._chainTouch(() => {
         this._pendingMove = null;
-        return this._post({ kind: 'touchMove', fingers: slot.fingers }, { size: true });
+        return this._post({ kind: 'touchMove', fingers: slot.fingers, edge: slot.edge }, { size: true });
       });
     }
 
-    touchUp(fingers) {
+    touchUp(fingers, opts) {
       // Flush any pending move first so up never overtakes a coalesced move.
       if (this._pendingMove) {
         const slot = this._pendingMove;
         this._pendingMove = null;
         this._chainTouch(() =>
-          this._post({ kind: 'touchMove', fingers: slot.fingers }, { size: true }));
+          this._post({ kind: 'touchMove', fingers: slot.fingers, edge: slot.edge }, { size: true }));
       }
       return this._chainTouch(() =>
-        this._post({ kind: 'touchUp', fingers }, { size: true }));
+        this._post({ kind: 'touchUp', fingers, edge: opts?.edge }, { size: true }));
     }
 
     _chainTouch(thunk) {
@@ -204,11 +205,20 @@
      * @param {PinchOverlay} [opts.overlay]
      * @param {(msg:string)=>void} [opts.log]
      */
-    constructor({ el, input, overlay, log }) {
+    constructor({ el, input, overlay, log, getOrientation }) {
       this.el = el;
       this.input = input;
       this.overlay = overlay;
       this.log = log || (() => {});
+      // Returns the current device orientation so the edge-stream
+      // detector knows which visual edge holds the home indicator
+      // — bottom for portrait/landscape, top for
+      // portrait-upside-down (iOS in raw=2 doesn't rotate the
+      // home-indicator hot zone in our headless setup, so the
+      // pill renders at portrait-bottom of the framebuffer which
+      // after our 180° canvas rotation appears at the user's
+      // visual top).
+      this.getOrientation = getOrientation || (() => 'portrait');
       this._handlers = [];
       // Shared with _attachOptionHoverPreview so the preview pauses while a
       // real gesture is streaming.
@@ -294,11 +304,61 @@
       const DRAG_THRESHOLD_PX = 8;
       let lastMoveMs = 0;
 
+      // Drag from a screen edge streams `touch1-*` events flagged
+      // with that edge so the server-side digitizer dispatch
+      // patches the matching `IndigoHIDEdge` bit. iOS sees a real
+      // edge-gesture stream and animates the system preview live
+      // (home / app-switcher card on bottom; lock-screen cover
+      // sheet / notification center on top) — same UX as dragging
+      // in Simulator.app, no buffering until release. iOS itself
+      // decides Home vs App Switcher (bottom) and Lock Screen vs
+      // Notification Center (top by start-x) from velocity / dwell
+      // / position, so we don't need a client-side discriminator.
+      const EDGE_BAND_NORM = 0.93;
+      const TOP_BAND_NORM  = 0.07;
+
       this._on(this.el, 'mousedown', (e) => {
         const r = this.el.getBoundingClientRect();
         const vx = e.clientX - r.left, vy = e.clientY - r.top;
         const mode = modeOf(e);
         this._dragActive = true;
+
+        // Edge gesture — origin band depends on where iOS draws
+        // the home indicator visually after our CSS rotation:
+        //   portrait              → visual bottom (yNorm ≥ 0.93)
+        //   landscape-left  (+90) → visual bottom (yNorm ≥ 0.93)
+        //   landscape-right (−90) → visual bottom (yNorm ≥ 0.93)  *iOS recognizer not wired — see touches.md*
+        //   portrait-upside-down  → visual left  (xNorm ≤ 0.07)
+        // The rotated-bbox bottom corresponds to the user's visual
+        // bottom in each orientation; only upside-down sees the
+        // hot zone at a different visual edge because iOS routes
+        // its raw=2 recognizer to portrait-right (= visual left
+        // after our 180° rotation).
+        const yNorm = r.height ? (vy / r.height) : 0;
+        const xNorm = r.width  ? (vx / r.width)  : 0;
+        const ori = this.getOrientation();
+        // upside-down quirk: iOS routes its system-gesture
+        // recognizers to *physical* edges that are visually mirrored
+        // — home is hot at visual-LEFT (xNorm ≤ 0.07), so by
+        // symmetry the status-bar pull-down hot zone is visual-RIGHT
+        // (xNorm ≥ 0.93). Other orientations follow the strict
+        // CSS-rotation inverse: visual-bottom = high yNorm, visual-
+        // top = low yNorm.
+        const inBottomBand = ori === 'portrait-upside-down'
+          ? xNorm <= (1 - EDGE_BAND_NORM)
+          : yNorm >= EDGE_BAND_NORM;
+        const inTopBand = ori === 'portrait-upside-down'
+          ? xNorm >= EDGE_BAND_NORM
+          : yNorm <= TOP_BAND_NORM;
+        const startEdge = inBottomBand ? 'bottom' : (inTopBand ? 'top' : null);
+        if (mode === 'tap-or-swipe' && startEdge) {
+          const fx = vx / r.width;
+          const fy = vy / r.height;
+          state = { mode: 'edge-stream', edge: startEdge };
+          this.input.touchDown([{ x: fx, y: fy }], { edge: startEdge });
+          this.log('edge stream begin (' + ori + ', edge=' + startEdge + ', xNorm=' + xNorm.toFixed(2) + ' yNorm=' + yNorm.toFixed(2) + ')');
+          return;
+        }
 
         if (mode === 'pinch') {
           const pDev = pivotDev();
@@ -328,8 +388,13 @@
           this.log('pan begin');
         } else {
           // Deferred: decide tap vs drag on first movement past the threshold.
+          // Capture the original viewport coords so the tap-ripple
+          // animation can land where the cursor actually is — the
+          // local-frame `vx/vy` are inside a rotated screenArea
+          // and would visually drift after CSS rotation.
           state = { mode: 'pending',
                     startVx: vx, startVy: vy, startW: r.width, startH: r.height,
+                    startClientX: e.clientX, startClientY: e.clientY,
                     startedAt: Date.now() };
         }
       });
@@ -338,6 +403,17 @@
         if (!state) return;
         const r = this.el.getBoundingClientRect();
         const vx = e.clientX - r.left, vy = e.clientY - r.top;
+
+        if (state.mode === 'edge-stream') {
+          // Stream the move at the user's actual drag speed — iOS
+          // sees a real touch sequence, not a canned one, so the
+          // home-card preview animates live. Coalescing in
+          // `touchMove` keeps backpressure low if the WS is slow.
+          const fx = vx / r.width;
+          const fy = vy / r.height;
+          this.input.touchMove([{ x: fx, y: fy }], { edge: state.edge });
+          return;
+        }
 
         if (state.mode === 'pinch') {
           const pDev = pivotDev();
@@ -396,6 +472,17 @@
         const r = this.el.getBoundingClientRect();
         const vx = e.clientX - r.left, vy = e.clientY - r.top;
 
+        if (state.mode === 'edge-stream') {
+          const fx = vx / r.width;
+          const fy = vy / r.height;
+          this.input.touchUp([{ x: fx, y: fy }], { edge: state.edge });
+          this.log('edge stream end');
+          state = null;
+          this._dragActive = false;
+          this._updatePreview();
+          return;
+        }
+
         if (state.mode === 'pinch' || state.mode === 'pan') {
           send2('up', state.f1, state.f2);
           if (this.overlay) this.overlay.clear();
@@ -407,7 +494,7 @@
         } else {
           // Never promoted past the tap threshold → one-shot tap.
           this.input.tap(state.startVx / state.startW, state.startVy / state.startH);
-          this._ripple(state.startVx, state.startVy);
+          this._ripple(state.startClientX, state.startClientY);
           this.log('tap');
         }
         state = null;
@@ -421,12 +508,18 @@
       this._on(this.el, 'mouseleave', end);
     }
 
-    _ripple(x, y) {
+    _ripple(clientX, clientY) {
+      // Position in viewport coords (`position: fixed`) so the
+      // ripple lands where the cursor actually is, regardless of
+      // any CSS rotation applied to `this.el`'s ancestors. A
+      // child of `this.el` would be rotated alongside the bezel
+      // and visually drift away from the click point in
+      // landscape / upside-down orientations.
       const r = document.createElement('div');
-      r.style.cssText = `position:absolute;border:2px solid #6366f1;border-radius:50%;
+      r.style.cssText = `position:fixed;border:2px solid #6366f1;border-radius:50%;
         transform:translate(-50%,-50%);pointer-events:none;
-        left:${x}px;top:${y}px;animation:simRipple 0.5s ease-out forwards;z-index:10;`;
-      this.el.appendChild(r);
+        left:${clientX}px;top:${clientY}px;animation:simRipple 0.5s ease-out forwards;z-index:10000;`;
+      document.body.appendChild(r);
       setTimeout(() => r.remove(), 500);
     }
 

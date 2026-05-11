@@ -53,15 +53,157 @@
   // unconditionally — this trim is UI ergonomics only.
   // Starting index is `0` (portrait); we don't probe the guest
   // because the GSEvent path is write-only.
-  const ORIENTATION_CYCLE_PHONE  = ['portrait', 'landscape-right', 'landscape-left'];
-  const ORIENTATION_CYCLE_TABLET = ['portrait', 'landscape-right', 'portrait-upside-down', 'landscape-left'];
+  // Every wire-name `DeviceOrientation` accepts is reachable from
+  // the rotate-button cycle, on phones and tablets alike. The
+  // order matches a true 90°-clockwise visual rotation per click:
+  //   portrait              (CSS rotate(0))
+  //   landscape-left        (CSS rotate(90deg)   — home on left of visual)
+  //   portrait-upside-down  (CSS rotate(180deg))
+  //   landscape-right       (CSS rotate(-90deg)  — home on right of visual)
+  // Names refer to *home-button position* on the rotated bezel
+  // (Apple's UIDeviceOrientation convention), not direction of
+  // rotation — which is why `landscape-left` comes first in a
+  // clockwise cycle. iPhone UIKit silently ignores
+  // `portrait-upside-down` for apps that don't declare the
+  // interface orientation; the cycle still exposes it so apps
+  // that *do* honour it are reachable.
+  const ORIENTATION_CYCLE = [
+    'portrait', 'landscape-left', 'portrait-upside-down', 'landscape-right',
+  ];
   let orientationIndex = 0;
+  let currentOrientation = 'portrait';
+
+  // Debug knobs for landscape-right edge-gesture exploration —
+  // iOS in raw=3 doesn't fire the home recognizer on any of the
+  // recipes that work for landscape-left / upside-down, so we
+  // expose runtime overrides so the next drag uses a different
+  // (edge, coord) combination without a rebuild.
+  //   window.__edgeOverride('top'|'right'|'bottom'|'left'|null)
+  //   window.__mirrorX(true|false)         — flip portrait_x via {x: y, y: x}
+  //   window.__lrConfig()                  — print current state
+  //   window.__lrReset()                   — restore defaults
+  let lrEdgeOverride = null;     // null → use the default mapping
+  let lrMirrorX      = false;    // false → strict CSS-rotation inverse
+  if (typeof window !== 'undefined') {
+    window.__edgeOverride = (e) => { lrEdgeOverride = e || null; console.log('[lr] edge override =', lrEdgeOverride); };
+    window.__mirrorX      = (b) => { lrMirrorX = !!b;             console.log('[lr] mirror-X =', lrMirrorX); };
+    window.__lrReset      = ()  => { lrEdgeOverride = null; lrMirrorX = false; console.log('[lr] reset'); };
+    window.__lrConfig     = ()  => { console.log('[lr]', { edgeOverride: lrEdgeOverride, mirrorX: lrMirrorX }); };
+  }
+  // Absolute rotation degrees, monotonically increasing — each
+  // rotate-button click adds 90. Applied inline so CSS transitions
+  // interpolate the *short* way (always +90° forward) instead of
+  // the long way around when the wire-name's canonical angle
+  // would have decreased (e.g. 180° → -90° = -270° animation
+  // would be visibly weird). Modulo 360 just keeps the number
+  // tidy; the transition driver doesn't care about absolute size.
+  let rotationDegrees = 0;
 
   function orientationCycle() {
-    // chrome.json's `identifier` is `phone12` / `tablet5` / etc.
-    // Anything that isn't an iPhone gets the full 4-step cycle.
-    const id = (layout && layout.identifier) || '';
-    return id.startsWith('phone') ? ORIENTATION_CYCLE_PHONE : ORIENTATION_CYCLE_TABLET;
+    return ORIENTATION_CYCLE;
+  }
+
+  // Apply orientation visually: set the inline `transform` on the
+  // device-frame wrapper, plus a `data-orientation` attribute on
+  // the container so non-rotation CSS (max-height caps in
+  // landscape) and the input/overlay coord transforms can read
+  // `currentOrientation`.
+  function applyOrientation(value) {
+    const previous = currentOrientation;
+    currentOrientation = value;
+    const root = document.getElementById('nativeDeviceFrame');
+    if (root) {
+      if (value === 'portrait') root.removeAttribute('data-orientation');
+      else                      root.setAttribute('data-orientation', value);
+      // Advance the rotation by one cycle step (90° CW) when we
+      // move forward in the cycle. If the caller asked for the
+      // same orientation we already display (e.g. session restart
+      // after format swap), keep the existing degrees so the
+      // bezel doesn't re-animate.
+      if (value !== previous) {
+        rotationDegrees += 90;
+      }
+      const wrapper = root.querySelector(':scope > div');
+      if (wrapper) wrapper.style.transform = 'rotate(' + rotationDegrees + 'deg)';
+    }
+  }
+
+  // Map a normalized coord [0, 1]² from the rotated visual frame
+  // back to the device's portrait coord system. Used by the input
+  // transport so taps/swipes/touches land on the iOS element the
+  // user clicked on, even though iOS expects portrait coords.
+  // Direction must mirror the CSS transforms in sim-native.html —
+  // landscape-right is rotate(-90deg) (CCW) on the wrapper, so the
+  // visual→portrait inverse rotates CW.
+  function visualToPortraitNorm(x, y) {
+    switch (currentOrientation) {
+      case 'landscape-right':       return { x: 1 - y,     y: x         };
+      case 'portrait-upside-down':  return { x: 1 - x,     y: 1 - y     };
+      case 'landscape-left':        return { x: y,         y: 1 - x     };
+      default:                      return { x,            y            };
+    }
+  }
+
+  // Map a screen-edge name from the user's visual frame to the
+  // device's portrait coord frame. When the device is rotated, the
+  // user's visual bottom corresponds to a *different* physical
+  // edge in portrait coords (the frame the digitizer dispatch
+  // patches `IndigoHIDEdge` against). Without this remap, a swipe
+  // up from the visual bottom in landscape lands as portrait coords
+  // near the left/right edge but is still flagged `bottom` — iOS's
+  // gesture recognizer requires the flag to match the touch's
+  // physical edge, so the home gesture never fires.
+  //
+  //   portrait                : visual bottom → physical bottom
+  //   landscape-right         : visual bottom → physical left
+  //   portrait-upside-down    : visual bottom → physical top
+  //   landscape-left          : visual bottom → physical right
+  //
+  // Same rotation applies to all four edge names — derived from
+  // the same CSS rotate transforms the bezel uses.
+  function visualToPortraitEdge(edge) {
+    if (!edge) return edge;
+    // Empirical mapping (verified against iOS 26.4 home-indicator
+    // recognizer in our headless setup):
+    //   portrait                : bottom → bottom
+    //   landscape-left  (raw=4) : bottom → right   (rotateCW; verified)
+    //   landscape-right (raw=3) : bottom → left    (rotateCCW; recognizer not wired — known limitation)
+    //   portrait-upside-down    : bottom → right   (matches raw=4 path; verified)
+    //
+    // iOS rotates the home-indicator recognizer hot zone with
+    // orientation for raw=4 and raw=2 — both end up at
+    // portrait-right + edge=right. raw=3 *should* mirror to
+    // portrait-left + edge=left by the same logic, but iOS
+    // doesn't fire the recognizer there in our headless setup
+    // (the well-documented landscape-right gap). Sending edge=left
+    // keeps the wire envelope physically self-consistent (touch
+    // coords land on portrait-left, edge flag agrees) so the
+    // gesture isn't mis-routed to a different system region.
+    // Empirical mapping (verified):
+    //   portrait              : bottom → bottom  (✅ home fires)
+    //   landscape-left  (raw=4): bottom → right  (✅ home fires)
+    //   portrait-upside-down  : bottom → right  (✅ home fires)
+    //   landscape-right (raw=3): bottom → top    (✅ home fires)
+    switch (currentOrientation) {
+      case 'landscape-left':       return edge === 'bottom' ? 'right' : edge;
+      case 'portrait-upside-down': return edge === 'bottom' ? 'right' : edge;
+      case 'landscape-right':      return edge === 'bottom' ? 'top' : edge;
+      default:                     return edge;
+    }
+  }
+
+  // Map a pixel coord from the rotated visual bbox back to the
+  // unrotated DOM-local frame (the screenArea's own pre-rotation
+  // pixel grid). Used when placing pinch-overlay dots — their CSS
+  // left/top is in unrotated local pixels, so we have to undo the
+  // wrapper's rotation before the dot lines up under the cursor.
+  function visualToUnrotatedLocalPx(vx, vy, w, h) {
+    switch (currentOrientation) {
+      case 'landscape-right':       return { x: h - vy,    y: vx        };
+      case 'portrait-upside-down':  return { x: w - vx,    y: h - vy    };
+      case 'landscape-left':        return { x: vy,        y: w - vx    };
+      default:                      return { x: vx,        y: vy        };
+    }
   }
 
   // --- Bootstrap ---------------------------------------------------
@@ -94,7 +236,7 @@
     const html = await fetchTemplate();
     if (!html) {
       document.body.innerHTML =
-        '<pre style="color:#f87171;padding:24px;font-family:ui-monospace">sim-native.html not found</pre>';
+          '<pre style="color:#f87171;padding:24px;font-family:ui-monospace">sim-native.html not found</pre>';
       return;
     }
     document.body.insertAdjacentHTML('beforeend', html);
@@ -113,8 +255,8 @@
     // 3. Layout drives bezel + screen rect + corner radius. Same
     //    endpoint sim-stream.js uses.
     layout = await fetch(`/simulators/${encodeURIComponent(udid)}/chrome.json`)
-      .then((r) => (r.ok ? r.json() : null))
-      .catch(() => null);
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null);
 
     // 4. Mount frame. Actionable mode is opt-in (toolbar toggle,
     //    persisted to localStorage). When on, `bezel.png?buttons=
@@ -135,6 +277,16 @@
     wireUnload();
     applyStoredTheme();
     reflectActionable();
+
+    // Reset iOS to portrait on page boot. Without this, a page
+    // reload would leave our JS state at `currentOrientation =
+    // 'portrait'` (rotation degrees 0) while iOS still holds
+    // whatever orientation it was set to in a previous session
+    // — the bezel renders un-rotated but the iOS framebuffer
+    // shows UI from the stale orientation, which looks upside
+    // down to the user.
+    fetch('/simulators/' + encodeURIComponent(udid) + '/orientation?value=portrait',
+        { method: 'POST' }).catch(() => { /* best-effort */ });
   }
 
   // Actionable-bezel toggle. Off by default — the bezel renders
@@ -170,7 +322,7 @@
     const pinned = root && root.getAttribute('data-theme');
     if (pinned === 'light' || pinned === 'dark') return pinned;
     return window.matchMedia('(prefers-color-scheme: light)').matches
-      ? 'light' : 'dark';
+        ? 'light' : 'dark';
   }
 
   function setTheme(theme) {
@@ -259,19 +411,19 @@
   function fetchTemplate() {
     if (_templatePromise) return _templatePromise;
     _templatePromise = fetch('/sim-native.html')
-      .then((r) => (r.ok ? r.text() : ''))
-      .then((html) => {
-        if (!html) return '';
-        const doc = new DOMParser().parseFromString(html, 'text/html');
-        // Carry the inline <style> blocks (they live in <body>) plus
-        // the #simNativeView root. The standalone-preview <script>
-        // is ignored — boot() owns the wiring instead.
-        const styles = Array.from(doc.body.querySelectorAll('style'))
-          .map((s) => s.outerHTML).join('\n');
-        const root = doc.getElementById('simNativeView');
-        return styles + (root ? root.outerHTML : '');
-      })
-      .catch(() => '');
+        .then((r) => (r.ok ? r.text() : ''))
+        .then((html) => {
+          if (!html) return '';
+          const doc = new DOMParser().parseFromString(html, 'text/html');
+          // Carry the inline <style> blocks (they live in <body>) plus
+          // the #simNativeView root. The standalone-preview <script>
+          // is ignored — boot() owns the wiring instead.
+          const styles = Array.from(doc.body.querySelectorAll('style'))
+              .map((s) => s.outerHTML).join('\n');
+          const root = doc.getElementById('simNativeView');
+          return styles + (root ? root.outerHTML : '');
+        })
+        .catch(() => '');
     return _templatePromise;
   }
 
@@ -286,7 +438,7 @@
         return {
           name: hit.name || 'Simulator',
           runtime: hit.displayRuntime
-                || formatRuntime(hit.runtime || hit.os || ''),
+              || formatRuntime(hit.runtime || hit.os || ''),
         };
       }
     } catch (_) { /* fall through */ }
@@ -295,16 +447,16 @@
 
   function formatRuntime(raw) {
     return String(raw || '')
-      .replace('com.apple.CoreSimulator.SimRuntime.', '')
-      .replace(/^iOS-/, 'iOS ')
-      .replace(/-/g, '.');
+        .replace('com.apple.CoreSimulator.SimRuntime.', '')
+        .replace(/^iOS-/, 'iOS ')
+        .replace(/-/g, '.');
   }
 
   function pickFormat() {
     const stored = localStorage.getItem('asc.simFormat');
     if (stored === 'avcc' || stored === 'mjpeg') return stored;
     return window.FrameDecoder && window.FrameDecoder.isHardwareAvailable()
-      ? 'avcc' : 'mjpeg';
+        ? 'avcc' : 'mjpeg';
   }
 
   function wireInput(targetUdid, screenSize) {
@@ -319,19 +471,81 @@
     simInput = new window.SimInput({
       udid: targetUdid,
       log,
-      // Shared translator from sim-input-bridge.js — same dialect
-      // adapter sim-stream.js and farm-tile.js use.
-      transport: window.SimInputBridge.makeTransport(session, log),
+      // Shared translator from sim-input-bridge.js — wrapped here
+      // so user gestures captured in the rotated visual frame are
+      // remapped back to the device's portrait coord system
+      // before the bridge converts them to wire envelopes.
+      transport: makeOrientationTransport(session, log),
     });
     simInput.setScreenSize(screenSize.w, screenSize.h);
-    pinchOverlay = new window.PinchOverlay(surface.screenArea);
+    pinchOverlay = makeOrientationPinchOverlay(surface.screenArea);
+    // Restore the cached orientation across format-swap remounts,
+    // so reopening the session doesn't snap the device back to
+    // portrait while the simulator is still landscape.
+    if (currentOrientation !== 'portrait') applyOrientation(currentOrientation);
     mouseSource = new window.MouseGestureSource({
       el: surface.screenArea,
       input: simInput,
       overlay: pinchOverlay,
       log,
+      getOrientation: () => currentOrientation,
     });
     mouseSource.attach();
+  }
+
+  // Wrap SimInputBridge's transport with a normalized-coord
+  // remapper. MouseGestureSource computes finger coords against
+  // screenArea's bounding rect, which after CSS rotation is the
+  // ROTATED bbox — so the normalized [0, 1] coords arriving here
+  // are in the user's visual frame. We translate them to portrait
+  // device-norm before the bridge multiplies by width/height
+  // (still portrait pixel dims) to produce wire envelopes.
+  function makeOrientationTransport(session, log) {
+    const inner = window.SimInputBridge.makeTransport(session, log);
+    return (payload) => inner(remapPayloadToPortrait(payload));
+  }
+
+  function remapPayloadToPortrait(payload) {
+    if (currentOrientation === 'portrait' || !payload) return payload;
+    switch (payload.kind) {
+      case 'tap': {
+        const p = visualToPortraitNorm(payload.x, payload.y);
+        return { ...payload, x: p.x, y: p.y };
+      }
+      case 'swipe': {
+        const a = visualToPortraitNorm(payload.x1, payload.y1);
+        const b = visualToPortraitNorm(payload.x2, payload.y2);
+        return { ...payload, x1: a.x, y1: a.y, x2: b.x, y2: b.y };
+      }
+      case 'touchDown':
+      case 'touchMove':
+      case 'touchUp': {
+        const fingers = (payload.fingers || []).map((f) => visualToPortraitNorm(f.x, f.y));
+        const edge = visualToPortraitEdge(payload.edge);
+        return { ...payload, fingers, edge };
+      }
+      default:
+        return payload;
+    }
+  }
+
+  // Wrap PinchOverlay so dot positions are placed in the
+  // unrotated DOM-local frame even when the user's cursor (and
+  // therefore the (x, y) we receive) is in the rotated visual
+  // frame. Without this, dots drift away from the cursor as soon
+  // as the device is in landscape.
+  function makeOrientationPinchOverlay(host) {
+    const inner = new window.PinchOverlay(host);
+    return {
+      setFingers(points) {
+        if (currentOrientation === 'portrait') return inner.setFingers(points);
+        const r = host.getBoundingClientRect();
+        const w = r.width, h = r.height;
+        const remapped = points.map(({ x, y }) => visualToUnrotatedLocalPx(x, y, w, h));
+        return inner.setFingers(remapped);
+      },
+      clear() { inner.clear(); },
+    };
   }
 
   // Wire host-keyboard → simulator. Focus-gated: while the screen
@@ -349,7 +563,14 @@
 
   function wireActions() {
     window.__nativeHome = () => simInput && simInput.button('home');
-    window.__nativeLock = () => simInput && simInput.button('lock');
+    // App switcher — fires the new `app-switcher` virtual button
+    // on the server side. The Swift `IndigoHIDInput` decomposes it
+    // into two consecutive home `IndigoHIDMessageForButton` presses
+    // ~150 ms apart, which is the recipe SpringBoard listens for
+    // (works on Face ID iPhones with no physical home button). No
+    // gesture coordinates involved, so device rotation is a non-
+    // issue here.
+    window.__nativeAppSwitcher = () => simInput && simInput.button('app-switcher');
     window.__nativeScreenshot = () => downloadSnapshot();
     window.__nativeClose = () => {
       // Shutting the window from inside a popup-style URL: try
@@ -408,8 +629,14 @@
       const cycle = orientationCycle();
       orientationIndex = (orientationIndex + 1) % cycle.length;
       const value = cycle[orientationIndex];
+      // Mirror the rotation in the UI immediately. The CSS
+      // transform on `#nativeDeviceFrame > div` rotates the bezel
+      // + canvas as one unit, while the input + overlay wrappers
+      // remap coords back to portrait so taps still land on the
+      // iOS element under the cursor.
+      applyOrientation(value);
       const url = '/simulators/' + encodeURIComponent(udid)
-                + '/orientation?value=' + encodeURIComponent(value);
+          + '/orientation?value=' + encodeURIComponent(value);
       fetch(url, { method: 'POST' }).catch(() => { /* best-effort */ });
     };
   }
@@ -427,22 +654,22 @@
     }
     panel.setAttribute('data-open', 'true');
     panel.innerHTML =
-      '<div class="ax-host-head">' +
+        '<div class="ax-host-head">' +
         '<span>Element</span>' +
         '<button class="ax-host-close" data-role="ax-close" aria-label="Dismiss">×</button>' +
-      '</div>' +
-      '<div data-role="ax-body"></div>';
+        '</div>' +
+        '<div data-role="ax-body"></div>';
     panel.querySelector('[data-role="ax-close"]').addEventListener('click', () => {
       panel.removeAttribute('data-open');
       panel.innerHTML = '';
     });
     window.AXInspector.renderSelectionInto(
-      panel.querySelector('[data-role="ax-body"]'),
-      node,
-      {
-        send: (payload) => session && session.send(payload),
-        getDeviceSize: () => frame.screenSize(),
-      }
+        panel.querySelector('[data-role="ax-body"]'),
+        node,
+        {
+          send: (payload) => session && session.send(payload),
+          getDeviceSize: () => frame.screenSize(),
+        }
     );
   }
 

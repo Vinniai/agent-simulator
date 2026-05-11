@@ -27,9 +27,19 @@ recipe.
 | `volume-up`    | Volume up                               | `IndigoHIDMessageForHIDArbitrary` |
 | `volume-down`  | Volume down                             | `IndigoHIDMessageForHIDArbitrary` |
 | `action`       | iPhone 15 Pro action button             | `IndigoHIDMessageForHIDArbitrary` |
+| `app-switcher` | Multitasking carousel (cards)           | `IndigoHIDMessageForButton` × 2 (double home press, ~150 ms apart) |
 
 `siri` is **explicitly rejected**: every Indigo path we tried crashes
 `backboardd` on iOS 26.4. Don't add it back without a working recipe.
+
+`app-switcher` is a *virtual* button — there's no physical equivalent
+on Face ID iPhones. The dispatch fires two consecutive `home`
+`IndigoHIDMessageForButton` messages ~150 ms apart. SpringBoard
+listens to that event source independently of whether the device has
+home-button hardware, so this recipe is rotation-agnostic and works
+across the iPhone X+ family. The slow swipe-and-hold variant is
+still available on the wire as `swipe-to-app-switcher` (gesture
+path; see [touches.md](touches.md)).
 
 ## Wire JSON
 

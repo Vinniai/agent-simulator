@@ -32,8 +32,31 @@ final class GestureDispatcher {
 
     private func ack(ok: Bool, error: String? = nil) -> String {
         if let error {
-            return "{\"ok\":\(ok),\"error\":\"\(error)\"}"
+            return "{\"ok\":\(ok),\"error\":\"\(Self.jsonEscape(error))\"}"
         }
         return "{\"ok\":\(ok)}"
+    }
+
+    private static func jsonEscape(_ s: String) -> String {
+        var out = ""
+        out.reserveCapacity(s.count + 8)
+        for ch in s.unicodeScalars {
+            switch ch {
+            case "\"":  out.append("\\\"")
+            case "\\":  out.append("\\\\")
+            case "\n":  out.append("\\n")
+            case "\r":  out.append("\\r")
+            case "\t":  out.append("\\t")
+            case "\u{08}": out.append("\\b")
+            case "\u{0C}": out.append("\\f")
+            default:
+                if ch.value < 0x20 {
+                    out.append(String(format: "\\u%04x", ch.value))
+                } else {
+                    out.append(Character(ch))
+                }
+            }
+        }
+        return out
     }
 }

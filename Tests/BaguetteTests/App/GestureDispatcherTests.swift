@@ -54,13 +54,13 @@ struct GestureDispatcherTests {
 
     @Test func `dispatches phased touch1-down via registry suffix`() {
         let input = MockInput()
-        given(input).touch1(phase: .any, at: .any, size: .any).willReturn(true)
+        given(input).touch1(phase: .any, at: .any, size: .any, edge: .any).willReturn(true)
         let dispatcher = GestureDispatcher(input: input)
 
         let ack = dispatcher.dispatch(line: #"{"type":"touch1-down","x":0,"y":0,"width":1,"height":1}"#)
 
         #expect(ack == #"{"ok":true}"#)
-        verify(input).touch1(phase: .value(.down), at: .any, size: .any).called(1)
+        verify(input).touch1(phase: .value(.down), at: .any, size: .any, edge: .any).called(1)
     }
 
     @Test func `wraps non-GestureError thrown by a parser into the ack`() {
@@ -73,6 +73,17 @@ struct GestureDispatcherTests {
 
         #expect(ack == #"{"ok":false,"error":"boom"}"#)
     }
+
+    @Test func `escapes thrown error strings in JSON acks`() {
+        let input = MockInput()
+        let registry = GestureRegistry()
+        registry.register(EscapingGesture.self)
+        let dispatcher = GestureDispatcher(input: input, registry: registry)
+
+        let ack = dispatcher.dispatch(line: #"{"type":"escape-error"}"#)
+
+        #expect(ack == #"{"ok":false,"error":"quote \" backslash \\ newline \n tab \t backspace \b formfeed \f control \u0001"}"#)
+    }
 }
 
 private struct ThrowingGesture: Gesture {
@@ -84,4 +95,16 @@ private struct ThrowingGesture: Gesture {
 private enum OtherError: Error, CustomStringConvertible {
     case boom
     var description: String { "boom" }
+}
+
+private struct EscapingGesture: Gesture {
+    static var wireType: String { "escape-error" }
+    static func parse(_ dict: [String: Any]) throws -> Self { throw EscapingError() }
+    func execute(on input: any Input) -> Bool { true }
+}
+
+private struct EscapingError: Error, CustomStringConvertible {
+    var description: String {
+        "quote \" backslash \\ newline \n tab \t backspace \u{08} formfeed \u{0C} control \u{01}"
+    }
 }

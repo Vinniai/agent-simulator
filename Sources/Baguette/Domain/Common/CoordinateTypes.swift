@@ -45,6 +45,17 @@ struct HIDUsage: Equatable, Hashable, Sendable {
     let usage: UInt32
 }
 
+/// Screen-edge gesture region a streaming touch belongs to. When
+/// set on a `touch1-*` envelope, the Infrastructure adapter
+/// patches the `IndigoHIDEdge` byte slot in the message so iOS's
+/// system gesture recognizers (home indicator, control centre,
+/// notification centre) see the touch as an edge gesture rather
+/// than an interior pan. Empirical bitmask values verified against
+/// `IndigoHIDMessageForMouseNSEvent`'s 7-arg signature.
+public enum DeviceEdge: String, Sendable, Equatable, Hashable, CaseIterable {
+    case left, top, right, bottom
+}
+
 /// Hardware buttons routable via the host-HID path on iOS 26.4.
 ///
 /// `home` / `lock` ride `IndigoHIDMessageForButton`. The four
@@ -52,11 +63,33 @@ struct HIDUsage: Equatable, Hashable, Sendable {
 /// `action`) ride `IndigoHIDMessageForHIDArbitrary` keyed by HID
 /// usagePage / usage codes from each device's chrome.json. `siri`
 /// remains rejected — it crashes backboardd through every known path.
+///
+/// `appSwitcher`, `swipeToAppSwitcher`, `swipeToHome`,
+/// `pullDownToLockScreen`, and `pullDownToNotificationCenter` are
+/// *virtual* buttons — they have no physical counterpart on any
+/// iPhone, but the wire surface keeps the API uniform with the real
+/// ones. `appSwitcher` decomposes into two consecutive home
+/// `IndigoHIDMessageForButton` presses ~150 ms apart (SpringBoard's
+/// own recipe; works on Face ID devices that have no home button
+/// hardware — cleaner and more reliable than synthesising the slow
+/// swipe-and-hold gesture). The four swipe / pull variants all ride
+/// `IOHIDDigitizerDispatch` with an `IndigoHIDEdge` flag set, which
+/// is what tells the iOS HID stack to route the touches to the
+/// system-gesture recognizer rather than to whatever app is foreground:
+///   - `swipeToAppSwitcher` — slow drag-and-hold from the bottom edge
+///   - `swipeToHome` — fast flick from the device's bottom edge
+///   - `pullDownToLockScreen` — slow drag from top-left
+///   - `pullDownToNotificationCenter` — slow drag from top-right
 enum DeviceButton: String, Sendable, Equatable, Hashable {
     case home, lock
     case power, action
     case volumeUp = "volume-up"
     case volumeDown = "volume-down"
+    case appSwitcher = "app-switcher"
+    case swipeToAppSwitcher = "swipe-to-app-switcher"
+    case swipeToHome = "swipe-to-home"
+    case pullDownToLockScreen = "pull-down-to-lock-screen"
+    case pullDownToNotificationCenter = "pull-down-to-notification-center"
 }
 
 extension DeviceButton {
@@ -68,7 +101,8 @@ extension DeviceButton {
     /// shipping iPhone's chrome.json.
     var standardHIDUsage: HIDUsage? {
         switch self {
-        case .home, .lock: return nil
+        case .home, .lock, .appSwitcher, .swipeToAppSwitcher, .swipeToHome,
+             .pullDownToLockScreen, .pullDownToNotificationCenter: return nil
         case .power:      return HIDUsage(page: 12, usage: 48)
         case .volumeUp:   return HIDUsage(page: 12, usage: 233)
         case .volumeDown: return HIDUsage(page: 12, usage: 234)

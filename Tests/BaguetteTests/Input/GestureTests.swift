@@ -91,14 +91,43 @@ struct Touch1Tests {
 
     @Test func `executes against the input surface`() {
         let input = MockInput()
-        given(input).touch1(phase: .any, at: .any, size: .any).willReturn(true)
+        given(input).touch1(phase: .any, at: .any, size: .any, edge: .any).willReturn(true)
         let g = Touch1(phase: .up, at: Point(x: 5, y: 6), size: Size(width: 100, height: 200))
 
         _ = g.execute(on: input)
         verify(input).touch1(
             phase: .value(.up),
             at:    .value(Point(x: 5, y: 6)),
-            size:  .value(Size(width: 100, height: 200))
+            size:  .value(Size(width: 100, height: 200)),
+            edge:  .value(nil)
+        ).called(1)
+    }
+
+    @Test func `parses optional edge field`() throws {
+        let g = try Touch1.parse([
+            "phase": "down", "x": 0.5, "y": 0.99,
+            "width": 100, "height": 200, "edge": "bottom"
+        ])
+        #expect(g == Touch1(phase: .down,
+                            at: Point(x: 0.5, y: 0.99),
+                            size: Size(width: 100, height: 200),
+                            edge: .bottom))
+    }
+
+    @Test func `executes with edge passed through`() {
+        let input = MockInput()
+        given(input).touch1(phase: .any, at: .any, size: .any, edge: .any).willReturn(true)
+        let g = Touch1(phase: .down,
+                       at: Point(x: 0.5, y: 0.99),
+                       size: Size(width: 100, height: 200),
+                       edge: .bottom)
+
+        _ = g.execute(on: input)
+        verify(input).touch1(
+            phase: .value(.down),
+            at:    .value(Point(x: 0.5, y: 0.99)),
+            size:  .value(Size(width: 100, height: 200)),
+            edge:  .value(.bottom)
         ).called(1)
     }
 }
@@ -173,6 +202,31 @@ struct PressTests {
         #expect(g == Press(button: .action))
     }
 
+    @Test func `parses app-switcher button`() throws {
+        let g = try Press.parse(["button": "app-switcher"])
+        #expect(g == Press(button: .appSwitcher))
+    }
+
+    @Test func `parses swipe-to-app-switcher button`() throws {
+        let g = try Press.parse(["button": "swipe-to-app-switcher"])
+        #expect(g == Press(button: .swipeToAppSwitcher))
+    }
+
+    @Test func `parses swipe-to-home button`() throws {
+        let g = try Press.parse(["button": "swipe-to-home"])
+        #expect(g == Press(button: .swipeToHome))
+    }
+
+    @Test func `parses pull-down-to-lock-screen button`() throws {
+        let g = try Press.parse(["button": "pull-down-to-lock-screen"])
+        #expect(g == Press(button: .pullDownToLockScreen))
+    }
+
+    @Test func `parses pull-down-to-notification-center button`() throws {
+        let g = try Press.parse(["button": "pull-down-to-notification-center"])
+        #expect(g == Press(button: .pullDownToNotificationCenter))
+    }
+
     @Test func `parses duration when present`() throws {
         let g = try Press.parse(["button": "action", "duration": 1.5])
         #expect(g == Press(button: .action, duration: 1.5))
@@ -186,7 +240,7 @@ struct PressTests {
     @Test func `rejects unknown button`() {
         #expect(throws: GestureError.invalidValue(
             "button",
-            expected: "home | lock | power | volume-up | volume-down | action"
+            expected: "home | lock | power | volume-up | volume-down | action | app-switcher | swipe-to-app-switcher | swipe-to-home | pull-down-to-lock-screen | pull-down-to-notification-center"
         )) {
             try Press.parse(["button": "siri"])
         }

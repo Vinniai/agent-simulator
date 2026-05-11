@@ -20,7 +20,7 @@ struct CommandParsingTests {
             "tap", "swipe", "pinch", "pan", "press",
             "key", "type",
             "chrome", "screenshot", "describe-ui", "logs", "serve",
-            "orientation", "review-tasks",
+            "orientation", "diag-digitizer-trackpad", "review-tasks",
         ])
     }
 
@@ -114,6 +114,14 @@ struct CommandParsingTests {
         #expect(throws: (any Error).self) {
             try OrientationCommand.parse(["portrait"])
         }
+    }
+
+    // MARK: - diag-digitizer-trackpad
+
+    @Test func `diag-digitizer-trackpad parses --udid`() throws {
+        let cmd = try DiagDigitizerTrackpadCommand.parse(["--udid", "U"])
+        #expect(cmd.options.udid == "U")
+        #expect(DiagDigitizerTrackpadCommand.configuration.commandName == "diag-digitizer-trackpad")
     }
 
     // MARK: - stream

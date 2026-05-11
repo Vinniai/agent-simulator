@@ -147,10 +147,26 @@ fresh captures `baguette screenshot` is one HTTP-free command.
 
 Wired (use freely):
 - `tap`, `swipe`, `touch1-{down,move,up}`, `touch2-{down,move,up}`,
-  `pinch`, `pan`, `scroll`
+  `pinch`, `pan`, `scroll`. `touch1-*` events accept an optional
+  `edge: "bottom" | "top" | "left" | "right"` field that flags every
+  event in the chain as a screen-edge system gesture; `bottom`
+  engages iOS's home-indicator recognizer (live home / app-switcher
+  preview as the touches stream); `top` engages the status-bar
+  recognizer (live lock-screen cover sheet from a top-left drag,
+  Notification Center from a top-right drag). Omit `edge` for
+  ordinary interior touches.
 - `button`: `home`, `lock`, `power`, `volume-up`, `volume-down`,
-  `action`. Optional `--duration` / `"duration"` for long-press
-  semantics (action button "Hold for Ring", power → Siri / SOS, …).
+  `action`, `app-switcher`, `swipe-to-app-switcher`, `swipe-to-home`,
+  `pull-down-to-lock-screen`, `pull-down-to-notification-center`.
+  Optional `--duration` / `"duration"` for long-press semantics
+  (action button "Hold for Ring", power → Siri / SOS, …). The five
+  virtual buttons land iOS gesture recognition without any
+  client-side stream management. `app-switcher` fires two home
+  presses ~150 ms apart (SpringBoard's own multitasking recipe);
+  `swipe-to-app-switcher` is the slow drag-and-hold variant on
+  the gesture path; `swipe-to-home` is the fast edge-flick → Home;
+  `pull-down-to-lock-screen` and `pull-down-to-notification-center`
+  drag down from top-left and top-right respectively.
 - `key` (single keystroke) and `type` (US-ASCII string). CLI:
   `baguette key --code KeyA --modifiers shift,command --duration 0.2`
   and `baguette type --text "hello"`. `code` is a W3C

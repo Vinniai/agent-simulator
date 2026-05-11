@@ -110,8 +110,9 @@
         font-size: 12px;
         font-weight: 700;
         cursor: pointer;
+        text-decoration: none;
       }
-      .asc-sim-button:hover { background: #f1f5f9; border-color: #cbd5e1; }
+      .asc-sim-button:hover { background: #f1f5f9; border-color: #cbd5e1; color: #475569; }
       .asc-sim-pending {
         display: inline-flex;
         align-items: center;
@@ -340,6 +341,7 @@
             <option value="all" ${state.family === 'all' ? 'selected' : ''}>All Devices</option>
           </select>
           <select class="asc-sim-select" id="ascSimRuntime">${runtimeOptions()}</select>
+          <a class="asc-sim-button" id="ascSimFarm" href="/farm">Device Farm</a>
           <button class="asc-sim-button" id="ascSimRefresh">Refresh</button>
         </div>
         ${body}
