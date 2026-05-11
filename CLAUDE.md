@@ -47,14 +47,14 @@ The naming bar is the same for both: **collaborators are domain nouns, never pat
 ## Build & test
 
 ```bash
-make                                          # release build via ./build.sh → ./Baguette
+make                                          # release build via ./build.sh → ./agent-sim
 swift build                                   # debug build (carries MOCKING flag + mocks)
 swift test                                    # full Swift Testing suite (440+ tests, no booted sim required)
 swift test --filter Simulators                # one suite
 swift test --filter "GestureRegistry/parses tap"   # one test
 ```
 
-Hybrid build: pure SPM with `-F` / `-rpath` flags into Xcode private frameworks (`CoreSimulator`, `SimulatorKit`, `IOSurface`, `VideoToolbox`, `CoreGraphics`, `ImageIO`). `build.sh` does `swift build -c release` then copies the binary to `./Baguette`. Targets `arm64e-apple-macos26.0`; requires Xcode 26 + Apple Silicon.
+Hybrid build: pure SPM with `-F` / `-rpath` flags into Xcode private frameworks (`CoreSimulator`, `SimulatorKit`, `IOSurface`, `VideoToolbox`, `CoreGraphics`, `ImageIO`). `build.sh` does `swift build -c release` then copies the binary to `./agent-sim`. Targets `arm64e-apple-macos26.0`; requires Xcode 26 + Apple Silicon.
 
 Tests use **Swift Testing** (`@Suite`, `@Test`, `#expect`) — never XCTest. `MOCKING` is `.debug`-only so release builds carry no mock code (don't reach for `MockXxx` outside the test target).
 
@@ -67,14 +67,14 @@ Sources/Baguette/
 ├── App/                CLI dispatch (ArgumentParser) + use-case orchestration
 ├── Domain/             pure Swift; value types + @Mockable abstractions named after their domain role
 ├── Infrastructure/     concrete @Mockable abstraction impls (private-API code lives here only)
-└── Resources/Web/      vanilla IIFE modules served by `baguette serve`
+└── Resources/Web/      vanilla IIFE modules served by `agent-sim serve`
 ```
 
 `Domain/` and `Infrastructure/` are split into bounded contexts (`Simulator/`, `Input/`, `Screen/`, `Stream/`, `Chrome/`) that mirror across both layers — a feature lives in one place across both. `Tests/BaguetteTests/` mirrors the same split.
 
 ### Two consumers, one pipeline
 
-Both `baguette input` (stdin JSON, used by host plugins as a long-lived subprocess) and `baguette serve` (browser WS) funnel into the same `GestureDispatcher` → `Input` → `IndigoHIDInput`. The only difference is the App-layer entry point.
+Both `agent-sim input` (stdin JSON, used by host plugins as a long-lived subprocess) and `agent-sim serve` (browser WS) funnel into the same `GestureDispatcher` → `Input` → `IndigoHIDInput`. The only difference is the App-layer entry point.
 
 ### The crucial detail: 9-arg `IndigoHIDMessageForMouseNSEvent`
 
@@ -92,7 +92,7 @@ Wire-level coordinates (`x`, `y`, `startX`, `endX`, `x1`, `x2`, `cx`, `cy`) are 
 - New stream format: one `Stream` impl in `Infrastructure/Stream/` + one case in `StreamFormat.makeStream`. Envelope formats live in `Domain/Stream/Envelope.swift`.
 - New web UI piece: a single-purpose IIFE in `Resources/Web/` that hangs one class on `window`, loaded by `<script>` tag in `sim.html`. No bundler / module graph.
 
-### `baguette serve` route surface
+### `agent-sim serve` route surface
 
 Single resource tree, no `/api/` prefix; UDID always in path; format distinguished by extension. One bidirectional WebSocket per stream carries encoded binary frames (server→browser) and JSON text messages (browser→server) for both stream control (`set_bitrate` / `set_fps` / `set_scale` / `force_idr` / `snapshot`) and gestures. `Server` is intentionally dumb — UI lives in `Resources/Web/`. `BAGUETTE_WEB_DIR` overrides the served root for live-iteration without rebuilding.
 

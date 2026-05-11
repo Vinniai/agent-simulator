@@ -4,11 +4,11 @@ Send keystrokes from the host Mac keyboard into the simulator, plus
 explicit `key` / `type` verbs on the wire and CLI for scripting. Three
 entry points share the same dispatch:
 
-- `baguette key --code <KeyA…> [--modifiers shift,command] [--duration <s>]` — single keystroke.
-- `baguette type --text "<string>"` — typed as a sequence of keystrokes.
+- `agent-sim key --code <KeyA…> [--modifiers shift,command] [--duration <s>]` — single keystroke.
+- `agent-sim type --text "<string>"` — typed as a sequence of keystrokes.
 - Wire JSON `{ "type": "key", "code": "KeyA", "modifiers": ["shift"] }` and
-  `{ "type": "type", "text": "hello" }` on `baguette serve`'s WebSocket and
-  `baguette input`'s stdin.
+  `{ "type": "type", "text": "hello" }` on `agent-sim serve`'s WebSocket and
+  `agent-sim input`'s stdin.
 - Browser — when the device's screen surface has focus, every supported
   Mac keystroke is forwarded automatically.
 
@@ -155,7 +155,7 @@ address bar, etc.
   9-arg, like the mouse) to read `NSEvent.thread-local` state.
 - **No emoji or accented characters.** US layout only; `é` / `中` /
   `🦄` are rejected by `decompose`.
-- **No key repeat from CLI.** `baguette key` emits one keystroke; for
+- **No key repeat from CLI.** `agent-sim key` emits one keystroke; for
   held-key behaviour use `--duration`. Browser key repeat works via
   the OS firing repeated `keydown` events — each becomes its own
   press wire envelope.

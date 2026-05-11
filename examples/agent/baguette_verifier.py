@@ -1,4 +1,4 @@
-"""Reference baguette verifier — claim-completed-tasks → diff snapshots → pass/fail.
+"""Reference agent-sim verifier — claim-completed-tasks → diff snapshots → pass/fail.
 
 A complement to `baguette_worker.py`. While the worker drives the simulator
 to *make* a change, the verifier reads what a worker submitted, compares
@@ -183,7 +183,7 @@ def main() -> None:
     p.add_argument("--agent-prefix", required=True,
                    help="Only verify tasks whose assignee starts with this string")
     p.add_argument("--base", default="http://127.0.0.1:8421")
-    p.add_argument("--reviews-root", default=os.path.expanduser("~/.baguette/reviews"))
+    p.add_argument("--reviews-root", default=os.path.expanduser("~/.agent-sim/reviews"))
     p.add_argument("--interval", type=float, default=2.0)
     args = p.parse_args()
     loop(args.base, args.agent_prefix, args.reviews_root, args.interval)

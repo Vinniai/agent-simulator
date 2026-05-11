@@ -5,7 +5,7 @@ a downstream tool — line-by-line, in real time, with the same filter
 vocabulary `xcrun simctl spawn <udid> log stream` accepts. Two
 entry points share one dispatch path:
 
-- `baguette logs --udid <UDID> [--level …] [--style …] [--predicate …] [--bundle-id …]` —
+- `agent-sim logs --udid <UDID> [--level …] [--style …] [--predicate …] [--bundle-id …]` —
   CLI; writes to stdout; SIGINT (Ctrl-C) tears down cleanly.
 - `WS /simulators/:udid/logs?level=&style=&predicate=&bundleId=` — one
   socket per consumer; server emits one `{"type":"log","line":"…"}` text
@@ -47,12 +47,12 @@ re-parse on its end.
 ## CLI
 
 ```bash
-baguette logs --udid <UDID>                              # info-and-above, default style
-baguette logs --udid <UDID> --level debug                # everything including debug-level chatter
-baguette logs --udid <UDID> --style json                 # one JSON object per line
-baguette logs --udid <UDID> --bundle-id com.apple.MobileSafari
-baguette logs --udid <UDID> --predicate 'subsystem == "com.apple.UIKit"'
-baguette logs --udid <UDID> | grep -i error              # composes with shell pipelines
+agent-sim logs --udid <UDID>                              # info-and-above, default style
+agent-sim logs --udid <UDID> --level debug                # everything including debug-level chatter
+agent-sim logs --udid <UDID> --style json                 # one JSON object per line
+agent-sim logs --udid <UDID> --bundle-id com.apple.MobileSafari
+agent-sim logs --udid <UDID> --predicate 'subsystem == "com.apple.UIKit"'
+agent-sim logs --udid <UDID> | grep -i error              # composes with shell pipelines
 ```
 
 | Flag           | Default   | Effect                                                            |

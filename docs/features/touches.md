@@ -25,8 +25,8 @@ two `IndigoHIDMessageForButton` presses ~150 ms apart — so it lives in
 
 | Surface | How it arrives |
 |---------|----------------|
-| **CLI** | `baguette tap --x … --y …`, `baguette swipe …`, `baguette press --button swipe-to-app-switcher / swipe-to-home / pull-down-to-lock-screen / pull-down-to-notification-center` (the canned `app-switcher` button uses the home-press recipe — see [buttons.md](buttons.md)) |
-| **Wire** | `{"type":"tap"}` / `{"type":"swipe"}` / `{"type":"touch1-down","edge":"bottom",…}` on `baguette serve` WS or `baguette input` stdin. `edge` accepts `bottom` (home / app switcher) or `top` (lock screen / notification center). |
+| **CLI** | `agent-sim tap --x … --y …`, `agent-sim swipe …`, `agent-sim press --button swipe-to-app-switcher / swipe-to-home / pull-down-to-lock-screen / pull-down-to-notification-center` (the canned `app-switcher` button uses the home-press recipe — see [buttons.md](buttons.md)) |
+| **Wire** | `{"type":"tap"}` / `{"type":"swipe"}` / `{"type":"touch1-down","edge":"bottom",…}` on `agent-sim serve` WS or `agent-sim input` stdin. `edge` accepts `bottom` (home / app switcher) or `top` (lock screen / notification center). |
 | **Browser** | Click / drag on the focus-mode canvas. Drag from the bottom 7 % streams `touch1-*` with `edge: 'bottom'` (iOS animates the home / app-switcher preview live); drag from the top 7 % streams with `edge: 'top'` (iOS pulls the lock-screen cover sheet from a top-left origin or Notification Center from a top-right origin). |
 
 Everything ends up in `Input.touch1(phase:at:size:edge:)` (streaming)
@@ -161,10 +161,10 @@ Simulator.app:
 All four shapes are exposed as wire buttons:
 
 ```
-baguette press --button swipe-to-app-switcher
-baguette press --button swipe-to-home
-baguette press --button pull-down-to-lock-screen
-baguette press --button pull-down-to-notification-center
+agent-sim press --button swipe-to-app-switcher
+agent-sim press --button swipe-to-home
+agent-sim press --button pull-down-to-lock-screen
+agent-sim press --button pull-down-to-notification-center
 ```
 
 The canonical `app-switcher` button doesn't live on this gesture
@@ -223,7 +223,7 @@ omit for an interior touch.
 ```
 
 These run the canned shapes from the table above. Use them when
-you don't need live-preview UI feedback (CLI scripts, `baguette
+you don't need live-preview UI feedback (CLI scripts, `agent-sim
 input` stdin) — they're a single dispatch each instead of a chain.
 
 ## Where the bytes are decoded
@@ -232,7 +232,7 @@ If iOS ever changes any of the layout offsets, the `diag-digitizer-trackpad`
 probe is the falsification surface:
 
 ```
-baguette diag-digitizer-trackpad --udid <UDID> \
+agent-sim diag-digitizer-trackpad --udid <UDID> \
     --event-mask 0x07 --range --touch --with-parent \
     --x 0.5 --y 0.5 --dump --compare-with-mouse
 ```

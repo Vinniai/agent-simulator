@@ -1,10 +1,10 @@
-# Baguette — Architecture
+# Agent Sim — Architecture
 
 How a tap in a browser becomes a `UITouch` inside a booted iOS 26
 simulator, and how the code is laid out to keep that path testable
 and extensible.
 
-If you just want to build and use Baguette, read [`../README.md`](../README.md).
+If you just want to build and use Agent Sim, read [`../README.md`](../README.md).
 
 ## The problem
 
@@ -18,11 +18,11 @@ Xcode 26's SimulatorKit exposes a new 9-argument
 `IndigoHIDMessageForMouseNSEvent` signature that routes touches to
 digitizer target `0x32`. Tools that use the correct new signature can
 inject from the host again — no in-process code, no app injection,
-no `DYLD_INSERT_LIBRARIES`. Baguette ships that path.
+no `DYLD_INSERT_LIBRARIES`. Agent Sim ships that path.
 
 ## Two consumers
 
-Baguette has two ways to drive a simulator: via stdin JSON (a
+Agent Sim has two ways to drive a simulator: via stdin JSON (a
 subprocess pipeline used by host plugins) and via WebSocket (the
 standalone web UI it serves itself).
 
@@ -30,7 +30,7 @@ standalone web UI it serves itself).
                 Subprocess pipeline                 Standalone serve
                 ───────────────────                 ────────────────
    Host plugin      JSON                Browser           text/binary WS
-   (asc-pro etc.)  ──────► baguette     (sim.html)       ──────► baguette
+   (asc-pro etc.)  ──────► agent-sim     (sim.html)       ──────► agent-sim
                     stdin    input                         /simulators       serve
                                   │                              │
                                   ▼                              ▼
@@ -48,10 +48,10 @@ standalone web UI it serves itself).
 
 Both paths share the same Domain + Infrastructure layers. The only
 difference is the App-layer entry point: `InputCommand` reads stdin
-and writes stdout; `Server` (under `baguette serve`) opens a
+and writes stdout; `Server` (under `agent-sim serve`) opens a
 WebSocket and uses `WebSocketFrameSink` to push encoded frames back.
 
-Subprocess consumers typically spawn one persistent `baguette input
+Subprocess consumers typically spawn one persistent `agent-sim input
 --udid <UDID>` per booted device because spawning costs ~1.2 s
 (framework resolution) and the IndigoHID pipeline has a ~40 ms
 per-session warmup that should only happen once.
@@ -117,7 +117,7 @@ mocks at the port boundary.
 | Chrome | `Chromes` | `LiveChromes` | composes `ChromeStore` + `PDFRasterizer`; caches per chrome identifier |
 | Chrome | `ChromeStore` | `FileSystemChromeStore` | reads `/Library/Developer/CoreSimulator/.../profile.plist` + `/Library/Developer/DeviceKit/Chrome/...` |
 | Chrome | `PDFRasterizer` | `CoreGraphicsPDFRasterizer` | turns composite PDFs into RGBA PNG |
-| Server | — | `Server` | Hummingbird HTTP + WebSocket server for `baguette serve` |
+| Server | — | `Server` | Hummingbird HTTP + WebSocket server for `agent-sim serve` |
 | Server | — | `WebRoot` | resolves `Resources/Web/` via env override → source tree → `Bundle.module` |
 
 `StdoutSink` and `WebSocketFrameSink` both conform to `FrameSink`
@@ -144,7 +144,7 @@ Thin orchestration; ArgumentParser lives here.
   returns a new config. Same parser used by stdin `ControlChannel`
   and by `Server.streamWS`.
 
-## End-to-end flow: a tap in `baguette serve`
+## End-to-end flow: a tap in `agent-sim serve`
 
 1. **Browser** — user taps inside the on-page simulator. `MouseGestureSource`
    computes the click's normalized coordinates and calls `SimInput.tap(...)`.
@@ -152,7 +152,7 @@ Thin orchestration; ArgumentParser lives here.
    in the host plugin's wire dialect, hands it to its `transport`
    callback.
 3. **`sim-stream.js` orchestrator** — translates the dialect to
-   Baguette's wire (`type:"tap"`, x/y multiplied to device-point
+   Agent Sim's wire (`type:"tap"`, x/y multiplied to device-point
    space), serialises to JSON, sends as a text WS message.
 4. **`Server.streamWS`** — receives the text frame, runs
    `applyStreamControl` first (returns `false` since this isn't a
@@ -204,7 +204,7 @@ in points too — same unit system end to end.
 SimulatorKitScreen (IOSurface)        Stream impl                        FrameSink
 ─────────────────────────────         ───────────                        ─────────
   framebuffer callbacks      ──►      MJPEG / AVCC encode loop  ──►     StdoutSink
-  (queue: baguette.screen)            keepalive timer (H.264)            WebSocketFrameSink
+  (queue: agent-sim.screen)            keepalive timer (H.264)            WebSocketFrameSink
                                       JPEG seed emitter                       │
                                       runtime reconfig                        ▼
                                                                      stdout (CLI)
@@ -227,7 +227,7 @@ Format-specific envelopes live in `Domain/Stream/Envelope.swift`:
   length prefix; CLI consumers (e.g. `ffplay`) read it.
 
 Runtime control: while a stream is live, JSON commands over the same
-channel (stdin for `baguette stream`, WS text frames for `serve`)
+channel (stdin for `agent-sim stream`, WS text frames for `serve`)
 retune scale / fps / bitrate without restarting. `ReconfigParser`
 turns one line into a new `StreamConfig` and `Stream.apply(_:)` does
 the deltas (VideoToolbox bitrate retune, etc.).
@@ -345,7 +345,7 @@ code. The `Tests` scheme runs in a few seconds without a booted sim.
 
 ## iOS 26 limits
 
-- **`key` / `type`** — keyboard isn't on Baguette's host-HID path
+- **`key` / `type`** — keyboard isn't on Agent Sim's host-HID path
   yet (preview-kit recipe still WIP). The `serve` UI logs and drops
   these; subprocess consumers route them through external tooling.
 - **`siri` button** — crashes `backboardd` via every known Indigo

@@ -71,7 +71,7 @@ Response is the full updated `ReviewTask`:
 Single change via flags:
 
 ```bash
-baguette review-tasks add-code-change task_42 \
+agent-sim review-tasks add-code-change task_42 \
     --path Sources/Save/SaveButton.swift \
     --summary "added validation on submit" \
     --start-line 42 --end-line 58 \
@@ -85,7 +85,7 @@ baguette review-tasks add-code-change task_42 \
 Batch from a JSON array of `ReviewTaskCodeChangeInput`:
 
 ```bash
-baguette review-tasks add-code-change task_42 --changes-file changes.json
+agent-sim review-tasks add-code-change task_42 --changes-file changes.json
 ```
 
 Use `--diff-file` to point at a file containing the unified diff —
@@ -141,7 +141,7 @@ POST /agent/tasks/:id/     ┌────────────────�
 ## Known limits
 
 - **No git auto-population.** The agent must POST what it changed. A
-  future `baguette review-tasks add-code-change --auto --since-claim`
+  future `agent-sim review-tasks add-code-change --auto --since-claim`
   helper could read git for you; today you wire the call yourself.
 - **`vscode://` links require an absolute path.** Relative paths render
   as text only; the link target won't resolve.

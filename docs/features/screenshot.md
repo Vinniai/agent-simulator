@@ -3,9 +3,9 @@
 One-shot JPEG of the simulator's framebuffer. Two entry points share
 the same capture path:
 
-- `GET /simulators/:udid/screenshot.jpg` — served by `baguette serve`,
+- `GET /simulators/:udid/screenshot.jpg` — served by `agent-sim serve`,
   returns `image/jpeg` bytes.
-- `baguette screenshot --udid <UDID>` — CLI; writes to `--output` or
+- `agent-sim screenshot --udid <UDID>` — CLI; writes to `--output` or
   stdout.
 
 If you want the live recording-and-overlays story instead, read
@@ -15,7 +15,7 @@ trade-offs.
 
 ## Why
 
-`baguette serve` already streams via WebSocket and accepts `snapshot`
+`agent-sim serve` already streams via WebSocket and accepts `snapshot`
 as an inline verb on that channel, but two real workflows wanted a
 plain HTTP fetch:
 
@@ -23,7 +23,7 @@ plain HTTP fetch:
   a rotating timestamp is the simplest possible "refresh on demand"
   affordance for review tools and dashboards. No WS plumbing needed
   in the embedding page.
-- **CLI / CI** — `curl -o shot.jpg …` and `baguette screenshot --output
+- **CLI / CI** — `curl -o shot.jpg …` and `agent-sim screenshot --output
   shot.jpg` drop into shell pipelines, golden-image diffs, and bug
   reports without spinning up a stream session.
 
@@ -42,15 +42,15 @@ GET /simulators/:udid/screenshot.jpg[?quality=0.85][?scale=1]
 ```
 
 ```
-baguette screenshot --udid <UDID> [--output <path>] [--quality 0.85] [--scale 1]
+agent-sim screenshot --udid <UDID> [--output <path>] [--quality 0.85] [--scale 1]
 ```
 
 `--output` defaults to stdout, so it composes with redirection:
 
 ```bash
-baguette screenshot --udid 5A1B… > shot.jpg
-baguette screenshot --udid 5A1B… --output /tmp/shot.jpg
-baguette screenshot --udid 5A1B… --quality 0.6 --scale 2 > thumb.jpg
+agent-sim screenshot --udid 5A1B… > shot.jpg
+agent-sim screenshot --udid 5A1B… --output /tmp/shot.jpg
+agent-sim screenshot --udid 5A1B… --quality 0.6 --scale 2 > thumb.jpg
 ```
 
 ## Pipeline
@@ -139,7 +139,7 @@ Sources/Baguette/
 │       └── Server.swift                  /screenshot.jpg route
 └── App/
     ├── Commands/
-    │   └── ScreenshotCommand.swift       baguette screenshot
+    │   └── ScreenshotCommand.swift       agent-sim screenshot
     └── RootCommand.swift                 registers ScreenshotCommand
 ```
 

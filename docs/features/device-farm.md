@@ -4,7 +4,7 @@ Multi-device dashboard for the iOS Simulator. One browser tab shows
 every booted simulator, with click-to-focus, gesture input on the
 selected device, and Grid / Wall / List view modes.
 
-Lives at `GET /farm` under `baguette serve`.
+Lives at `GET /farm` under `agent-sim serve`.
 
 If you want the end-to-end tap-to-`UITouch` story, read
 [`../ARCHITECTURE.md`](../ARCHITECTURE.md). This doc is scoped to the
@@ -58,7 +58,7 @@ served URL structure — no rewriting, no flat-file aliasing.
 │ Display  │  │  📱  │ │  📱  │                        │  CONTROLS  │
 │ Bulk     │  └──────┘ └──────┘                        │  GESTURE   │
 └──────────┴───────────────────────────────────────────┴────────────┘
-└─ CLI MIRROR: baguette serve --platform … --runtime … --focus <udid> ┘
+└─ CLI MIRROR: agent-sim serve --platform … --runtime … --focus <udid> ┘
 ```
 
 Three columns, one main row, plus header + footer. The CLI mirror

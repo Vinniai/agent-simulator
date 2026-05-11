@@ -1,6 +1,6 @@
 # Chrome bezel rendering
 
-`baguette serve` renders each simulator with a real-looking device
+`agent-sim serve` renders each simulator with a real-looking device
 bezel — the rounded body silhouette, the rail, the side buttons —
 using Apple's own DeviceKit chrome bundles as source. Two outputs:
 
@@ -211,8 +211,8 @@ Ring", iPhone power's Siri / SOS).
 ## Verifying changes
 
 ```bash
-# Restart baguette serve so the new binary + JS land.
-make && pkill -f baguette/serve; ./Baguette serve &
+# Restart agent-sim serve so the new binary + JS land.
+make && pkill -f agent-sim/serve; ./agent-sim serve &
 
 # Pull the merged composite (with buttons baked) for the device:
 curl -s "http://127.0.0.1:8421/simulators/<UDID>/bezel.png" \
