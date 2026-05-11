@@ -16,8 +16,7 @@ let package = Package(
     name: "agent-sim",
     platforms: [.macOS(.v15)],
     products: [
-        .executable(name: "Baguette", targets: ["Baguette"]),
-        .executable(name: "agent-sim", targets: ["Baguette"]),
+        .executable(name: "agent-sim", targets: ["AgentSim"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.7.1"),
@@ -30,14 +29,14 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "Baguette",
+            name: "AgentSim",
             dependencies: [
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "Mockable", package: "Mockable"),
                 .product(name: "Hummingbird", package: "hummingbird"),
                 .product(name: "HummingbirdWebSocket", package: "hummingbird-websocket"),
             ],
-            path: "Sources/Baguette",
+            path: "Sources/AgentSim",
             resources: [
                 // Static HTML/CSS/JS for `agent-sim serve`. Each file is
                 // self-contained — open in a browser via file:// for a
@@ -58,12 +57,12 @@ let package = Package(
             ]
         ),
         .testTarget(
-            name: "BaguetteTests",
+            name: "AgentSimTests",
             dependencies: [
-                "Baguette",
+                "AgentSim",
                 .product(name: "Mockable", package: "Mockable"),
             ],
-            path: "Tests/BaguetteTests",
+            path: "Tests/AgentSimTests",
             swiftSettings: [
                 .define("MOCKING"),
             ]

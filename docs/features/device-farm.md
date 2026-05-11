@@ -48,7 +48,7 @@ served URL structure — no rewriting, no flat-file aliasing.
 
 ```
 ┌─ HEADER ──────────────────────────────────────────────────────────┐
-│ Baguette / DEVICE FARM   FLEET · FPS · BANDWIDTH · LATENCY · CLOCK│
+│  agent-sim / DEVICE FARM   FLEET · FPS · BANDWIDTH · LATENCY · CLOCK│
 ├──────────┬───────────────────────────────────────────┬────────────┤
 │  RAIL    │  GRID / WALL / LIST                       │ FOCUS PANE │
 │          │  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐      │ big preview│
@@ -62,7 +62,7 @@ served URL structure — no rewriting, no flat-file aliasing.
 ```
 
 Three columns, one main row, plus header + footer. The CLI mirror
-footer reflects the current filter / focus state as a Baguette
+footer reflects the current filter / focus state as an agent-sim
 invocation — useful for copy-paste reproduction.
 
 ## Frontend split
@@ -139,7 +139,7 @@ percentages.
 ### Gesture input
 
 `SimInputBridge` is a small shared module (under `Resources/Web/`)
-that translates `SimInput`'s asc-cli plugin dialect to Baguette's
+that translates `SimInput`'s asc-cli plugin dialect to agent-sim's
 GestureRegistry wire format. Both `sim-stream.js` and `farm-tile.js`
 use it.
 
@@ -279,7 +279,7 @@ later iteration could add a thin DOM test harness around
 `farm-views.js` (pure renderers, easy to fake state).
 
 The new server routes have a Swift Testing suite at
-`Tests/BaguetteTests/Server/WebRootSubdirTests.swift` covering the
+`Tests/AgentSimTests/Server/WebRootSubdirTests.swift` covering the
 nested-path lookup `WebRoot` learned. Higher-level routing tests
 would benefit from a Hummingbird router fixture — not yet in the
 repo.

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Baguette · Architecture</title>
+  <title>agent-sim · Architecture</title>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -48,9 +48,9 @@
 <body>
   <div class="container">
     <div class="header">
-      <p class="header-eyebrow">Architecture · Baguette</p>
+      <p class="header-eyebrow">Architecture · agent-sim</p>
       <h1>Thin CLI, rich domain, narrow ports</h1>
-      <p class="subtitle">A headless iOS Simulator console. Five layers sit on CoreSimulator + SimulatorKit. The same Domain + Infrastructure powers three consumers: the CLI (<code>baguette stream</code> / <code>input</code>), the asc-pro plugin's spawned subprocess pipeline, and the standalone <code>baguette serve</code> web UI.</p>
+      <p class="subtitle">A headless iOS Simulator console. Five layers sit on CoreSimulator + SimulatorKit. The same Domain + Infrastructure powers three consumers: the CLI (<code>agent-sim stream</code> / <code>input</code>), the asc-pro plugin's spawned subprocess pipeline, and the standalone <code>agent-sim serve</code> web UI.</p>
     </div>
 
     <div class="diagram-container">
@@ -119,9 +119,9 @@
         <p class="eyebrow">THREE CONSUMERS</p>
         <div class="card-header"><span class="card-dot ink"></span><h3>One Domain, three frontends</h3></div>
         <ul>
-          <li><strong>CLI</strong> — <code>baguette stream</code> writes encoded frames to stdout; <code>baguette input</code> reads JSON gestures from stdin. Both run as standalone processes.</li>
-          <li><strong>asc-pro plugin</strong> — spawns one persistent <code>baguette input</code> subprocess per booted device; HTTP routes translate browser events to JSON lines on the subprocess's stdin.</li>
-          <li><strong>baguette serve</strong> — same Server / GestureDispatcher / Stream pipeline in-process; one bidirectional WebSocket per stream carries binary frames down + text JSON (gestures + control) up.</li>
+          <li><strong>CLI</strong> — <code>agent-sim stream</code> writes encoded frames to stdout; <code>agent-sim input</code> reads JSON gestures from stdin. Both run as standalone processes.</li>
+          <li><strong>asc-pro plugin</strong> — spawns one persistent <code>agent-sim input</code> subprocess per booted device; HTTP routes translate browser events to JSON lines on the subprocess's stdin.</li>
+          <li><strong>agent-sim serve</strong> — same Server / GestureDispatcher / Stream pipeline in-process; one bidirectional WebSocket per stream carries binary frames down + text JSON (gestures + control) up.</li>
         </ul>
       </div>
       <div class="card">
@@ -137,8 +137,8 @@
     </div>
 
     <div class="footer">
-      <span>baguette · layered architecture · 110+ tests</span>
-      <span>sources/baguette/{app,domain,infrastructure,resources/web}</span>
+      <span>agent-sim · layered architecture · 110+ tests</span>
+      <span>sources/agent-sim/{app,domain,infrastructure,resources/web}</span>
     </div>
   </div>
 </body>

@@ -15,13 +15,13 @@ coverage:
 # simulator or live socket to exercise — and the thin command-layer files
 # that do nothing but wire those shims together follow the same rule.
 ignore:
-  - "Sources/Baguette/Resources/**"
-  - "Sources/Baguette/Infrastructure/Server/**"
-  - "Sources/Baguette/Infrastructure/Simulator/**"
-  - "Sources/Baguette/Infrastructure/Input/**"
-  - "Sources/Baguette/Infrastructure/Screen/**"
-  - "Sources/Baguette/Infrastructure/Stream/**"
-  - "Sources/Baguette/Infrastructure/Chrome/PDFRasterizer.swift"
-  - "Sources/Baguette/App/Commands/**"
-  - "Sources/Baguette/App/Logger.swift"
+  - "Sources/AgentSim/Resources/**"
+  - "Sources/AgentSim/Infrastructure/Server/**"
+  - "Sources/AgentSim/Infrastructure/Simulator/**"
+  - "Sources/AgentSim/Infrastructure/Input/**"
+  - "Sources/AgentSim/Infrastructure/Screen/**"
+  - "Sources/AgentSim/Infrastructure/Stream/**"
+  - "Sources/AgentSim/Infrastructure/Chrome/PDFRasterizer.swift"
+  - "Sources/AgentSim/App/Commands/**"
+  - "Sources/AgentSim/App/Logger.swift"
   - "Tests/**"

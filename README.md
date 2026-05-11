@@ -203,7 +203,7 @@ device list (RUNNING / AVAILABLE sections), Boot / Shutdown buttons,
 and a Stream page per device with live frames + gesture input + the
 DeviceKit-sourced bezel.
 
-The HTML is editable on disk — `Sources/Baguette/Resources/Web/sim.html`
+The HTML is editable on disk — `Sources/AgentSim/Resources/Web/sim.html`
 opens directly in any browser via `file://` (preview mode), and points
 to its sibling `.js` files. Set `BAGUETTE_WEB_DIR` to override the
 served root for live-iteration without rebuilding.
@@ -289,7 +289,7 @@ loads five IIFE component scripts from `/farm/<name>.js`:
 | `farm-app.js`    | `FarmApp` — orchestrator (boot, fetch, dispatch)|
 
 `BAGUETTE_WEB_DIR` overrides the served root, so you can iterate on the
-farm UI without rebuilding — point it at `Sources/Baguette/Resources/Web`
+farm UI without rebuilding — point it at `Sources/AgentSim/Resources/Web`
 on disk and reload the browser.
 
 ## Wire protocol — `agent-sim input`
@@ -392,7 +392,7 @@ feature lives in one place across both layers.
 ├── build.sh                          hybrid SPM + swiftc, arm64e-apple-macos26.0
 ├── Package.swift                     SPM manifest
 │
-├── Sources/Baguette/
+├── Sources/AgentSim/
 │   ├── App/                          CLI dispatch + use-case orchestration
 │   │   ├── RootCommand.swift
 │   │   ├── GestureDispatcher.swift   JSON line → Gesture → Input
@@ -460,7 +460,7 @@ feature lives in one place across both layers.
 │       └── farm/                     multi-device dashboard (farm.html, farm.css,
 │                                     farm-tile.js, farm-grid.js, …)
 │
-└── Tests/BaguetteTests/              mirrors Sources/ contexts
+└── Tests/AgentSimTests/              mirrors Sources/ contexts
     ├── App/                          GestureDispatcher / ReconfigParser /
     │                                 Logger / Commands (CommandParsing,
     │                                 ChromeCommand) tests
@@ -525,7 +525,7 @@ signature from Xcode 26's preview-kit**, which routes through digitizer
 target `0x32` — the target iOS 26 still honours.
 
 That single calling-convention change is the entire difference. The
-recipe is heavily commented in `Sources/Baguette/Infrastructure/Input/IndigoHIDInput.swift`,
+recipe is heavily commented in `Sources/AgentSim/Infrastructure/Input/IndigoHIDInput.swift`,
 and the layered design is documented in
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 

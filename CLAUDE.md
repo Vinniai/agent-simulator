@@ -4,12 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## TDD is non-negotiable (read this first)
 
-**You MUST write a failing test before writing any production code.** This rule overrides every other instinct, including "the change is small", "it's just a one-liner", "I'll add the test after". If you catch yourself opening a file under `Sources/Baguette/` before a test under `Tests/BaguetteTests/` exists and fails, stop and reverse course.
+**You MUST write a failing test before writing any production code.** This rule overrides every other instinct, including "the change is small", "it's just a one-liner", "I'll add the test after". If you catch yourself opening a file under `Sources/AgentSim/` before a test under `Tests/AgentSimTests/` exists and fails, stop and reverse course.
 
 **Pre-implementation gate** — before editing anything in `Sources/` (Domain value type, Domain abstraction, Infrastructure adapter, App-layer command), you must have done all of the following in order:
 
 1. Stated the user-facing behaviour in one sentence using **domain language**, not implementation language. Good: "a tap is dispatched as down → hold → up against the input surface", "describe-ui returns nil when no app is frontmost", "logs reject `notice` because the iOS-runtime `log` binary doesn't accept it". Bad: "IndigoHIDInput calls sendMouse twice" — that's an interaction, not a behaviour.
-2. Written a `@Test` in `Tests/BaguetteTests/<Context>/<Suite>.swift` that asserts the expected outcome. Prefer state assertions (`#expect(filter.argv == [...])`, `#expect(node.frame == ...)`) over interaction assertions. For `@Mockable` abstractions, use the auto-generated `MockXxx` (`given(input).tap(...).willReturn(true)`); plain test doubles backed by Mockable are the canonical mocking style — never mock the value type itself.
+2. Written a `@Test` in `Tests/AgentSimTests/<Context>/<Suite>.swift` that asserts the expected outcome. Prefer state assertions (`#expect(filter.argv == [...])`, `#expect(node.frame == ...)`) over interaction assertions. For `@Mockable` abstractions, use the auto-generated `MockXxx` (`given(input).tap(...).willReturn(true)`); plain test doubles backed by Mockable are the canonical mocking style — never mock the value type itself.
 3. Run the test and **observed it fail** — `swift test --filter "<SuiteName>"` for the fastest loop. A compile error counts as red only when the failing symbol is the one the test names (`KeyboardKey.from(wireCode:)` doesn't exist yet); a generic build error somewhere else doesn't.
 4. Reported the red result back to the user (one line is fine: "test `parses lowercase letter wire codes onto HID page 7` fails: `KeyboardKey.from is not a member`").
 
@@ -63,14 +63,14 @@ Tests use **Swift Testing** (`@Suite`, `@Test`, `#expect`) — never XCTest. `MO
 Three-layer split with strict inward-flowing imports: `App` → `Domain` + `Infrastructure`; `Infrastructure` → `Domain`; `Domain` depends only on Foundation + IOSurface.
 
 ```
-Sources/Baguette/
+Sources/AgentSim/
 ├── App/                CLI dispatch (ArgumentParser) + use-case orchestration
 ├── Domain/             pure Swift; value types + @Mockable abstractions named after their domain role
 ├── Infrastructure/     concrete @Mockable abstraction impls (private-API code lives here only)
 └── Resources/Web/      vanilla IIFE modules served by `agent-sim serve`
 ```
 
-`Domain/` and `Infrastructure/` are split into bounded contexts (`Simulator/`, `Input/`, `Screen/`, `Stream/`, `Chrome/`) that mirror across both layers — a feature lives in one place across both. `Tests/BaguetteTests/` mirrors the same split.
+`Domain/` and `Infrastructure/` are split into bounded contexts (`Simulator/`, `Input/`, `Screen/`, `Stream/`, `Chrome/`) that mirror across both layers — a feature lives in one place across both. `Tests/AgentSimTests/` mirrors the same split.
 
 ### Two consumers, one pipeline
 
@@ -78,7 +78,7 @@ Both `agent-sim input` (stdin JSON, used by host plugins as a long-lived subproc
 
 ### The crucial detail: 9-arg `IndigoHIDMessageForMouseNSEvent`
 
-iOS 26 changed `SimulatorHID`'s wire format. The 5-arg signature used by `idb` / `AXe` routes to a pointer service that drops messages or crashes `backboardd`. Baguette uses the **9-arg signature from Xcode 26's preview-kit**, which routes to digitizer target `0x32`. The recipe lives in `Sources/Baguette/Infrastructure/Input/IndigoHIDInput.swift` (heavily commented).
+iOS 26 changed `SimulatorHID`'s wire format. The 5-arg signature used by `idb` / `AXe` routes to a pointer service that drops messages or crashes `backboardd`. agent-sim uses the **9-arg signature from Xcode 26's preview-kit**, which routes to digitizer target `0x32`. The recipe lives in `Sources/AgentSim/Infrastructure/Input/IndigoHIDInput.swift` (heavily commented).
 
 `IndigoHIDMessageForMouseNSEvent` reads AppKit / NSEvent thread-local state, so it **must run on `MainActor`**. Calling it from a NIO event-loop thread builds malformed messages that the simulator silently drops. `Server.streamWS` hops to `MainActor` before invoking `GestureDispatcher`. Buttons (`IndigoHIDMessageForButton`) are pure C and thread-safe — useful as a sanity check when input fails.
 
@@ -116,4 +116,4 @@ Chicago-school state-based throughout. Every external boundary is an `@Mockable`
 
 - `README.md` — quickstart, full CLI reference, wire protocol JSON examples.
 - `docs/ARCHITECTURE.md` — end-to-end tap-to-`UITouch` flow, layer diagrams, route table.
-- `Sources/Baguette/Infrastructure/Input/IndigoHIDInput.swift` — the 9-arg recipe.
+- `Sources/AgentSim/Infrastructure/Input/IndigoHIDInput.swift` — the 9-arg recipe.

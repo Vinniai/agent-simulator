@@ -100,14 +100,14 @@ gesture wire (`tap`, `swipe`). The inspector:
    `chrome.json`) to get device-point coordinates.
 4. Recurses into the cached tree picking the deepest node whose
    `frame` contains the point — same algorithm as
-   [`AXNode.hitTest`](../../Sources/Baguette/Domain/Accessibility/AXNode.swift)
+   [`AXNode.hitTest`](../../Sources/AgentSim/Domain/Accessibility/AXNode.swift)
    on the Swift side, so the browser overlay and the
    `--x --y` CLI hit-test always agree.
 
 The "Tap" button forwards the centre of the locked selection's frame
 back through the same WS as a `{"type":"tap","x":…,"y":…,"width":…,"height":…}`
 envelope — the canonical
-[`Tap`](../../Sources/Baguette/Domain/Input/Tap.swift) gesture, no
+[`Tap`](../../Sources/AgentSim/Domain/Input/Tap.swift) gesture, no
 indirection.
 
 ## UX notes worth pinning down
@@ -147,9 +147,9 @@ indirection.
 
 - [`accessibility.md`](accessibility.md) — the wire protocol the
   inspector consumes (`describe_ui` / `describe_ui_result`).
-- [`Sources/Baguette/Resources/Web/sim-ax-inspector.js`](../../Sources/Baguette/Resources/Web/sim-ax-inspector.js)
+- [`Sources/AgentSim/Resources/Web/sim-ax-inspector.js`](../../Sources/AgentSim/Resources/Web/sim-ax-inspector.js)
   — module source, including the static
   `AXInspector.renderSelectionInto(host, node, ctx)` helper that
   both modes share.
-- [`Sources/Baguette/Domain/Accessibility/AXNode.swift`](../../Sources/Baguette/Domain/Accessibility/AXNode.swift)
+- [`Sources/AgentSim/Domain/Accessibility/AXNode.swift`](../../Sources/AgentSim/Domain/Accessibility/AXNode.swift)
   — `hitTest` algorithm the JS overlay mirrors.

@@ -40,7 +40,7 @@ dispatches a single touch event.
 
 Five steps. Each one is empirically verified — skip any of them and
 iOS either ignores the touch or `backboardd` crashes. Code lives in
-`Sources/Baguette/Infrastructure/Input/IOHIDDigitizerDispatch.swift`.
+`Sources/AgentSim/Infrastructure/Input/IOHIDDigitizerDispatch.swift`.
 
 ### 1. Build a digitizer-finger event
 
@@ -246,7 +246,7 @@ agent-sim diag-digitizer-trackpad --udid <UDID> \
 - `--cycle` does paired down→up; `--swipe-end-y` does down→N moves
   →up; `--swipe-dwell-ms` adds a midpoint hold.
 
-The probe stays in the build (`Sources/Baguette/App/Commands/DiagDigitizerTrackpadCommand.swift`)
+The probe stays in the build (`Sources/AgentSim/App/Commands/DiagDigitizerTrackpadCommand.swift`)
 as integration-only research scaffolding. It doesn't sit in any
 production path — taps / swipes / touches go through
 `IOHIDDigitizerDispatch` directly, not the probe.

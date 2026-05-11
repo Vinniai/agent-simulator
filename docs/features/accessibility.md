@@ -166,7 +166,7 @@ The mapping from `AXPMacPlatformElement` properties to `AXNode`
 fields lives in `AXPTranslatorAccessibility.walk(...)`. To add a new
 column (e.g. `accessibilityTraits`):
 
-1. **Domain.** Add the field to `AXNode` (`Sources/Baguette/Domain/Accessibility/AXNode.swift`)
+1. **Domain.** Add the field to `AXNode` (`Sources/AgentSim/Domain/Accessibility/AXNode.swift`)
    with a default value, and to its `dictionary` JSON projection.
 2. **Tests.** Extend `AXNodeTests` to assert the JSON shape and the
    `nil`-handling semantics.
@@ -199,9 +199,9 @@ column (e.g. `accessibilityTraits`):
 
 ## Further reading
 
-- `Sources/Baguette/Infrastructure/Accessibility/AXPTranslatorAccessibility.swift`
+- `Sources/AgentSim/Infrastructure/Accessibility/AXPTranslatorAccessibility.swift`
   — the dispatcher recipe with inline commentary.
-- `Sources/Baguette/Domain/Accessibility/AXNode.swift` — the value
+- `Sources/AgentSim/Domain/Accessibility/AXNode.swift` — the value
   type + `hitTest` recursion.
 - [Silbercue/SilbercueSwift `AXPBridge.swift`](https://github.com/Silbercue/SilbercueSwift/blob/main/SilbercueSwiftMCP/Sources/SilbercueSwiftCore/AXPBridge.swift)
   — the source of the dispatcher pattern.

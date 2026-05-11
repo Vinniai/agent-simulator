@@ -33,7 +33,7 @@ jobs:
       - name: Generate lcov report
         run: |
           BIN_PATH=$(swift build --show-bin-path)
-          XCTEST="$BIN_PATH/BaguettePackageTests.xctest/Contents/MacOS/BaguettePackageTests"
+          XCTEST="$BIN_PATH/agent_simPackageTests.xctest/Contents/MacOS/agent_simPackageTests"
           PROFDATA="$BIN_PATH/codecov/default.profdata"
           # Excluded: IO / 3rd-party-SDK shims (CoreSimulator, SimulatorKit,
           # IOKit HID, Hummingbird, VideoToolbox, CoreImage, IOSurface,

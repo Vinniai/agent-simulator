@@ -171,7 +171,7 @@ honest without firing a no-op event.
    switch handles it — legacy (`pressLegacyButton`) or
    arbitrary-HID (`pressArbitraryHID`). If legacy, add a
    `buttonCodes(for:)` entry.
-4. Add tests in `Tests/BaguetteTests/Input/GestureTests.swift`
+4. Add tests in `Tests/AgentSimTests/Input/GestureTests.swift`
    following the existing `parses <name> button` / DeviceButton
    suite patterns.
 5. Map the chrome.json `name` to the wire value in

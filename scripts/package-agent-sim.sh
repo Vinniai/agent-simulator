@@ -17,7 +17,14 @@ swift build -c release --arch arm64 --disable-sandbox --product agent-sim
 strip -rSTx "$BUILD_DIR/agent-sim" || true
 
 cp "$BUILD_DIR/agent-sim" "$STAGING/agent-sim"
-cp -R "$BUILD_DIR/agent-sim_Baguette.bundle" "$STAGING/agent-sim_Baguette.bundle"
+# SPM names resource bundles `<package>_<target>.bundle`. Post-rename:
+# `agent-sim_AgentSim.bundle`. Fall back to the legacy name so older
+# tagged checkouts still package successfully.
+if [ -d "$BUILD_DIR/agent-sim_AgentSim.bundle" ]; then
+    cp -R "$BUILD_DIR/agent-sim_AgentSim.bundle" "$STAGING/agent-sim_AgentSim.bundle"
+else
+    cp -R "$BUILD_DIR/agent-sim_Baguette.bundle" "$STAGING/agent-sim_Baguette.bundle"
+fi
 
 tar czf "$OUT_DIR/$ARCHIVE" "$STAGING"
 (

@@ -377,7 +377,7 @@ agent-sim review-tasks bulk-create \
     --priority high
 
 # Stdin form — handy with adapters that emit the envelope.
-agent_canvas_to_baguette --manifest agent-canvas/latest/manifest.json \
+agent_canvas_to_agentsim --manifest agent-canvas/latest/manifest.json \
                          --session-id review_01HX… \
     | agent-sim review-tasks bulk-create --session-id review_01HX… --file -
 ```
@@ -390,15 +390,15 @@ without rewriting the JSON.
 
 Two self-contained Python loops ship in the repo:
 
-- [`../examples/agent/baguette_worker.py`](../examples/agent/baguette_worker.py)
+- [`../examples/agent/agentsim_worker.py`](../examples/agent/agentsim_worker.py)
   — claims a task, drives the simulator over WebSocket, captures the
   after-state, submits a result. <200 LOC, stdlib + `websocket-client`.
-- [`../examples/agent/baguette_verifier.py`](../examples/agent/baguette_verifier.py)
+- [`../examples/agent/agentsim_verifier.py`](../examples/agent/agentsim_verifier.py)
   — polls `readyForVerify` submissions from a chosen worker prefix,
   compares before/after snapshots, and records a `pass` / `fail`
   verdict. Snapshot-only — never drives the simulator, so it can run
   alongside a worker without contending for the device. Pure stdlib.
-- [`../examples/agent/agent_canvas_to_baguette.py`](../examples/agent/agent_canvas_to_baguette.py)
+- [`../examples/agent/agent_canvas_to_agentsim.py`](../examples/agent/agent_canvas_to_agentsim.py)
   — adapter that reads an `agent-canvas/latest/manifest.json` (Expo
   Router route inventory) and emits the bulk-create envelope on
   stdout. Pipe it into `agent-sim review-tasks bulk-create --file -`

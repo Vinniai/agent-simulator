@@ -72,7 +72,7 @@ still resolves.
 ## Domain mirror
 
 The same geometry runs server-side in
-`Sources/Baguette/Domain/Review/ReviewMarkupHitTest.swift`:
+`Sources/AgentSim/Domain/Review/ReviewMarkupHitTest.swift`:
 
 ```swift
 ReviewMarkupHitTest.rectangleHits(rect: Rect, elements: [ReviewElement]) -> [String]

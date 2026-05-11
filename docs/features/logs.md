@@ -173,9 +173,9 @@ opaque to it.
 
 ## Further reading
 
-- `Sources/Baguette/Domain/Logs/{LogFilter,LogStream}.swift` — the
+- `Sources/AgentSim/Domain/Logs/{LogFilter,LogStream}.swift` — the
   value type + port.
-- `Sources/Baguette/Infrastructure/Logs/SimDeviceLogStream.swift` —
+- `Sources/AgentSim/Infrastructure/Logs/SimDeviceLogStream.swift` —
   the simctl-shellout adapter with the entitlement-context note.
 - `xcrun simctl spawn <udid> log help stream` — the upstream
   surface we project onto.

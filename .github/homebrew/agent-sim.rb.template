@@ -22,7 +22,9 @@ class AgentSim < Formula
     # executable's directory. Install both into libexec and symlink
     # the binary into bin.
     libexec.install "agent-sim"
-    libexec.install "agent-sim_Baguette.bundle"
+    bundle = ["agent-sim_AgentSim.bundle", "agent-sim_Baguette.bundle"]
+      .find { |f| File.exist?(f) }
+    libexec.install bundle if bundle
     bin.install_symlink libexec/"agent-sim"
   end
 

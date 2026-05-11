@@ -32,7 +32,7 @@ and ships:
 
 Mapping from simulator name to chrome bundle goes through
 `profile.plist`'s `chromeIdentifier` key — see
-`Sources/Baguette/Infrastructure/Chrome/FileSystemChromeStore.swift`.
+`Sources/AgentSim/Infrastructure/Chrome/FileSystemChromeStore.swift`.
 
 ## Geometry pipeline
 
@@ -196,13 +196,13 @@ Ring", iPhone power's Siri / SOS).
    `profile.plist` (`chromeIdentifier`). Apple ships everything we
    need at `/Library/Developer/DeviceKit/Chrome/<id>.devicechrome/`.
 2. If the new button has a wire-distinct HID code, add it to
-   `DeviceButton` (`Sources/Baguette/Domain/Common/CoordinateTypes.swift`)
+   `DeviceButton` (`Sources/AgentSim/Domain/Common/CoordinateTypes.swift`)
    with the (page, usage) pair from chrome.json's `usagePage` /
    `usage` fields and a wire name matching chrome.json's `name`.
-3. Extend `Press.allowed` (`Sources/Baguette/Domain/Input/Press.swift`)
+3. Extend `Press.allowed` (`Sources/AgentSim/Domain/Input/Press.swift`)
    so the gesture registry accepts the new wire name. Add the same
    name to `WIRE_BUTTON` in
-   `Sources/Baguette/Resources/Web/bezel-buttons.js` so the actionable
+   `Sources/AgentSim/Resources/Web/bezel-buttons.js` so the actionable
    overlay routes clicks through `simInput.button(...)`.
 4. The geometry path is data-driven — no code change needed for
    new chrome bundles unless their `inputs[]` carries a previously

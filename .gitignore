@@ -4,5 +4,6 @@ DerivedData/
 .DS_Store
 *.xcodeproj
 *.xcworkspace
+/AgentSim
 /Baguette
 .claude/scheduled_tasks.lock

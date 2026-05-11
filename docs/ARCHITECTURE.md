@@ -63,7 +63,7 @@ Infrastructure; Infrastructure depends on Domain; Domain depends on
 nothing but Foundation / IOSurface (a public Apple type).
 
 ```
-Sources/Baguette/
+Sources/AgentSim/
 ├── App/                CLI dispatch + use-case orchestration
 ├── Domain/             pure Swift, no private Apple APIs
 ├── Infrastructure/     @Mockable protocols + concrete impls
@@ -73,7 +73,7 @@ Sources/Baguette/
 `Domain/` and `Infrastructure/` are further split into bounded-context
 subfolders (`Simulator/`, `Input/`, `Screen/`, `Stream/`, `Chrome/`)
 that mirror across the two layers, so a feature lives in one place
-across both. `Tests/BaguetteTests/` mirrors the same context split.
+across both. `Tests/AgentSimTests/` mirrors the same context split.
 
 ### Domain
 
@@ -321,7 +321,7 @@ graph; vanilla `<script>` tags loaded in order.
 Chicago-school state-based tests throughout. 110+ tests; every
 external boundary is `@Mockable`, so tests substitute auto-generated
 fakes and assert on returned values rather than recorded calls.
-`Tests/BaguetteTests/` mirrors the same context split as `Sources/`
+`Tests/AgentSimTests/` mirrors the same context split as `Sources/`
 (`Simulator/`, `Input/`, `Stream/`, `Chrome/`, plus `App/` for the
 App-layer dispatchers).
 
@@ -359,6 +359,6 @@ code. The `Tests` scheme runs in a few seconds without a booted sim.
 
 - [`../README.md`](../README.md) — quickstart, CLI reference, wire
   protocol.
-- `../Sources/Baguette/Infrastructure/Input/IndigoHIDInput.swift` —
+- `../Sources/AgentSim/Infrastructure/Input/IndigoHIDInput.swift` —
   the 9-arg `IndigoHIDMessageForMouseNSEvent` recipe, heavily
   commented.

@@ -130,7 +130,7 @@ envelopes; the CLI exits non-zero with the underlying message logged.
 ## Files
 
 ```
-Sources/Baguette/
+Sources/AgentSim/
 ├── Infrastructure/
 │   └── Screen/
 │       └── ScreenSnapshot.swift         capture helper (this doc)

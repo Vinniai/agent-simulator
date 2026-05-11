@@ -46,8 +46,8 @@ jobs:
 
       - name: Update version in source
         run: |
-          sed -i '' "s/let agentSimVersion = \".*\"/let agentSimVersion = \"${{ steps.version.outputs.version }}\"/" Sources/Baguette/App/Version.swift
-          grep agentSimVersion Sources/Baguette/App/Version.swift
+          sed -i '' "s/let agentSimVersion = \".*\"/let agentSimVersion = \"${{ steps.version.outputs.version }}\"/" Sources/AgentSim/App/Version.swift
+          grep agentSimVersion Sources/AgentSim/App/Version.swift
 
       - name: Package arm64 binary + resource bundle
         run: scripts/package-agent-sim.sh "${{ steps.version.outputs.version }}" release
