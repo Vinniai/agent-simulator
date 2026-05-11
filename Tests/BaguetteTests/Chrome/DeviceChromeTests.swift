@@ -27,6 +27,28 @@ struct DeviceChromeTests {
         #expect(chrome.compositeImageName == "PhoneComposite")
     }
 
+    @Test func `parsing reads images_devicePadding into devicePadding`() throws {
+        // Apple ships `devicePadding` on every shipping chrome — the
+        // four edge-margins to reserve around the rasterized composite
+        // for button overshoot and rollover-animation slack. Sourced
+        // from /Library/Developer/DeviceKit/Chrome/<chrome>/Contents/
+        // Resources/chrome.json. The watch4 value (top:0, left:0,
+        // bottom:0, right:11) reserves 11 px of right padding for the
+        // digital crown / side-button caps to pop out into during
+        // hover; honouring it keeps Baguette's bezel.png pixel-aligned
+        // with Apple's Simulator.app.
+        let chrome = try DeviceChrome.parsing(json: Self.fixtureWatch4DevicePadding)
+        #expect(chrome.devicePadding == Insets(top: 0, left: 0, bottom: 0, right: 11))
+    }
+
+    @Test func `parsing defaults devicePadding to zero when absent`() throws {
+        // Older / hand-rolled fixtures omit the block entirely. The
+        // chrome should still parse, with the field at zero so the
+        // merged-bezel canvas matches the composite size exactly.
+        let chrome = try DeviceChrome.parsing(json: Self.fixturePhone11)
+        #expect(chrome.devicePadding == Insets(top: 0, left: 0, bottom: 0, right: 0))
+    }
+
     @Test func `compositeImageName is nil when chrome relies on 9-slice only`() throws {
         let chrome = try DeviceChrome.parsing(json: Self.fixtureNoComposite)
         #expect(chrome.compositeImageName == nil)
@@ -604,6 +626,22 @@ private extension DeviceChromeTests {
         "sizing": { "leftWidth": 0, "rightWidth": 0, "topHeight": 0, "bottomHeight": 0 }
       },
       "paths": { "simpleOutsideBorder": { "cornerRadiusX": 0 } },
+      "inputs": []
+    }
+    """#.utf8)
+
+    /// watch4-shaped fixture exposing `images.devicePadding` — the
+    /// authoritative right margin Apple ships for the digital crown's
+    /// hover popout (`right: 11`). Used to pin the parsing path.
+    static let fixtureWatch4DevicePadding: Data = Data(#"""
+    {
+      "identifier": "com.apple.dt.devicekit.chrome.watch4",
+      "images": {
+        "composite": "WatchComposite",
+        "sizing": { "leftWidth": 45.5, "rightWidth": 45.5, "topHeight": 31, "bottomHeight": 31 },
+        "devicePadding": { "top": 0, "left": 0, "bottom": 0, "right": 11 }
+      },
+      "paths": { "simpleOutsideBorder": { "cornerRadiusX": 85.2 } },
       "inputs": []
     }
     """#.utf8)

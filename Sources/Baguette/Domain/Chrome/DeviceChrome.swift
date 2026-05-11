@@ -27,6 +27,15 @@ struct DeviceChrome: Equatable, Sendable {
     /// publish slice names, so the slice acts as a fallback path even
     /// when `compositeImageName` is set.
     let slice: DeviceChromeSlice?
+    /// Margin to reserve around the rasterized composite when
+    /// rendering the merged bezel — Apple's authoritative source of
+    /// truth, sourced from `images.devicePadding` in chrome.json. The
+    /// values reserve room for button overshoot and rollover-animation
+    /// slack (e.g. watch4 ships `right: 11` for the digital-crown
+    /// popout). Defaults to zero when the chrome doesn't ship the
+    /// block; in that case the merged canvas matches the composite
+    /// size exactly.
+    let devicePadding: Insets
 
     init(
         identifier: String,
@@ -34,7 +43,8 @@ struct DeviceChrome: Equatable, Sendable {
         outerCornerRadius: Double,
         buttons: [ChromeButton],
         compositeImageName: String?,
-        slice: DeviceChromeSlice? = nil
+        slice: DeviceChromeSlice? = nil,
+        devicePadding: Insets = Insets(top: 0, left: 0, bottom: 0, right: 0)
     ) {
         self.identifier = identifier
         self.screenInsets = screenInsets
@@ -42,6 +52,7 @@ struct DeviceChrome: Equatable, Sendable {
         self.buttons = buttons
         self.compositeImageName = compositeImageName
         self.slice = slice
+        self.devicePadding = devicePadding
     }
 
     /// Width of the bezel surrounding the screen — the larger of the
@@ -139,13 +150,22 @@ struct DeviceChrome: Equatable, Sendable {
         let inputs = dict["inputs"] as? [[String: Any]] ?? []
         let buttons = inputs.compactMap(ChromeButton.init(json:))
 
+        let padding = images["devicePadding"] as? [String: Any] ?? [:]
+        let devicePadding = Insets(
+            top:    coerceDouble(padding["top"]),
+            left:   coerceDouble(padding["left"]),
+            bottom: coerceDouble(padding["bottom"]),
+            right:  coerceDouble(padding["right"])
+        )
+
         return DeviceChrome(
             identifier: identifier,
             screenInsets: insets,
             outerCornerRadius: outerRadius,
             buttons: buttons,
             compositeImageName: images["composite"] as? String,
-            slice: DeviceChromeSlice(json: images)
+            slice: DeviceChromeSlice(json: images),
+            devicePadding: devicePadding
         )
     }
 }

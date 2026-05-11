@@ -47,13 +47,21 @@
   // (usagePage, usage) declared in each device's chrome.json.
   // Anything outside this table renders but is inert with a tooltip.
   const WIRE_BUTTON = {
-    power:         'power',
-    'side-button': 'power',  // future-proof if DeviceKit renames
-    'volume-up':   'volume-up',
-    'volume-down': 'volume-down',
-    action:        'action',
-    home:          'home',
-    lock:          'lock',
+    power:              'power',
+    'volume-up':        'volume-up',
+    'volume-down':      'volume-down',
+    action:             'action',
+    home:               'home',
+    lock:               'lock',
+    // Apple Watch hardware buttons — each rides the arbitrary-HID
+    // path keyed by its own (page, usage) from chrome.json. They are
+    // distinct wire names (NOT aliases for power/action) because
+    // the watch side-button and left-side-button use HID codes
+    // different from the iPhone power and action buttons — aliasing
+    // would silently send the wrong code to the simulator.
+    'digital-crown':    'digital-crown',
+    'side-button':      'side-button',
+    'left-side-button': 'left-side-button',
   };
 
   function BezelButtons({ udid, layout, onPress }) {
@@ -105,24 +113,37 @@
     wrap.type = 'button';
     wrap.dataset.btn = b.name;
     wrap.title = wire
-      ? `${humanizeName(b.name)} → ${wire}`
-      : `${humanizeName(b.name)} — not wired on iOS 26.4`;
+        ? `${humanizeName(b.name)} → ${wire}`
+        : `${humanizeName(b.name)} — not wired on iOS 26.4`;
     wrap.setAttribute('aria-label', wrap.title);
+    // Z-order against the bezel <img> (which sits at z=1):
+    //  • `onTop: false` → z=0, BEHIND the bezel. DeviceKit marks
+    //    iPhone power/volume/action this way: the cap pokes out
+    //    through a transparent slot in the bezel's side rail and
+    //    only the overshoot is visible. The bezel image's opaque
+    //    body silhouette occludes the rest with no CSS clip-path
+    //    math. Apple Watch's digital-crown and side-button are
+    //    also `onTop:false` because the watch composite has
+    //    their silhouettes baked into the body PDF — the overlay
+    //    sits behind the silhouette as the click target while
+    //    being visually hidden.
+    //  • `onTop: true`  → z=2, IN FRONT of the bezel. Apple
+    //    Watch's orange action button (`left-side-button`) ships
+    //    this way: the action cap is NOT baked into the watch
+    //    composite, so the overlay must layer on top to be
+    //    visible at all. Routing both z-indices off chrome.json's
+    //    `onTop` keeps the actionable-bezel UI consistent with
+    //    Apple's static merged composite, which uses the same
+    //    flag to decide whether to bake the button under or over
+    //    the device body.
+    const z = b.onTop ? 2 : 0;
     wrap.style.cssText = [
       'position:absolute',
       'padding:0',
       'border:0',
       'background:transparent',
       'cursor:pointer',
-      // Render BEHIND the bezel <img> (which is z=1). DeviceKit's
-      // chrome data marks iPhone power/volume/action with
-      // `onTop:false` — i.e. the cap should sit behind the device
-      // body so only the part overshooting the bezel edge stays
-      // visible. That's how a real iPhone looks: the cap pokes out
-      // through a slot in the side rail. z=0 + the opaque bezel
-      // composite gives us that exact occlusion for free, with no
-      // CSS clip-path math.
-      'z-index:0',
+      `z-index:${z}`,
       'transition:transform 160ms cubic-bezier(0.2, 0.7, 0.2, 1.0)',
       '-webkit-user-select:none',
       'user-select:none',
@@ -227,10 +248,10 @@
     // macOS Tahoe Simulator.
     const restSrc = b.imageUrl;
     const downSrc =
-      (b.imageDownUrl
-        && (b.imageDownDrawMode || 'replace').toLowerCase() === 'replace')
-        ? b.imageDownUrl
-        : null;
+        (b.imageDownUrl
+            && (b.imageDownDrawMode || 'replace').toLowerCase() === 'replace')
+            ? b.imageDownUrl
+            : null;
 
     wrap.addEventListener('mouseenter', () => {
       wrap.style.transform = 'translate(var(--out-dx), var(--out-dy))';
@@ -242,7 +263,7 @@
     wrap.addEventListener('mousedown', () => {
       // Press back to NORMAL — opposite sign of the rollover delta.
       wrap.style.transform =
-        'translate(calc(var(--out-dx) * -1), calc(var(--out-dy) * -1))';
+          'translate(calc(var(--out-dx) * -1), calc(var(--out-dy) * -1))';
       if (downSrc) img.src = downSrc;
     });
     wrap.addEventListener('mouseup', () => {
@@ -301,11 +322,25 @@
         break;
       }
       case 'right': {
-        // Centre at (bareW + off.x) — chrome.json's right anchor
-        // uses negative offset.x to push the cap inward.
-        const cxPct = ((bareW + off.x) / bareW) * 100;
-        const tyPct = (off.y / bareH) * 100;
-        wrap.style.left = `${cxPct - halfWPct}%`;
+        // INNER EDGE convention with at-rest position mirroring
+        // chrome.json's rollover delta inward.
+        //
+        // chrome.json's `normalOffset` is the HOVER position; at-rest
+        // sits as far inside `normal` as `rollover` is outside it
+        // (`restX = 2*normal.x - rollover.x`). On hover `_wireAnim`
+        // translates outward by `rollover - normal` chrome-px,
+        // landing the cap exactly at `normalOffset.x` — the user's
+        // "current is hover, at-rest should be less" feedback.
+        // For caps without hover (DigitalCrown, normal == rollover)
+        // the formula collapses to normalOffset and the cap stays
+        // fixed.
+        const n = b.normalOffset || b.offset || { x: 0, y: 0 };
+        const r = b.rolloverOffset || b.offset || { x: 0, y: 0 };
+        const restX = 2 * n.x - r.x;
+        const restY = 2 * n.y - r.y;
+        const leftPct = ((bareW + restX) / bareW) * 100;
+        const tyPct = (restY / bareH) * 100;
+        wrap.style.left = `${leftPct}%`;
         wrap.style.top  = `${tyPct}%`;
         break;
       }
@@ -338,10 +373,10 @@
   function humanizeName(name) {
     if (!name) return 'Button';
     return name
-      .split(/[-_]/)
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' ')
-      .trim();
+        .split(/[-_]/)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ')
+        .trim();
   }
 
   window.BezelButtons = BezelButtons;

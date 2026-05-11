@@ -237,10 +237,25 @@ struct PressTests {
         #expect(g.duration == 0)
     }
 
+    @Test func `parses digital-crown button`() throws {
+        let g = try Press.parse(["button": "digital-crown"])
+        #expect(g == Press(button: .digitalCrown))
+    }
+
+    @Test func `parses side-button button`() throws {
+        let g = try Press.parse(["button": "side-button"])
+        #expect(g == Press(button: .sideButton))
+    }
+
+    @Test func `parses left-side-button button`() throws {
+        let g = try Press.parse(["button": "left-side-button"])
+        #expect(g == Press(button: .leftSideButton))
+    }
+
     @Test func `rejects unknown button`() {
         #expect(throws: GestureError.invalidValue(
             "button",
-            expected: "home | lock | power | volume-up | volume-down | action | app-switcher | swipe-to-app-switcher | swipe-to-home | pull-down-to-lock-screen | pull-down-to-notification-center"
+            expected: "home | lock | power | volume-up | volume-down | action | digital-crown | side-button | left-side-button | app-switcher | swipe-to-app-switcher | swipe-to-home | pull-down-to-lock-screen | pull-down-to-notification-center"
         )) {
             try Press.parse(["button": "siri"])
         }
@@ -277,6 +292,27 @@ struct DeviceButtonTests {
         #expect(DeviceButton.volumeUp.standardHIDUsage   == HIDUsage(page: 12, usage: 233))
         #expect(DeviceButton.volumeDown.standardHIDUsage == HIDUsage(page: 12, usage: 234))
         #expect(DeviceButton.action.standardHIDUsage     == HIDUsage(page: 11, usage: 45))
+    }
+
+    // Apple Watch hardware buttons. Codes copied verbatim from
+    // /Library/Developer/DeviceKit/Chrome/watch4.devicechrome's
+    // chrome.json — `usagePage` + `usage` per input. Side-button uses
+    // the consumer "Information" usage (149), distinct from iPhone
+    // power (48); the action button rides Apple's vendor-defined
+    // page 0xFF01 (65281) usage 512.
+    @Test func `arbitrary-HID buttons carry Apple-Watch codes`() {
+        #expect(DeviceButton.digitalCrown.standardHIDUsage
+            == HIDUsage(page: 12, usage: 64))
+        #expect(DeviceButton.sideButton.standardHIDUsage
+            == HIDUsage(page: 12, usage: 149))
+        #expect(DeviceButton.leftSideButton.standardHIDUsage
+            == HIDUsage(page: 65281, usage: 512))
+    }
+
+    @Test func `Apple-Watch button raw values match watchchrome json`() {
+        #expect(DeviceButton.digitalCrown.rawValue   == "digital-crown")
+        #expect(DeviceButton.sideButton.rawValue     == "side-button")
+        #expect(DeviceButton.leftSideButton.rawValue == "left-side-button")
     }
 
     @Test func `press delegates to input button with the given duration`() {

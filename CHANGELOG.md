@@ -15,6 +15,13 @@ For releases prior to this changelog, see the
 
 ---
 
+## [0.1.70] - 2026-05-11
+
+### Added
+- **Apple Watch hardware buttons (`digital-crown`, `side-button`, `left-side-button`).** Three new `Press`-compatible wire names cover the watch input surface end-to-end: the `baguette press` CLI, the wire JSON `{"type":"button"}`, and the actionable-bezel overlay on `/simulators/<UDID>` all accept them. Each rides `IndigoHIDMessageForHIDArbitrary` with the (page, usage) pair copied verbatim from `/Library/Developer/DeviceKit/Chrome/watch4.devicechrome/Contents/Resources/chrome.json` — `digital-crown` → page 12 / usage 64, `side-button` → page 12 / usage 149, `left-side-button` → page 0xFF01 / usage 512 (Apple's vendor-defined Watch action page). Before this change the actionable-bezel overlay rendered every watch button but every press was inert: `digital-crown` and `left-side-button` had no entry in the front-end wire-name table, and `side-button` mis-aliased to `power` (page 12 / usage 48), silently sending the wrong consumer code. Verified on `Apple Watch Ultra 2 (49mm)` running watchOS 11.2.
+
+---
+
 ## [0.1.69] - 2026-05-09
 
 ### Added
@@ -149,7 +156,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.69...HEAD
+[Unreleased]: https://github.com/tddworks/baguette/compare/v0.1.70...HEAD
+[0.1.70]: https://github.com/tddworks/baguette/compare/v0.1.69...v0.1.70
 [0.1.69]: https://github.com/tddworks/baguette/compare/v0.1.68...v0.1.69
 [0.1.68]: https://github.com/tddworks/baguette/compare/v0.1.67...v0.1.68
 [0.1.67]: https://github.com/tddworks/baguette/compare/v0.1.66...v0.1.67

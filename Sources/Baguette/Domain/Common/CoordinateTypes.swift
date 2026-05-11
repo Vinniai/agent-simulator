@@ -58,11 +58,13 @@ public enum DeviceEdge: String, Sendable, Equatable, Hashable, CaseIterable {
 
 /// Hardware buttons routable via the host-HID path on iOS 26.4.
 ///
-/// `home` / `lock` ride `IndigoHIDMessageForButton`. The four
-/// chrome.json side-buttons (`power` / `volumeUp` / `volumeDown` /
-/// `action`) ride `IndigoHIDMessageForHIDArbitrary` keyed by HID
-/// usagePage / usage codes from each device's chrome.json. `siri`
-/// remains rejected — it crashes backboardd through every known path.
+/// `home` / `lock` ride `IndigoHIDMessageForButton`. The iPhone-family
+/// side-buttons (`power` / `volumeUp` / `volumeDown` / `action`) and
+/// the Apple-Watch-family buttons (`digitalCrown` / `sideButton` /
+/// `leftSideButton`) ride `IndigoHIDMessageForHIDArbitrary` keyed by
+/// HID usagePage / usage codes copied verbatim from each device's
+/// chrome.json. `siri` remains rejected — it crashes backboardd
+/// through every known path.
 ///
 /// `appSwitcher`, `swipeToAppSwitcher`, `swipeToHome`,
 /// `pullDownToLockScreen`, and `pullDownToNotificationCenter` are
@@ -85,6 +87,9 @@ enum DeviceButton: String, Sendable, Equatable, Hashable {
     case power, action
     case volumeUp = "volume-up"
     case volumeDown = "volume-down"
+    case digitalCrown = "digital-crown"
+    case sideButton = "side-button"
+    case leftSideButton = "left-side-button"
     case appSwitcher = "app-switcher"
     case swipeToAppSwitcher = "swipe-to-app-switcher"
     case swipeToHome = "swipe-to-home"
@@ -107,6 +112,16 @@ extension DeviceButton {
         case .volumeUp:   return HIDUsage(page: 12, usage: 233)
         case .volumeDown: return HIDUsage(page: 12, usage: 234)
         case .action:     return HIDUsage(page: 11, usage: 45)
+        // Apple Watch family. Codes match watch4.devicechrome's
+        // chrome.json verbatim (`usagePage` / `usage` per input).
+        // `leftSideButton` rides Apple's vendor-defined consumer
+        // page 0xFF01 — accepted as a raw (page, usage) pair by
+        // IndigoHIDMessageForHIDArbitrary like any other consumer
+        // code; the iOS-side handler is what gives it watch-specific
+        // semantics.
+        case .digitalCrown:   return HIDUsage(page: 12, usage: 64)
+        case .sideButton:     return HIDUsage(page: 12, usage: 149)
+        case .leftSideButton: return HIDUsage(page: 65281, usage: 512)
         }
     }
 
