@@ -1,6 +1,6 @@
-# TDD test patterns (baguette)
+# TDD test patterns (agent-sim)
 
-baguette uses **Chicago school** state-based TDD with
+agent-sim uses **Chicago school** state-based TDD with
 **Swift Testing** — never XCTest. Tests live in `Tests/BaguetteTests/`,
 mirroring the Domain/Infrastructure split. The full suite runs in
 ~50 ms with no booted simulator required (the private SimulatorKit
@@ -8,7 +8,7 @@ boundary lives behind `@Mockable`).
 
 ## Why Chicago school here
 
-| Chicago school (baguette uses)        | London school (avoid)                    |
+| Chicago school (agent-sim uses)        | London school (avoid)                    |
 |---------------------------------------|------------------------------------------|
 | Test state changes and return values  | Test interactions between objects        |
 | Mocks stub data, not verify calls     | Mocks verify method calls were made      |

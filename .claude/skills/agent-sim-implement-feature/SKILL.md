@@ -1,13 +1,13 @@
 ---
 name: app-implement-feature
 description: |
-  Guide for implementing features in baguette — a Swift CLI + WebSocket server
+  Guide for implementing features in agent-sim — a Swift CLI + WebSocket server
   that drives iOS simulators via private SimulatorKit. Use this skill when:
   (1) Adding a new gesture, button, keyboard surface, stream format, or
       device-chrome behaviour (anything that lands across Domain / Infrastructure /
       App + Resources/Web).
   (2) Extending an existing wire-protocol envelope, CLI subcommand, or HTTP route.
-  (3) User asks "add feature X to baguette", "implement <gesture>", "wire <new
+  (3) User asks "add feature X to agent-sim", "implement <gesture>", "wire <new
       verb> through serve / input / CLI", or similar.
   (4) Touching the iOS-26 SimulatorKit / IndigoHID surface — those edits MUST
       go through this skill's Architecture phase before code lands.
@@ -15,9 +15,9 @@ description: |
   TDD-driven without the architecture-approval gate).
 ---
 
-# Implement a feature in baguette
+# Implement a feature in agent-sim
 
-baguette is a **CLI + WebSocket server**, not a SwiftUI app. There is no
+agent-sim is a **CLI + WebSocket server**, not a SwiftUI app. There is no
 ViewModel layer, no async actors in the input path — gestures are
 synchronous `Bool`-returning calls into the `@Mockable` `Input`
 abstraction whose only concrete adapter is `IndigoHIDInput`. The frontend
@@ -73,7 +73,7 @@ the **process** of adding features that fit those rules.
 │  4. DOCS + CHANGELOG (mandatory before reporting "done")      │
 │     create or update `docs/features/<feature>.md` ·           │
 │     update `CHANGELOG.md` Unreleased section ·                │
-│     update `skills/baguette/` references when CLI / wire     │
+│     update `skills/agent-sim/` references when CLI / wire     │
 │     surface changed                                           │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -84,7 +84,7 @@ For any feature that crosses a layer boundary or touches the
 SimulatorKit / IndigoHID / AXPTranslator / spawn surface, **stop and
 design before coding**. Briefly produce:
 
-1. **Wire shape** — the JSON envelope on `baguette serve` WS / `baguette input` stdin. Field names, optional vs required, default values.
+1. **Wire shape** — the JSON envelope on `agent-sim serve` WS / `agent-sim input` stdin. Field names, optional vs required, default values.
 2. **CLI surface** — subcommand + flag names. Match existing patterns (`--udid`, `--width`, `--height`).
 3. **Domain types** — value types (struct/enum) and which `@Mockable` abstraction is added/changed. Rich domain: behaviour lives on the value, not in a service (`DeviceButton.press`, `KeyboardKey.press` are the templates). **Name new abstractions for their domain role** — `Subprocess`, `DeviceHost`, `Accessibility`. **Never `XxxPort` / `XxxService` / `XxxManager`, and never the suffix `XxxRepository`.** If the abstraction *is* aggregate CRUD (load / save / delete by identity for an aggregate root), name it as the **plural collection noun** — `Simulators`, `Chromes`, `Books`. If the noun isn't obvious, the abstraction probably shouldn't exist yet.
 4. **Adapter changes** — how the production class (`IndigoHIDInput`, `AXPTranslatorAccessibility`, `SimDeviceLogStream`, …) handles it. Which private-API symbol, which arg shape. Flag iOS-26-specific gotchas explicitly (signature drift between idb/AXe and Xcode 26 has burned us before — see [`buttons.md`](../../../docs/features/buttons.md) for the canonical example).
@@ -280,7 +280,7 @@ Each new gesture / verb flows through the same checklist:
    path.
 4. **Browser** — when the feature is user-facing:
    - Add the wire field handling to `Resources/Web/sim-input-bridge.js`
-     (translate plugin dialect → baguette wire).
+     (translate plugin dialect → agent-sim wire).
    - Expose a method on `SimInput` in `sim-input.js`.
    - If a new DOM-driven module is needed, write a single-purpose
      IIFE that hangs one class on `window`, add a `<script>` tag in
@@ -332,9 +332,9 @@ explain WHAT shipped, WHY it matters, and any non-obvious gotcha
 If the feature changed the **CLI surface** or **wire-protocol
 envelope**, also update:
 
-- `skills/baguette/SKILL.md` — the "What's wired vs what isn't" list.
-- `skills/baguette/references/cli.md` — new flags / subcommands.
-- `skills/baguette/references/wire-protocol.md` — new envelope shapes.
+- `skills/agent-sim/SKILL.md` — the "What's wired vs what isn't" list.
+- `skills/agent-sim/references/cli.md` — new flags / subcommands.
+- `skills/agent-sim/references/wire-protocol.md` — new envelope shapes.
 
 These files are what the agent skill loads; if they're stale, the
 next agent will mis-propose stale invocations.
@@ -436,6 +436,6 @@ next agent will mis-propose stale invocations.
 ### Phase 4 — Docs + Changelog
 - [ ] `docs/features/<feature>.md` created or updated
 - [ ] `CHANGELOG.md` Unreleased entry written in the existing prose tone
-- [ ] `skills/baguette/SKILL.md` "What's wired" list updated (if CLI/wire changed)
-- [ ] `skills/baguette/references/cli.md` updated (if CLI changed)
-- [ ] `skills/baguette/references/wire-protocol.md` updated (if wire changed)
+- [ ] `skills/agent-sim/SKILL.md` "What's wired" list updated (if CLI/wire changed)
+- [ ] `skills/agent-sim/references/cli.md` updated (if CLI changed)
+- [ ] `skills/agent-sim/references/wire-protocol.md` updated (if wire changed)
