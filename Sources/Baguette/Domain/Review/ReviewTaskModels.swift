@@ -20,6 +20,83 @@ struct ReviewTask: Codable, Equatable, Sendable {
     var completedAt: Date?
     var elements: [ReviewTaskElement]
     var events: [ReviewTaskEvent]
+    var codeChanges: [ReviewTaskCodeChange]
+
+    init(
+        id: String,
+        sessionId: String,
+        bundleId: String?,
+        title: String,
+        instructions: String,
+        status: String,
+        priority: String,
+        assignee: String?,
+        contextPath: String?,
+        bundleJSONPath: String?,
+        bundleMarkdownPath: String?,
+        resultSummary: String?,
+        verificationSnapshotId: String?,
+        createdAt: Date,
+        updatedAt: Date,
+        claimedAt: Date?,
+        completedAt: Date?,
+        elements: [ReviewTaskElement],
+        events: [ReviewTaskEvent],
+        codeChanges: [ReviewTaskCodeChange] = []
+    ) {
+        self.id = id
+        self.sessionId = sessionId
+        self.bundleId = bundleId
+        self.title = title
+        self.instructions = instructions
+        self.status = status
+        self.priority = priority
+        self.assignee = assignee
+        self.contextPath = contextPath
+        self.bundleJSONPath = bundleJSONPath
+        self.bundleMarkdownPath = bundleMarkdownPath
+        self.resultSummary = resultSummary
+        self.verificationSnapshotId = verificationSnapshotId
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.claimedAt = claimedAt
+        self.completedAt = completedAt
+        self.elements = elements
+        self.events = events
+        self.codeChanges = codeChanges
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, sessionId, bundleId, title, instructions, status, priority, assignee
+        case contextPath, bundleJSONPath, bundleMarkdownPath
+        case resultSummary, verificationSnapshotId
+        case createdAt, updatedAt, claimedAt, completedAt
+        case elements, events, codeChanges
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.sessionId = try c.decode(String.self, forKey: .sessionId)
+        self.bundleId = try c.decodeIfPresent(String.self, forKey: .bundleId)
+        self.title = try c.decode(String.self, forKey: .title)
+        self.instructions = try c.decode(String.self, forKey: .instructions)
+        self.status = try c.decode(String.self, forKey: .status)
+        self.priority = try c.decode(String.self, forKey: .priority)
+        self.assignee = try c.decodeIfPresent(String.self, forKey: .assignee)
+        self.contextPath = try c.decodeIfPresent(String.self, forKey: .contextPath)
+        self.bundleJSONPath = try c.decodeIfPresent(String.self, forKey: .bundleJSONPath)
+        self.bundleMarkdownPath = try c.decodeIfPresent(String.self, forKey: .bundleMarkdownPath)
+        self.resultSummary = try c.decodeIfPresent(String.self, forKey: .resultSummary)
+        self.verificationSnapshotId = try c.decodeIfPresent(String.self, forKey: .verificationSnapshotId)
+        self.createdAt = try c.decode(Date.self, forKey: .createdAt)
+        self.updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+        self.claimedAt = try c.decodeIfPresent(Date.self, forKey: .claimedAt)
+        self.completedAt = try c.decodeIfPresent(Date.self, forKey: .completedAt)
+        self.elements = try c.decode([ReviewTaskElement].self, forKey: .elements)
+        self.events = try c.decode([ReviewTaskEvent].self, forKey: .events)
+        self.codeChanges = try c.decodeIfPresent([ReviewTaskCodeChange].self, forKey: .codeChanges) ?? []
+    }
 }
 
 struct ReviewTaskElement: Codable, Equatable, Sendable {
@@ -95,4 +172,34 @@ struct ReviewTaskEventInput: Codable, Equatable, Sendable {
     var actor: String?
     var message: String
     var metadataJSON: String?
+}
+
+struct ReviewTaskCodeChange: Codable, Equatable, Sendable {
+    let id: String
+    let taskId: String
+    let path: String
+    let summary: String?
+    let startLine: Int?
+    let endLine: Int?
+    let commitSha: String?
+    let branch: String?
+    let language: String?
+    let diffText: String?
+    let createdAt: Date
+}
+
+struct ReviewTaskCodeChangeInput: Codable, Equatable, Sendable {
+    var path: String
+    var summary: String?
+    var startLine: Int?
+    var endLine: Int?
+    var commitSha: String?
+    var branch: String?
+    var language: String?
+    var diffText: String?
+}
+
+struct ReviewTaskCodeChangesInput: Codable, Equatable, Sendable {
+    var actor: String?
+    var changes: [ReviewTaskCodeChangeInput]
 }

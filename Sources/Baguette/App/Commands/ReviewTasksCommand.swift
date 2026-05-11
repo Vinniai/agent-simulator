@@ -13,6 +13,7 @@ struct ReviewTasksCommand: ParsableCommand {
             Event.self,
             Result.self,
             Verify.self,
+            AddCodeChange.self,
             Watch.self,
         ]
     )
@@ -166,6 +167,77 @@ struct ReviewTasksCommand: ParsableCommand {
                     notes: resolvedNotes,
                     createdAt: Date()
                 )
+            ))
+        }
+    }
+
+    struct AddCodeChange: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "add-code-change",
+            abstract: "Record one or more source-file modifications against a task"
+        )
+
+        @Argument(help: "Task id")
+        var id: String
+
+        @Option(name: .long, help: "Path to the changed file (absolute path makes VSCode links work)")
+        var path: String?
+
+        @Option(name: .long, help: "One-line summary of the change")
+        var summary: String?
+
+        @Option(name: .long, help: "First line of the changed range")
+        var startLine: Int?
+
+        @Option(name: .long, help: "Last line of the changed range")
+        var endLine: Int?
+
+        @Option(name: .long, help: "Commit SHA containing the change")
+        var commitSha: String?
+
+        @Option(name: .long, help: "Branch name")
+        var branch: String?
+
+        @Option(name: .long, help: "Source language hint (swift, ts, js, …)")
+        var language: String?
+
+        @Option(name: .long, help: "Path to a file containing the unified diff")
+        var diffFile: String?
+
+        @Option(name: .long, help: "Path to a JSON file with an array of ReviewTaskCodeChangeInput (overrides flags)")
+        var changesFile: String?
+
+        @Option(name: .long, help: "Actor or agent id recorded on the event")
+        var actor: String?
+
+        func run() throws {
+            let changes: [ReviewTaskCodeChangeInput]
+            if let changesFile {
+                let data = try Data(contentsOf: URL(fileURLWithPath: changesFile))
+                changes = try JSONDecoder().decode([ReviewTaskCodeChangeInput].self, from: data)
+            } else {
+                guard let path else {
+                    throw ValidationError("--path is required when --changes-file is not provided")
+                }
+                let diff: String? = try diffFile.map {
+                    try String(contentsOf: URL(fileURLWithPath: $0), encoding: .utf8)
+                }
+                changes = [
+                    ReviewTaskCodeChangeInput(
+                        path: path,
+                        summary: summary,
+                        startLine: startLine,
+                        endLine: endLine,
+                        commitSha: commitSha,
+                        branch: branch,
+                        language: language,
+                        diffText: diff
+                    )
+                ]
+            }
+            try printJSON(SQLiteReviewTaskStore().appendCodeChanges(
+                taskId: id,
+                input: ReviewTaskCodeChangesInput(actor: actor, changes: changes)
             ))
         }
     }

@@ -93,4 +93,77 @@ struct SQLiteReviewTaskStoreTests {
         )
         #expect(verified.events.contains { $0.type == "verification:passed" })
     }
+
+    @Test("appendCodeChanges persists, hydrates, and emits a code_changes event")
+    func appendCodeChangesRoundtrip() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("baguette-task-tests-\(UUID().uuidString)")
+        let store = SQLiteReviewTaskStore(url: dir.appendingPathComponent("tasks.sqlite"))
+        let now = Date()
+        let task = ReviewTask(
+            id: "task-cc",
+            sessionId: "review-cc",
+            bundleId: nil,
+            title: "Fix Save",
+            instructions: "Tap Save and confirm row appears",
+            status: "open",
+            priority: "normal",
+            assignee: nil,
+            contextPath: nil,
+            bundleJSONPath: nil,
+            bundleMarkdownPath: nil,
+            resultSummary: nil,
+            verificationSnapshotId: nil,
+            createdAt: now,
+            updatedAt: now,
+            claimedAt: nil,
+            completedAt: nil,
+            elements: [],
+            events: []
+        )
+        _ = try store.createTask(task)
+
+        let result = try store.appendCodeChanges(
+            taskId: "task-cc",
+            input: ReviewTaskCodeChangesInput(
+                actor: "agent-a",
+                changes: [
+                    ReviewTaskCodeChangeInput(
+                        path: "Sources/Save/SaveButton.swift",
+                        summary: "added validation on submit",
+                        startLine: 42,
+                        endLine: 58,
+                        commitSha: "abc123",
+                        branch: "main",
+                        language: "swift",
+                        diffText: "@@ -42,7 +42,12 @@"
+                    ),
+                    ReviewTaskCodeChangeInput(
+                        path: "Sources/Save/SaveStore.swift",
+                        summary: "handle save error",
+                        startLine: 12,
+                        endLine: 21,
+                        commitSha: "abc123",
+                        branch: "main",
+                        language: "swift",
+                        diffText: nil
+                    )
+                ]
+            )
+        )
+
+        #expect(result.codeChanges.count == 2)
+        #expect(result.codeChanges[0].path == "Sources/Save/SaveButton.swift")
+        #expect(result.codeChanges[0].startLine == 42)
+        #expect(result.codeChanges[0].diffText == "@@ -42,7 +42,12 @@")
+        #expect(result.codeChanges[1].diffText == nil)
+        #expect(result.events.contains { $0.type == "code_changes" && $0.actor == "agent-a" })
+
+        let reloaded = try store.loadTask(id: "task-cc")
+        #expect(reloaded.codeChanges.count == 2)
+        #expect(reloaded.codeChanges.map(\.path) == [
+            "Sources/Save/SaveButton.swift",
+            "Sources/Save/SaveStore.swift",
+        ])
+    }
 }

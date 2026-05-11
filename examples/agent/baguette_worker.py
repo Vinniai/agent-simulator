@@ -13,13 +13,14 @@ Usage:
 Dependencies: stdlib + `websocket-client` (`pip install websocket-client`).
 
 MCP-shaped variant (sketch — not implemented here):
-    Wrap the four step functions below as MCP tools so a host agent
+    Wrap the step functions below as MCP tools so a host agent
     (e.g. Claude Code) can invoke them as discrete actions instead of
     running the polling loop:
-        - claim_next_task(agent_id)              -> ReviewTask | None
-        - tap_element(udid, element_id)          -> {ok: bool}
-        - capture_state(session_id, udid, from)  -> snapshot_id
-        - submit_result(task_id, status, ...)    -> ReviewTask
+        - claim_next_task(agent_id)                  -> ReviewTask | None
+        - tap_element(udid, element_id)              -> {ok: bool}
+        - post_code_changes(task_id, agent_id, list) -> None
+        - capture_state(session_id, udid, from)      -> snapshot_id
+        - submit_result(task_id, status, ...)        -> ReviewTask
     Each tool wraps a single HTTP / WS call from this file. Drop the
     while-loop; the host agent decides when each tool fires.
 """
@@ -85,6 +86,23 @@ def submit_result(
         "actor": agent_id,
         "resultSummary": summary,
         "verificationSnapshotId": verification_snapshot_id,
+    })
+
+
+def post_code_changes(base: str, task_id: str, agent_id: str, changes: list[dict]) -> None:
+    """Record the source-file modifications the agent made for this task.
+
+    Each change is a dict matching ReviewTaskCodeChangeInput in the
+    Swift Domain: {path, summary, startLine, endLine, commitSha,
+    branch, language, diffText}. `path` should be an absolute path so
+    the review UI's vscode://file/<path>:<line> link resolves on the
+    operator's machine. `diffText` is capped server-side at 256 KB.
+    """
+    if not changes:
+        return
+    post(base, f"/agent/tasks/{task_id}/code-changes", {
+        "actor": agent_id,
+        "changes": changes,
     })
 
 

@@ -192,6 +192,60 @@ verify"; `failed` for "I tried and could not"; `inProgress` /
 `paused` for long-running multi-step tasks. The store accepts any
 string — the conventions above are what the browser map expects.
 
+## Recording code modifications
+
+After the agent edits source files for a task, record what changed so the
+reviewer can see the original instructions, the before / after snapshots,
+AND the diff that produced the after-state in one place.
+
+```
+POST /agent/tasks/:id/code-changes
+content-type: application/json
+
+{ "actor": "claude-code-mcp@laptop-01",
+  "changes": [
+    { "path":       "/abs/path/Sources/Save/SaveButton.swift",
+      "summary":    "added validation on submit",
+      "startLine":  42,
+      "endLine":    58,
+      "commitSha":  "abc123def",
+      "branch":     "main",
+      "language":   "swift",
+      "diffText":   "@@ -42,7 +42,12 @@..." } ] }
+```
+
+Response is the full updated `ReviewTask` with the new `codeChanges[]`
+populated (mirrors `events` / `verifySnapshotId` shape).
+
+- **`path`** — supply an **absolute path** so the review UI's
+  `vscode://file/<path>:<startLine>` link opens the file on the
+  operator's machine. Relative paths still render as text but the
+  link will fail to resolve.
+- **`diffText`** is bounded — anything over 256 KB is truncated server
+  side with a `[…truncated]` marker. Send unified-diff format.
+- The operator-side mirror route is `POST /review-tasks/:id/code-changes`
+  if you're driving from a non-agent tool.
+- A `code_changes` event is automatically appended to the task and
+  broadcast on `WS /review-tasks/stream`, so any watcher UI lights up
+  without new wiring.
+
+CLI mirror:
+
+```
+baguette review-tasks add-code-change <task-id> \
+    --path Sources/Save/SaveButton.swift \
+    --summary "added validation on submit" \
+    --start-line 42 --end-line 58 \
+    --commit-sha "$(git rev-parse HEAD)" \
+    --branch "$(git rev-parse --abbrev-ref HEAD)" \
+    --language swift \
+    --diff-file /tmp/savebutton.diff \
+    --actor claude-code-mcp@laptop-01
+
+# Batch alternative — feed a JSON array of ReviewTaskCodeChangeInput:
+baguette review-tasks add-code-change <task-id> --changes-file changes.json
+```
+
 ## Subscribing instead of polling
 
 ```

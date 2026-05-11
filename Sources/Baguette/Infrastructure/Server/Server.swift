@@ -359,6 +359,20 @@ struct Server: Sendable {
                 taskStore: reviewTaskStore
             )
         }
+        router.post("/agent/tasks/:id/code-changes") { [reviewTaskStore] r, _ in
+            await Self.appendReviewTaskCodeChanges(
+                id: Self.agentTaskIdParam(r),
+                request: r,
+                taskStore: reviewTaskStore
+            )
+        }
+        router.post("/review-tasks/:id/code-changes") { [reviewTaskStore] r, _ in
+            await Self.appendReviewTaskCodeChanges(
+                id: Self.taskIdParam(r),
+                request: r,
+                taskStore: reviewTaskStore
+            )
+        }
         router.ws("/review-tasks/stream") { [reviewTaskStore] inbound, outbound, context in
             await Self.reviewTasksWS(
                 sessionId: context.request.uri.queryParameters.get("sessionId"),
@@ -1397,6 +1411,23 @@ struct Server: Sendable {
             let input = try await decodeJSON(ReviewTaskEventInput.self, from: request)
             return jsonResponse(try jsonEncoder.encode(
                 try taskStore.appendEvent(taskId: id, input: input)
+            ))
+        } catch ReviewTaskStoreError.notFound {
+            return errorJSON("unknown task: \(id)", status: .notFound)
+        } catch {
+            return errorJSON(String(describing: error), status: .badRequest)
+        }
+    }
+
+    private static func appendReviewTaskCodeChanges(
+        id: String,
+        request: Request,
+        taskStore: any ReviewTaskStore
+    ) async -> Response {
+        do {
+            let input = try await decodeJSON(ReviewTaskCodeChangesInput.self, from: request)
+            return jsonResponse(try jsonEncoder.encode(
+                try taskStore.appendCodeChanges(taskId: id, input: input)
             ))
         } catch ReviewTaskStoreError.notFound {
             return errorJSON("unknown task: \(id)", status: .notFound)

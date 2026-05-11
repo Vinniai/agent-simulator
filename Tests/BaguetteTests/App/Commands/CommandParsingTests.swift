@@ -116,6 +116,41 @@ struct CommandParsingTests {
         }
     }
 
+    // MARK: - review-tasks add-code-change
+
+    @Test func `add-code-change parses single change flags`() throws {
+        let cmd = try ReviewTasksCommand.AddCodeChange.parse([
+            "task_42",
+            "--path", "Sources/Save/SaveButton.swift",
+            "--summary", "added validation",
+            "--start-line", "42",
+            "--end-line", "58",
+            "--commit-sha", "abc123",
+            "--branch", "main",
+            "--language", "swift",
+            "--actor", "claude-agent",
+        ])
+        #expect(cmd.id == "task_42")
+        #expect(cmd.path == "Sources/Save/SaveButton.swift")
+        #expect(cmd.summary == "added validation")
+        #expect(cmd.startLine == 42)
+        #expect(cmd.endLine == 58)
+        #expect(cmd.commitSha == "abc123")
+        #expect(cmd.branch == "main")
+        #expect(cmd.language == "swift")
+        #expect(cmd.actor == "claude-agent")
+        #expect(ReviewTasksCommand.AddCodeChange.configuration.commandName == "add-code-change")
+    }
+
+    @Test func `add-code-change accepts --changes-file alone`() throws {
+        let cmd = try ReviewTasksCommand.AddCodeChange.parse([
+            "task_42",
+            "--changes-file", "/tmp/changes.json",
+        ])
+        #expect(cmd.changesFile == "/tmp/changes.json")
+        #expect(cmd.path == nil)
+    }
+
     // MARK: - diag-digitizer-trackpad
 
     @Test func `diag-digitizer-trackpad parses --udid`() throws {
@@ -317,7 +352,7 @@ struct CommandParsingTests {
 
     @Test func `review-tasks exposes agent queue subcommands`() {
         let names = ReviewTasksCommand.configuration.subcommands.map { $0.configuration.commandName }
-        #expect(Set(names) == ["list", "next", "show", "claim", "event", "result", "verify", "watch"])
+        #expect(Set(names) == ["list", "next", "show", "claim", "event", "result", "verify", "add-code-change", "watch"])
     }
 
     @Test func `review-tasks next parses agent id`() throws {

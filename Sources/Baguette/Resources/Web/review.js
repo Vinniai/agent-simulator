@@ -163,8 +163,16 @@
         </div>
         ${elsHTML ? `<div>${elsHTML}</div>` : ''}
         ${commentNotes ? `<div>${commentNotes}</div>` : ''}
+        <div data-code-changes-for="${esc(t.id)}"></div>
       </div>`;
     }).join('');
+    if (window.ReviewCodeChanges) {
+      const codeChangesByTaskId = new Map(tasks.map((t) => [t.id, t.codeChanges || []]));
+      list.querySelectorAll('[data-code-changes-for]').forEach((slot) => {
+        const id = slot.getAttribute('data-code-changes-for');
+        window.ReviewCodeChanges.renderInto(slot, codeChangesByTaskId.get(id) || []);
+      });
+    }
     list.querySelectorAll('[data-task-id]').forEach((row) => {
       row.addEventListener('click', () => {
         const sid = row.dataset.snapId;

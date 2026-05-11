@@ -9,6 +9,7 @@ protocol ReviewTaskStore: Sendable {
     func appendEvent(taskId: String, input: ReviewTaskEventInput) throws -> ReviewTask
     func updateTask(id: String, input: ReviewTaskUpdateInput) throws -> ReviewTask
     func addVerification(taskId: String, verification: ReviewTaskVerification) throws -> ReviewTask
+    func appendCodeChanges(taskId: String, input: ReviewTaskCodeChangesInput) throws -> ReviewTask
 }
 
 enum ReviewTaskStoreError: Error, Equatable {

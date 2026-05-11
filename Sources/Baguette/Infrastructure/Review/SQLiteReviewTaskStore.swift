@@ -119,6 +119,62 @@ final class SQLiteReviewTaskStore: ReviewTaskStore, @unchecked Sendable {
         }
     }
 
+    func appendCodeChanges(taskId: String, input: ReviewTaskCodeChangesInput) throws -> ReviewTask {
+        try locked {
+            _ = try loadTaskUnlocked(id: taskId)
+            let now = Date()
+            for change in input.changes {
+                let truncated = truncateDiff(change.diffText)
+                try run(
+                    """
+                    INSERT INTO review_task_code_changes
+                    (id, task_id, path, summary, start_line, end_line,
+                     commit_sha, branch, language, diff_text, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    [
+                        FileReviewStore.makeID(prefix: "cc"),
+                        taskId,
+                        change.path,
+                        change.summary,
+                        change.startLine.map(String.init),
+                        change.endLine.map(String.init),
+                        change.commitSha,
+                        change.branch,
+                        change.language,
+                        truncated,
+                        iso(now),
+                    ]
+                )
+            }
+            let message = "Recorded \(input.changes.count) code change\(input.changes.count == 1 ? "" : "s")"
+            try insertEvent(ReviewTaskEvent(
+                id: FileReviewStore.makeID(prefix: "event"),
+                taskId: taskId,
+                type: "code_changes",
+                actor: input.actor,
+                message: message,
+                metadataJSON: nil,
+                createdAt: now
+            ))
+            try run(
+                "UPDATE review_tasks SET updated_at = ? WHERE id = ?",
+                [iso(now), taskId]
+            )
+            return try loadTaskUnlocked(id: taskId)
+        }
+    }
+
+    private static let maxDiffBytes = 256 * 1024
+    private func truncateDiff(_ text: String?) -> String? {
+        guard let text else { return nil }
+        let data = Data(text.utf8)
+        guard data.count > Self.maxDiffBytes else { return text }
+        let head = data.prefix(Self.maxDiffBytes)
+        let prefix = String(data: head, encoding: .utf8) ?? String(text.prefix(Self.maxDiffBytes))
+        return prefix + "\n[…truncated]"
+    }
+
     func addVerification(taskId: String, verification: ReviewTaskVerification) throws -> ReviewTask {
         try locked {
             _ = try loadTaskUnlocked(id: taskId)
@@ -210,8 +266,25 @@ final class SQLiteReviewTaskStore: ReviewTaskStore, @unchecked Sendable {
               FOREIGN KEY(task_id) REFERENCES review_tasks(id) ON DELETE CASCADE
             )
             """)
+        try exec("""
+            CREATE TABLE IF NOT EXISTS review_task_code_changes (
+              id TEXT PRIMARY KEY,
+              task_id TEXT NOT NULL,
+              path TEXT NOT NULL,
+              summary TEXT,
+              start_line TEXT,
+              end_line TEXT,
+              commit_sha TEXT,
+              branch TEXT,
+              language TEXT,
+              diff_text TEXT,
+              created_at TEXT NOT NULL,
+              FOREIGN KEY(task_id) REFERENCES review_tasks(id) ON DELETE CASCADE
+            )
+            """)
         try exec("CREATE INDEX IF NOT EXISTS idx_review_tasks_status ON review_tasks(status, created_at)")
         try exec("CREATE INDEX IF NOT EXISTS idx_review_tasks_session ON review_tasks(session_id, updated_at)")
+        try exec("CREATE INDEX IF NOT EXISTS idx_code_changes_task ON review_task_code_changes(task_id, created_at)")
     }
 
     private func insertTask(_ task: ReviewTask) throws {
@@ -310,6 +383,7 @@ final class SQLiteReviewTaskStore: ReviewTaskStore, @unchecked Sendable {
     private func hydrate(_ row: TaskRow) throws -> ReviewTask {
         let elements = try queryElements(taskId: row.id)
         let events = try queryEvents(taskId: row.id)
+        let codeChanges = try queryCodeChanges(taskId: row.id)
         return ReviewTask(
             id: row.id,
             sessionId: row.sessionId,
@@ -329,8 +403,30 @@ final class SQLiteReviewTaskStore: ReviewTaskStore, @unchecked Sendable {
             claimedAt: row.claimedAt.map(date),
             completedAt: row.completedAt.map(date),
             elements: elements,
-            events: events
+            events: events,
+            codeChanges: codeChanges
         )
+    }
+
+    private func queryCodeChanges(taskId: String) throws -> [ReviewTaskCodeChange] {
+        try query(
+            "SELECT id, task_id, path, summary, start_line, end_line, commit_sha, branch, language, diff_text, created_at FROM review_task_code_changes WHERE task_id = ? ORDER BY created_at ASC, rowid ASC",
+            [taskId]
+        ) { stmt in
+            ReviewTaskCodeChange(
+                id: text(stmt, 0) ?? "",
+                taskId: text(stmt, 1) ?? "",
+                path: text(stmt, 2) ?? "",
+                summary: text(stmt, 3),
+                startLine: text(stmt, 4).flatMap(Int.init),
+                endLine: text(stmt, 5).flatMap(Int.init),
+                commitSha: text(stmt, 6),
+                branch: text(stmt, 7),
+                language: text(stmt, 8),
+                diffText: text(stmt, 9),
+                createdAt: date(text(stmt, 10) ?? "")
+            )
+        }
     }
 
     private func queryElements(taskId: String) throws -> [ReviewTaskElement] {
