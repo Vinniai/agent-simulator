@@ -16,6 +16,7 @@ let package = Package(
     name: "agent-sim",
     platforms: [.macOS(.v15)],
     products: [
+        .executable(name: "Baguette", targets: ["Baguette"]),
         .executable(name: "agent-sim", targets: ["Baguette"]),
     ],
     dependencies: [
