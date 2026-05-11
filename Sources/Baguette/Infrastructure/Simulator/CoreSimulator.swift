@@ -85,7 +85,10 @@ final class CoreSimulator: Simulator, @unchecked Sendable {
     }
 
     func accessibility() -> any Accessibility {
-        AXPTranslatorAccessibility(udid: udid, host: host)
+        CompositeAccessibility(
+            primary: AXPTranslatorAccessibility(udid: udid, host: host),
+            fallback: ArgentAccessibility(udid: udid)
+        )
     }
 
     func logs() -> any LogStream {
