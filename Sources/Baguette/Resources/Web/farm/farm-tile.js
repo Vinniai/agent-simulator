@@ -250,6 +250,10 @@
         this.onTelemetry(this.udid, { fps });
       },
       onLog:  () => {},
+      // Route incoming text envelopes (e.g. describe_ui_result) to a
+      // configurable hook; the focus pane wires this to its AXInspector
+      // so the same WS doubles as the AX channel.
+      onText: (env) => (this.onText ? this.onText(env) : false),
     });
     this.session.start();
     this.mode = 'thumb';
@@ -380,6 +384,10 @@
 
   FarmTile.prototype.forceIdr  = function () { this.session?.send?.({ type: 'force_idr' }); };
   FarmTile.prototype.snapshot  = function () { this.session?.send?.({ type: 'snapshot' }); };
+  // Generic send — used by the focus-pane AXInspector to dispatch
+  // describe_ui / tap envelopes over the tile's existing WS without
+  // opening a second socket.
+  FarmTile.prototype.send = function (payload) { this.session?.send?.(payload); };
 
   FarmTile.prototype.stop = function () {
     this.unwireInput();

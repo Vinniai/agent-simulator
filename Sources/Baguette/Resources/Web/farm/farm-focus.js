@@ -104,7 +104,10 @@
       </div>
 
       <div class="controls">
-        <h4>Review Mapping</h4>
+        <h4 style="display:flex;align-items:center;gap:8px">
+          <span>Review Mapping</span>
+          <span data-role="session-picker-slot" style="margin-left:auto;flex:0 0 auto"></span>
+        </h4>
         <div class="preset-row">
           <button class="preset" data-action="review-new">New</button>
           <button class="preset" data-action="review-capture">Capture</button>
@@ -115,6 +118,22 @@
           <button class="preset" data-action="review-ax">AX Screen</button>
           <button class="preset" data-action="review-history">History</button>
         </div>
+        <div class="preset-row" style="margin-top:6px">
+          <button class="preset" data-action="review-select">Select elements</button>
+          <button class="preset" data-action="review-record" title="Record gestures, then replay them against this device">Record</button>
+        </div>
+        <details data-role="review-activity-pane" style="margin-top:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px">
+          <summary style="cursor:pointer;padding:6px 10px;font-size:11px;color:var(--text,#cbd5e1);user-select:none">Activity</summary>
+          <div data-role="activity-host" style="max-height:220px;overflow:auto;background:#fff;color:#0f172a;border-radius:0 0 6px 6px"></div>
+        </details>
+        <details data-role="review-selection-pane" style="margin-top:6px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px">
+          <summary style="cursor:pointer;padding:6px 10px;font-size:11px;color:var(--text,#cbd5e1);user-select:none">Selection composer</summary>
+          <div data-role="selection-host" style="background:#fff;color:#0f172a;border-radius:0 0 6px 6px;padding:8px 10px"></div>
+        </details>
+        <details data-role="review-recorder-pane" style="margin-top:6px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px">
+          <summary style="cursor:pointer;padding:6px 10px;font-size:11px;color:var(--text,#cbd5e1);user-select:none">Flows</summary>
+          <div data-role="recorder-host" style="background:#fff;color:#0f172a;border-radius:0 0 6px 6px;padding:8px 10px"></div>
+        </details>
         <div class="review-focus-note" data-role="review-status">
           Capture stores the current screenshot, accessibility tree, markers, and path edge in the selected review session.
         </div>
@@ -251,6 +270,25 @@
       bytes:    typeof artifact.bytes === 'number'           ? artifact.bytes           : 0,
     });
     this._renderRecordList();
+    this._uploadRecording(artifact);
+  };
+
+  // Mirror the artifact to the active review session if one is
+  // selected. Failure is non-fatal — the Blob URL stays on disk-only
+  // so the user can still download it from the recordings list.
+  FarmFocus.prototype._uploadRecording = function (artifact) {
+    if (!window.BaguetteReviewClient || typeof window.BaguetteReviewClient.getSessionId !== 'function') return;
+    const sid = window.BaguetteReviewClient.getSessionId();
+    if (!sid || !artifact || !artifact.blob) return;
+    const params = new URLSearchParams();
+    params.set('contentType', artifact.mimeType || 'video/webm');
+    params.set('name', artifact.filename || 'recording.webm');
+    if (typeof artifact.durationSeconds === 'number') params.set('duration', String(artifact.durationSeconds));
+    fetch(`/reviews/${encodeURIComponent(sid)}/recordings?${params.toString()}`, {
+      method: 'POST',
+      headers: { 'content-type': artifact.mimeType || 'video/webm' },
+      body: artifact.blob,
+    }).catch((e) => console.warn('[FarmFocus] upload failed:', e && e.message));
   };
 
   FarmFocus.prototype._onRecordError = function (err) {

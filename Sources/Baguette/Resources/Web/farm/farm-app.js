@@ -842,6 +842,30 @@
     }
     // Bump stream quality + wire input on the mirror.
     if (tile) tile.promote({ layout });
+
+    // AX overlay + activity dock + selection dock for the focused tile.
+    // The inspector shares the tile's WS for describe_ui round-trips;
+    // we route the tile's onText through it so describe_ui_result
+    // envelopes land on the right consumer.
+    if (tile && this.focus.previewScreen && window.AXInspector) {
+      const inspector = new window.AXInspector({
+        screenArea:    this.focus.previewScreen,
+        send:          (payload) => tile.send(payload),
+        getDeviceSize: () => {
+          const sz = tile.computeScreenSize();
+          return { w: sz[0], h: sz[1] };
+        },
+      });
+      tile.onText = (env) => inspector.handleEnvelope(env);
+      this._focusInspector = inspector;
+      if (window.BaguetteReviewClient && window.BaguetteReviewClient.attachToFocus) {
+        this._focusDocks = window.BaguetteReviewClient.attachToFocus({
+          host: this.focus.host,
+          getUdid: () => udid,
+          getInspector: () => inspector,
+        });
+      }
+    }
   };
 
   // Flip the .selected class on grid tiles + refresh the CLI footer
@@ -868,9 +892,17 @@
   };
 
   FarmApp.prototype.clearFocus = function () {
+    if (this._focusDocks) { this._focusDocks.unmount(); this._focusDocks = null; }
+    if (this._focusInspector) {
+      try { this._focusInspector.detach(); } catch { /* ignore */ }
+      this._focusInspector = null;
+    }
     if (this.selectedUdid) {
       const tile = this.tiles.get(this.selectedUdid);
-      if (tile) tile.demote();
+      if (tile) {
+        tile.onText = null;
+        tile.demote();
+      }
     }
     this.selectedUdid = null;
     if (this.focus) { this.focus.dispose(); }

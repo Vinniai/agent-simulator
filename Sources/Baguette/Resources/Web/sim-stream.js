@@ -224,7 +224,10 @@
     }
 
     if (window.BaguetteReviewClient) {
-      window.BaguetteReviewClient.install({ getUdid: () => activeUdid });
+      window.BaguetteReviewClient.install({
+        getUdid: () => activeUdid,
+        getInspector: () => axInspector,
+      });
     }
   }
 

@@ -509,6 +509,22 @@
       </button>
 
       <div class="tb-actions">
+        <!-- Select-for-queue toggle. When ON, the AX overlay enters
+             multi-select mode (clicks select instead of tapping the
+             simulator) AND the Activity sheet slides in from the
+             right so the user can leave comments + queue review tasks
+             on the picked elements. -->
+        <button class="ico-btn" id="nativeQueueToggle"
+                title="Toggle element selection for queue"
+                aria-label="Toggle element selection for queue"
+                onclick="window.__nativeToggleQueue && window.__nativeToggleQueue()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+            <!-- Selection-rectangle glyph + small comment bubble -->
+            <rect x="3" y="3" width="11" height="11" rx="1.6" stroke-dasharray="2 2"/>
+            <path d="M11 14h10v6h-5l-3 3v-3h-2z"/>
+          </svg>
+        </button>
         <button class="ico-btn" id="nativeLogsToggle" title="Toggle live log sheet"
                 aria-label="Toggle live log sheet"
                 onclick="window.__nativeToggleLogs && window.__nativeToggleLogs()">

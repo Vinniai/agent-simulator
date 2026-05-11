@@ -138,23 +138,91 @@
 
   // --- AXInspector --------------------------------------------------
 
+  // Walk the tree once and stamp `_path` (and `_pathParts` for sorting)
+  // onto every node. `_path` is the JSON-pointer-style string callers
+  // hand to `POST /reviews/:id/tasks` as `axNodePath`. The root is `/`.
+  function stampPaths(root) {
+    function walk(n, path) {
+      if (!n) return;
+      n._path = path || '/';
+      const kids = n.children || [];
+      for (let i = 0; i < kids.length; i++) {
+        walk(kids[i], (path === '/' ? '' : path) + '/children/' + i);
+      }
+    }
+    walk(root, '/');
+  }
+
+  // Walk all visible (non-hidden) nodes; yields each node once.
+  function forEachVisible(node, fn) {
+    if (!node || node.hidden === true) return;
+    fn(node);
+    const kids = node.children || [];
+    for (let i = 0; i < kids.length; i++) forEachVisible(kids[i], fn);
+  }
+
   class AXInspector {
     constructor(opts) {
       this.host           = opts.host || null;       // optional sidebar mount
       this.screenArea     = opts.screenArea;         // overlay parent (already position:absolute)
       this.send           = opts.send;               // (payload) => void  — JSON over stream WS
       this.getDeviceSize  = opts.getDeviceSize;      // () => { w, h }     — device-point dims
-      this.onSelect       = opts.onSelect       || null; // (node | null) => void
-      this.onStatus       = opts.onStatus       || null; // (text)         => void
-      this.onEnableChange = opts.onEnableChange || null; // (enabled: bool) => void
+      this.onSelect            = opts.onSelect            || null; // (node | null) => void
+      this.onSelectionChange   = opts.onSelectionChange   || null; // (Array<{path,node}>) => void
+      this.onStatus            = opts.onStatus            || null; // (text)         => void
+      this.onEnableChange      = opts.onEnableChange      || null; // (enabled: bool) => void
 
       this.tree = null;
       this.hover = null;
-      this.selected = null;
+      this.selected = null;                    // inspect-mode: single node
+      this.selections = new Map();             // select-mode: path → node
+      this.selectionMode = 'inspect';          // 'inspect' | 'select'
       this.enabled = false;
 
       if (this.host) this._buildSidebar();
       this._buildOverlay();
+
+      // Debug handle for end-to-end testing (agent-browser). Last
+      // constructed inspector wins — fine for any practical workflow
+      // since pages mount one at a time.
+      try { window.__baguetteAXInspector = this; } catch (_) { /* ignore */ }
+    }
+
+    setSelectionMode(mode) {
+      const m = mode === 'select' ? 'select' : 'inspect';
+      if (m === this.selectionMode) return;
+      this.selectionMode = m;
+      // Switching modes clears the cross-mode state so the user
+      // doesn't see stale picks.
+      this.selected = null;
+      this.selections.clear();
+      this._renderInfo();
+      this._draw();
+      this._fireSelectionChange();
+      if (this.onSelect) this.onSelect(null);
+    }
+
+    getSelections() {
+      const out = [];
+      this.selections.forEach((node, path) => out.push({ path, node }));
+      return out;
+    }
+
+    clearSelections() {
+      if (!this.selections.size) return;
+      this.selections.clear();
+      this._draw();
+      this._fireSelectionChange();
+    }
+
+    removeSelection(path) {
+      if (!this.selections.delete(path)) return;
+      this._draw();
+      this._fireSelectionChange();
+    }
+
+    _fireSelectionChange() {
+      if (this.onSelectionChange) this.onSelectionChange(this.getSelections());
     }
 
     /// Public: dispatch a stream-WS text envelope. Returns `true`
@@ -164,6 +232,19 @@
       if (!env || env.type !== 'describe_ui_result') return false;
       if (env.ok && env.tree) {
         this.tree = env.tree;
+        stampPaths(this.tree);
+        // Re-resolve any persisted selections against the fresh tree
+        // (positions and even the set of nodes can shift across
+        // re-fetches). Drop selections whose path no longer exists.
+        if (this.selections.size) {
+          const next = new Map();
+          this.selections.forEach((_, path) => {
+            const node = this._findByPath(path);
+            if (node) next.set(path, node);
+          });
+          this.selections = next;
+          this._fireSelectionChange();
+        }
         this._setStatus('');
       } else {
         this.tree = null;
@@ -171,6 +252,22 @@
       }
       this._draw();
       return true;
+    }
+
+    _findByPath(path) {
+      if (!this.tree) return null;
+      if (path === '/') return this.tree;
+      let node = this.tree;
+      const parts = path.split('/').filter(Boolean);
+      for (let i = 0; i < parts.length; i += 2) {
+        if (parts[i] !== 'children') return null;
+        const idx = parseInt(parts[i + 1], 10);
+        if (!Number.isFinite(idx)) return null;
+        const kids = node.children || [];
+        node = kids[idx];
+        if (!node) return null;
+      }
+      return node;
     }
 
     enable() {
@@ -192,10 +289,13 @@
       this.tree = null;
       this.hover = null;
       this.selected = null;
+      const hadSelections = this.selections.size > 0;
+      this.selections.clear();
       this._setStatus('');
       this._renderInfo();
       this._draw();
       if (this.onSelect) this.onSelect(null);
+      if (hadSelections) this._fireSelectionChange();
       if (this.onEnableChange) this.onEnableChange(false);
     }
 
@@ -275,6 +375,16 @@
         e.stopPropagation();
         this._handleClick(e);
       });
+      // Right-click on a selected element removes it from the set
+      // (only meaningful in select-mode).
+      ov.addEventListener('contextmenu', (e) => {
+        if (!this.enabled || this.selectionMode !== 'select') return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (this.hover && this.hover._path && this.selections.has(this.hover._path)) {
+          this.removeSelection(this.hover._path);
+        }
+      });
     }
 
     _sizeOverlay() {
@@ -305,7 +415,24 @@
       }
     }
 
-    _handleClick() {
+    _handleClick(e) {
+      if (this.selectionMode === 'select') {
+        if (!this.hover || !this.hover._path) return;
+        const path = this.hover._path;
+        const additive = !!(e && (e.shiftKey || e.metaKey || e.ctrlKey));
+        if (additive) {
+          if (this.selections.has(path)) this.selections.delete(path);
+          else this.selections.set(path, this.hover);
+        } else {
+          this.selections.clear();
+          this.selections.set(path, this.hover);
+        }
+        this._draw();
+        this._refresh();
+        this._fireSelectionChange();
+        return;
+      }
+      // inspect-mode (legacy single-pick)
       this.selected = this.hover;
       this._renderInfo();
       this._draw();
@@ -350,13 +477,41 @@
         const h = n.frame.height * sy;
         ctx.lineWidth = lw;
         ctx.strokeStyle = stroke;
-        ctx.fillStyle   = fill;
-        ctx.fillRect(x, y, w, h);
+        if (fill) {
+          ctx.fillStyle = fill;
+          ctx.fillRect(x, y, w, h);
+        }
         ctx.strokeRect(x, y, w, h);
       };
 
-      drawNode(this.hover,    'rgba(37, 99, 235, 0.95)', 'rgba(37, 99, 235, 0.12)', 2);
-      drawNode(this.selected, 'rgba(220, 38, 38, 0.95)', 'rgba(220, 38, 38, 0.10)', 2);
+      // Hybrid: dim outline on every visible node when in select-mode,
+      // so the user can see the full hit-map at a glance without
+      // hover-discovery.
+      if (this.selectionMode === 'select' && this.tree) {
+        ctx.lineWidth = 0.5;
+        ctx.strokeStyle = 'rgba(15, 23, 42, 0.35)';
+        forEachVisible(this.tree, (n) => {
+          if (!n.frame || !n.frame.width || !n.frame.height) return;
+          ctx.strokeRect(
+            n.frame.x * sx, n.frame.y * sy,
+            n.frame.width * sx, n.frame.height * sy,
+          );
+        });
+      }
+
+      // Bright selections (multi-select layer) — red, slightly opaque
+      // fill so overlapping siblings stack readably.
+      if (this.selections.size) {
+        this.selections.forEach((node) => {
+          drawNode(node, 'rgba(220, 38, 38, 0.95)', 'rgba(220, 38, 38, 0.10)', 2);
+        });
+      }
+      // Single-selected (inspect-mode legacy path).
+      if (this.selected && !this.selections.size) {
+        drawNode(this.selected, 'rgba(220, 38, 38, 0.95)', 'rgba(220, 38, 38, 0.10)', 2);
+      }
+      // Hover always paints last so it stays visible above selections.
+      drawNode(this.hover, 'rgba(37, 99, 235, 0.95)', 'rgba(37, 99, 235, 0.12)', 2);
 
       if (this.hover) this._drawTooltip(ctx, this.hover, sx, sy);
     }

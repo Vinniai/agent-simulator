@@ -79,7 +79,10 @@
     // so hardcoding a colour here would defeat the theme switch.
     document.body.innerHTML = '';
     if (window.BaguetteReviewClient) {
-      window.BaguetteReviewClient.install({ getUdid: () => udid });
+      window.BaguetteReviewClient.install({
+        getUdid: () => udid,
+        getInspector: () => axInspector,
+      });
     }
     document.body.style.cssText = 'margin:0;padding:0;overflow:hidden';
     // Match <body> background to the active focus-mode page bg so
@@ -376,6 +379,16 @@
       if (!axInspector) return;
       if (axInspector.isEnabled()) axInspector.disable();
       else axInspector.enable();
+    };
+    // Queue-mode toggle: enable overlay in select-mode AND open the
+    // Activity sheet + selection composer. Wired by review-client.js's
+    // toggleQueueMode hook which manages dock visibility.
+    window.__nativeToggleQueue = () => {
+      if (!window.BaguetteReviewClient || !window.BaguetteReviewClient.toggleQueueMode) return;
+      const btn = document.getElementById('nativeQueueToggle');
+      const willEnable = !(btn && btn.classList.contains('active'));
+      window.BaguetteReviewClient.toggleQueueMode(willEnable);
+      if (btn) btn.classList.toggle('active', willEnable);
     };
     // Sidebar-view jump — bounce out of focus mode and into the
     // inline `startStream` layout on `/simulators`. The hash is
