@@ -85,13 +85,7 @@ enum ReviewCaptureService {
     }
 
     private static func accessibilityTree(for sim: any Simulator) async throws -> AXNode? {
-        if let native = try sim.accessibility().describeAll() {
-            return native
-        }
-        if let fallback = try ArgentAccessibilityFallback.describeAll(udid: sim.udid) {
-            return fallback
-        }
-        return nil
+        try sim.accessibility().describeAll()
     }
 
     private static func flattenElements(

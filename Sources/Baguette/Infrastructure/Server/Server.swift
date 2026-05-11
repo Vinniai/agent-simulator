@@ -246,6 +246,35 @@ struct Server: Sendable {
                 taskStore: reviewTaskStore
             )
         }
+        router.post("/reviews/:id/flows") { [reviewStore] r, _ in
+            await Self.createReviewFlow(
+                id: Self.reviewIdParam(r),
+                request: r,
+                store: reviewStore
+            )
+        }
+        router.get("/reviews/:id/flows.json") { [reviewStore] r, _ in
+            Self.listReviewFlows(id: Self.reviewIdParam(r), store: reviewStore)
+        }
+        router.post("/reviews/:id/flows/:flowId/replay") { [reviewStore, simulators] r, _ in
+            await Self.replayReviewFlow(
+                id: Self.reviewIdParam(r),
+                flowId: Self.flowIdParam(r),
+                request: r,
+                store: reviewStore,
+                simulators: simulators
+            )
+        }
+        router.post("/reviews/:id/recordings") { [reviewStore] r, _ in
+            await Self.uploadReviewRecording(
+                id: Self.reviewIdParam(r),
+                request: r,
+                store: reviewStore
+            )
+        }
+        router.get("/reviews/:id/recordings.json") { [reviewStore] r, _ in
+            Self.listReviewRecordings(id: Self.reviewIdParam(r), store: reviewStore)
+        }
         router.post("/reviews/source-search") { r, _ in
             await Self.reviewSourceSearch(request: r)
         }
@@ -1002,6 +1031,157 @@ struct Server: Sendable {
         }
     }
 
+    private static func createReviewFlow(
+        id: String,
+        request: Request,
+        store: any ReviewStore
+    ) async -> Response {
+        do {
+            let body = try await decodeJSON(ReviewFlowCreateInput.self, from: request)
+            var session = try store.loadSession(id: id)
+            let flow = ReviewFlow(
+                id: FileReviewStore.makeID(prefix: "flow"),
+                sessionId: id,
+                name: body.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? "Untitled flow" : body.name,
+                steps: body.steps,
+                createdAt: Date(),
+                createdBy: body.createdBy
+            )
+            session.flows.append(flow)
+            try store.saveSession(session)
+            return jsonResponse(try jsonEncoder.encode(flow))
+        } catch ReviewStoreError.notFound {
+            return errorJSON("unknown review: \(id)", status: .notFound)
+        } catch {
+            return errorJSON(String(describing: error), status: .badRequest)
+        }
+    }
+
+    private static func listReviewFlows(id: String, store: any ReviewStore) -> Response {
+        do {
+            let session = try store.loadSession(id: id)
+            return jsonResponse(try jsonEncoder.encode(session.flows))
+        } catch ReviewStoreError.notFound {
+            return errorJSON("unknown review: \(id)", status: .notFound)
+        } catch {
+            return errorJSON(String(describing: error), status: .internalServerError)
+        }
+    }
+
+    private static func replayReviewFlow(
+        id: String,
+        flowId: String,
+        request: Request,
+        store: any ReviewStore,
+        simulators: any Simulators
+    ) async -> Response {
+        do {
+            let body = try await decodeJSON(ReviewFlowReplayInput.self, from: request)
+            let session = try store.loadSession(id: id)
+            guard let flow = session.flows.first(where: { $0.id == flowId }) else {
+                return errorJSON("unknown flow: \(flowId)", status: .notFound)
+            }
+            let result = try await FlowReplayService.replay(
+                flow: flow,
+                udid: body.udid,
+                pacing: body.pacing ?? .fast,
+                simulators: simulators
+            )
+            let payload: [String: Any] = [
+                "ok": result.lastOK,
+                "executed": result.executed,
+                "flowId": flow.id,
+            ]
+            let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+            return jsonResponse(data)
+        } catch SimulatorError.notFound(let udid) {
+            return errorJSON("unknown udid: \(udid)", status: .notFound)
+        } catch ReviewStoreError.notFound {
+            return errorJSON("unknown review: \(id)", status: .notFound)
+        } catch let error as FlowReplayError {
+            return errorJSON(error.description, status: .badRequest)
+        } catch {
+            return errorJSON(String(describing: error), status: .badRequest)
+        }
+    }
+
+    private static func uploadReviewRecording(
+        id: String,
+        request: Request,
+        store: any ReviewStore
+    ) async -> Response {
+        let q = request.uri.queryParameters
+        let contentType = q.get("contentType") ?? "video/webm"
+        let from = q.get("from")
+        let to = q.get("to")
+        let duration = q.get("duration").flatMap(Double.init)
+        let rawName = q.get("name") ?? ""
+        do {
+            var buffer = try await request.body.collect(upTo: 200 * 1024 * 1024)
+            let bytes = buffer.readableBytes
+            guard bytes > 0 else {
+                return errorJSON("empty recording body", status: .badRequest)
+            }
+            let data = buffer.readData(length: bytes) ?? Data()
+
+            var session = try store.loadSession(id: id)
+            let recId = FileReviewStore.makeID(prefix: "rec")
+            let ext = recordingExtension(for: contentType)
+            let safeName = recordingFilename(preferred: rawName, fallback: "recording-\(recId).\(ext)")
+            let relativePath = "recordings/\(recId)/\(safeName)"
+            try store.writeArtifact(sessionId: id, relativePath: relativePath, data: data)
+
+            let recording = ReviewRecording(
+                id: recId,
+                sessionId: id,
+                filename: relativePath,
+                contentType: contentType,
+                bytes: data.count,
+                durationSeconds: duration,
+                fromSnapshotId: from,
+                toSnapshotId: to,
+                createdAt: Date()
+            )
+            session.recordings.append(recording)
+            try store.saveSession(session)
+            return jsonResponse(try jsonEncoder.encode(recording))
+        } catch ReviewStoreError.notFound {
+            return errorJSON("unknown review: \(id)", status: .notFound)
+        } catch {
+            return errorJSON(String(describing: error), status: .badRequest)
+        }
+    }
+
+    private static func listReviewRecordings(id: String, store: any ReviewStore) -> Response {
+        do {
+            let session = try store.loadSession(id: id)
+            return jsonResponse(try jsonEncoder.encode(session.recordings))
+        } catch ReviewStoreError.notFound {
+            return errorJSON("unknown review: \(id)", status: .notFound)
+        } catch {
+            return errorJSON(String(describing: error), status: .internalServerError)
+        }
+    }
+
+    private static func recordingExtension(for contentType: String) -> String {
+        if contentType.hasPrefix("video/mp4") { return "mp4" }
+        if contentType.hasPrefix("video/webm") { return "webm" }
+        return "bin"
+    }
+
+    private static func recordingFilename(preferred: String, fallback: String) -> String {
+        let trimmed = preferred.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return fallback }
+        // Drop any traversal — only keep the final path component, sanitised.
+        let base = trimmed.split(separator: "/").last.map(String.init) ?? trimmed
+        let allowed = CharacterSet.alphanumerics.union(.init(charactersIn: "._-"))
+        let cleaned = base.unicodeScalars
+            .map { allowed.contains($0) ? Character($0) : "_" }
+            .reduce(into: "") { $0.append($1) }
+        return cleaned.isEmpty ? fallback : cleaned
+    }
+
     private static func reviewSourceSearch(request: Request) async -> Response {
         do {
             let input = try await decodeJSON(ReviewSourceSearchInput.self, from: request)
@@ -1542,6 +1722,13 @@ struct Server: Sendable {
         return String(parts[2]).removingPercentEncoding ?? ""
     }
 
+    private static func flowIdParam(_ request: Request) -> String {
+        let parts = request.uri.path.split(separator: "/")
+        // path shape: /reviews/:id/flows/:flowId/replay → index 3
+        guard parts.count >= 4 else { return "" }
+        return String(parts[3]).removingPercentEncoding ?? ""
+    }
+
     private static func requiredString(_ key: String, _ dict: [String: Any]) throws -> String {
         guard let value = dict[key] as? String, !value.isEmpty else {
             throw ReviewTaskWSError.missing(key)
@@ -1780,5 +1967,7 @@ private func contentType(for filename: String) -> String {
     if filename.hasSuffix(".json") { return "application/json; charset=utf-8" }
     if filename.hasSuffix(".png")  { return "image/png" }
     if filename.hasSuffix(".jpg") || filename.hasSuffix(".jpeg") { return "image/jpeg" }
+    if filename.hasSuffix(".webm") { return "video/webm" }
+    if filename.hasSuffix(".mp4")  { return "video/mp4" }
     return "application/octet-stream"
 }

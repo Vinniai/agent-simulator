@@ -15,7 +15,10 @@
     </div>
     <div class="actions">
       <button id="new-review">New Review</button>
-      <button id="bundle-selected" disabled>Bundle Selected</button>
+      <button id="bundle-selected" disabled
+              title="Export a JSON + Markdown brief of the selected snapshots' comments, edges, and screenshots — for stakeholders or external agents.">Export evidence</button>
+      <button id="open-compare" title="Compare two screen recordings side-by-side with a shared scrub bar">Compare recordings</button>
+      <div id="bundle-result" style="position:absolute;top:60px;right:14px;max-width:360px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 8px 24px rgba(15,23,42,.10);padding:10px 12px;font-size:12px;color:#0f172a;display:none;z-index:20"></div>
     </div>
   </header>
   <main>
@@ -25,6 +28,14 @@
     </aside>
     <section class="canvas-wrap">
       <div id="canvas"></div>
+      <div id="tasks-panel" style="position:absolute;left:14px;right:14px;bottom:14px;max-height:42%;overflow:auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 6px 18px rgba(15,23,42,.08);font:12px -apple-system,BlinkMacSystemFont,SF Pro Text,sans-serif;color:#0f172a;display:none">
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #e2e8f0;background:#fff;position:sticky;top:0;z-index:1">
+          <strong style="font-size:13px">Queued tasks</strong>
+          <span id="tasks-count" style="color:#64748b;font-size:11px"></span>
+          <button id="tasks-collapse" style="margin-left:auto;background:transparent;border:0;cursor:pointer;color:#64748b;font-size:14px;padding:2px 6px">▾</button>
+        </div>
+        <div id="tasks-list" style="padding:8px 12px 12px"></div>
+      </div>
     </section>
     <aside class="inspector">
       <h2>Inspector</h2>
@@ -41,14 +52,43 @@
           <textarea id="comment-text" rows="4"></textarea>
         </label>
         <button id="save-comment">Save Comment</button>
+        <button id="queue-task">Queue Task</button>
         <h3>Comments</h3>
         <div id="comment-list"></div>
         <h3>Accessibility</h3>
-        <pre id="ax-tree"></pre>
+        <div id="ax-tree" style="max-height:340px;overflow:auto;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:4px 2px"></div>
       </div>
     </aside>
   </main>
 </div>
+<div id="compare-modal" style="position:fixed;inset:0;background:rgba(15,23,42,0.78);display:none;z-index:60;align-items:stretch;justify-content:center">
+  <div style="background:#0f172a;color:#e2e8f0;width:min(1200px,98vw);height:min(820px,96vh);margin:auto;border-radius:12px;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,0.45)">
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.08)">
+      <strong style="font-size:13px;letter-spacing:0.2px">Compare recordings</strong>
+      <span id="compare-drift" style="margin-left:8px;color:#94a3b8;font-size:11px;font-variant-numeric:tabular-nums"></span>
+      <button id="compare-close" style="margin-left:auto;background:transparent;border:0;color:#e2e8f0;cursor:pointer;font-size:18px">×</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px 14px;flex:1;min-height:0">
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <select data-role="compare-left" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:4px 8px;font-size:12px"></select>
+        <video data-role="compare-left-video" preload="auto" playsinline style="background:#000;width:100%;flex:1;min-height:0;object-fit:contain;border-radius:6px"></video>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <select data-role="compare-right" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:4px 8px;font-size:12px"></select>
+        <video data-role="compare-right-video" preload="auto" playsinline style="background:#000;width:100%;flex:1;min-height:0;object-fit:contain;border-radius:6px"></video>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid rgba(255,255,255,0.08)">
+      <button id="compare-play" style="background:#2563eb;color:#fff;border:0;border-radius:6px;padding:6px 14px;cursor:pointer;font-weight:600">Play</button>
+      <input id="compare-scrub" type="range" min="0" max="1000" value="0" style="flex:1">
+      <span id="compare-time" style="color:#94a3b8;font-size:11px;font-variant-numeric:tabular-nums;min-width:90px;text-align:right">0.00 / 0.00s</span>
+    </div>
+  </div>
+</div>
+<script src="/ax-tree-helpers.js"></script>
+<script src="/review-ax-tree.js"></script>
+<script src="/review-tasks-stream.js"></script>
+<script src="/review-compare.js"></script>
 <script src="/review.js"></script>
 </body>
 </html>
