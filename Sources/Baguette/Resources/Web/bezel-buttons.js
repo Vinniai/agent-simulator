@@ -113,8 +113,8 @@
     wrap.type = 'button';
     wrap.dataset.btn = b.name;
     wrap.title = wire
-      ? `${humanizeName(b.name)} → ${wire}`
-      : `${humanizeName(b.name)} — not wired on iOS 26.4`;
+        ? `${humanizeName(b.name)} → ${wire}`
+        : `${humanizeName(b.name)} — not wired on iOS 26.4`;
     wrap.setAttribute('aria-label', wrap.title);
     // Z-order against the bezel <img> (which sits at z=1):
     //  • `onTop: false` → z=0, BEHIND the bezel. DeviceKit marks
@@ -248,10 +248,10 @@
     // macOS Tahoe Simulator.
     const restSrc = b.imageUrl;
     const downSrc =
-      (b.imageDownUrl
-        && (b.imageDownDrawMode || 'replace').toLowerCase() === 'replace')
-        ? b.imageDownUrl
-        : null;
+        (b.imageDownUrl
+            && (b.imageDownDrawMode || 'replace').toLowerCase() === 'replace')
+            ? b.imageDownUrl
+            : null;
 
     wrap.addEventListener('mouseenter', () => {
       wrap.style.transform = 'translate(var(--out-dx), var(--out-dy))';
@@ -263,7 +263,7 @@
     wrap.addEventListener('mousedown', () => {
       // Press back to NORMAL — opposite sign of the rollover delta.
       wrap.style.transform =
-        'translate(calc(var(--out-dx) * -1), calc(var(--out-dy) * -1))';
+          'translate(calc(var(--out-dx) * -1), calc(var(--out-dy) * -1))';
       if (downSrc) img.src = downSrc;
     });
     wrap.addEventListener('mouseup', () => {
@@ -322,11 +322,25 @@
         break;
       }
       case 'right': {
-        // Centre at (bareW + off.x) — chrome.json's right anchor
-        // uses negative offset.x to push the cap inward.
-        const cxPct = ((bareW + off.x) / bareW) * 100;
-        const tyPct = (off.y / bareH) * 100;
-        wrap.style.left = `${cxPct - halfWPct}%`;
+        // INNER EDGE convention with at-rest position mirroring
+        // chrome.json's rollover delta inward.
+        //
+        // chrome.json's `normalOffset` is the HOVER position; at-rest
+        // sits as far inside `normal` as `rollover` is outside it
+        // (`restX = 2*normal.x - rollover.x`). On hover `_wireAnim`
+        // translates outward by `rollover - normal` chrome-px,
+        // landing the cap exactly at `normalOffset.x` — the user's
+        // "current is hover, at-rest should be less" feedback.
+        // For caps without hover (DigitalCrown, normal == rollover)
+        // the formula collapses to normalOffset and the cap stays
+        // fixed.
+        const n = b.normalOffset || b.offset || { x: 0, y: 0 };
+        const r = b.rolloverOffset || b.offset || { x: 0, y: 0 };
+        const restX = 2 * n.x - r.x;
+        const restY = 2 * n.y - r.y;
+        const leftPct = ((bareW + restX) / bareW) * 100;
+        const tyPct = (restY / bareH) * 100;
+        wrap.style.left = `${leftPct}%`;
         wrap.style.top  = `${tyPct}%`;
         break;
       }
@@ -359,10 +373,10 @@
   function humanizeName(name) {
     if (!name) return 'Button';
     return name
-      .split(/[-_]/)
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' ')
-      .trim();
+        .split(/[-_]/)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ')
+        .trim();
   }
 
   window.BezelButtons = BezelButtons;

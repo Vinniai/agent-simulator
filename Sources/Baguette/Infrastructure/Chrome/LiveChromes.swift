@@ -277,21 +277,29 @@ final class LiveChromes: Chromes, @unchecked Sendable {
     }
 
     /// Top-left draw position for a button image inside the expanded
-    /// canvas. Returns the point passed to `compose(...)`'s layer
-    /// geometry.
+    /// canvas.
     ///
-    /// chrome.json semantics for the four anchors (verified against
-    /// Apple's Simulator):
-    ///   • LEFT / RIGHT: `x` is the image's CENTRE inside the bezel
-    ///     (cap straddles the side rail). `y` is the image's TOP
-    ///     edge, NOT its centre — the convention scales with image
-    ///     height: a 16-px-tall action cap and a 101-px-tall power
-    ///     cap with the same y both START at the same y, so offsets
-    ///     line up with native rendering. Treating y as centre
-    ///     drifts taller caps downward by half-image-height (~5% of
-    ///     bezel for the power button).
-    ///   • TOP / BOTTOM: same y-as-edge logic on the perpendicular
-    ///     axis (x is CENTRE, y is the offset from the bezel edge).
+    /// chrome.json semantics — asymmetric per anchor:
+    ///   • LEFT / TOP / BOTTOM: `offset.x` is the image's CENTRE on
+    ///     the anchored axis; `offset.y` is the image's TOP edge on
+    ///     the perpendicular axis. (Treating y as CENTRE drifts tall
+    ///     caps downward by `imgH / 2` — Image #8 regression.)
+    ///   • RIGHT: `offset.x` is the image's LEFT (inner) edge,
+    ///     measured outward from `composite.width`. Wide right-
+    ///     anchor caps (DigitalCrown 25, SideButton 36) under a
+    ///     CENTRE interpretation land inside the body silhouette
+    ///     and become invisible at rest (Image #14 regression).
+    ///
+    /// At-rest offset for right anchor: chrome.json's `normalOffset`
+    /// is the HOVER position (the cap popped past the rail); at-rest
+    /// mirrors the rollover delta INWARD via
+    /// `2 * normalOffset - rolloverOffset`. For a side-button with
+    /// normal=-30, rollover=-25 the cap rests at -35 (1 px past the
+    /// rail) and animates outward by 5 chrome-px on hover to -30
+    /// (6 px past the rail). For a crown (normal == rollover) the
+    /// formula collapses to `normalOffset`. Other anchors continue
+    /// to use the default `offset` (= `rolloverOffset`), matching
+    /// how Apple's iPhone composites bake the side caps.
     private func buttonTopLeft(
         button: ChromeButton,
         imageSize: Size,
@@ -300,28 +308,36 @@ final class LiveChromes: Chromes, @unchecked Sendable {
     ) -> Point {
         let compX = margins.left
         let compY = margins.top
-        let cx: Double  // image CENTRE on x
-        let topY: Double  // image TOP-LEFT y (already the value we return)
         switch button.anchor {
         case .left:
-            cx = compX + button.offset.x
-            topY = compY + button.offset.y
+            let cx = compX + button.offset.x
+            let topY = compY + button.offset.y
+            return Point(x: cx - imageSize.width / 2, y: topY)
         case .right:
-            cx = compX + compositeSize.width + button.offset.x
-            topY = compY + button.offset.y
+            // Mirror the rollover delta inward to derive the at-rest
+            // position: chrome.json's `normalOffset` is the hover
+            // position, so at-rest sits as far from normal as
+            // rollover is on the opposite side. `2N - R` collapses
+            // to N when N == R (no-hover caps like DigitalCrown).
+            let restX = 2 * button.normalOffset.x - button.rolloverOffset.x
+            let restY = 2 * button.normalOffset.y - button.rolloverOffset.y
+            let leftX = compX + compositeSize.width + restX
+            let topY = compY + restY
+            return Point(x: leftX, y: topY)
         case .top:
             let baseX = button.align == .trailing
                 ? compX + compositeSize.width
                 : compX
-            cx = baseX + button.offset.x
-            topY = compY + button.offset.y
+            let cx = baseX + button.offset.x
+            let topY = compY + button.offset.y
+            return Point(x: cx - imageSize.width / 2, y: topY)
         case .bottom:
             let baseX = button.align == .trailing
                 ? compX + compositeSize.width
                 : compX
-            cx = baseX + button.offset.x
-            topY = compY + compositeSize.height + button.offset.y
+            let cx = baseX + button.offset.x
+            let topY = compY + compositeSize.height + button.offset.y
+            return Point(x: cx - imageSize.width / 2, y: topY)
         }
-        return Point(x: cx - imageSize.width / 2, y: topY)
     }
 }

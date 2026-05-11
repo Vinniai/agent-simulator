@@ -271,6 +271,62 @@ struct LiveChromesTests {
         ).called(1)
     }
 
+    // Right-anchor buttons position their image's LEFT (inner) edge
+    // at `composite.width + (2 * normalOffset.x - rolloverOffset.x)`.
+    //
+    // chrome.json's `normalOffset` is the HOVER position (the cap
+    // popped out a few px past the body); at-rest mirrors the
+    // rollover delta INWARD so a button with `normal=-30`,
+    // `rollover=-25` rests at `-35` (1 px protrusion) and animates
+    // outward by 5 chrome-px on hover to `-30` (6 px protrusion).
+    // For buttons without a hover animation (`normal == rollover`,
+    // e.g. watch4 DigitalCrown) the formula collapses to
+    // `normalOffset.x` and the cap stays at its single position.
+    //
+    // A naive "at-rest = normalOffset" interpretation landed wide
+    // caps (SideButton 36 wide) too far past the rail at rest —
+    // user's feedback was that the chrome.json normal position
+    // looks like a hovered state, not a relaxed one (Image #14 +
+    // "this offset should be when it's hovered").
+    //
+    // Fixture: right-anchor button with normal=(-30, 160),
+    // rollover=(-25, 160), image 36×67, on a 100×200 composite.
+    // Expected layer top-left:
+    //   x = composite.width + (2 * -30 - -25) = 100 - 35 = 65
+    //   y = 2 * 160 - 160 = 160  (TOP-edge convention; y delta is
+    //                             zero on horizontal-only animations)
+    @Test func `assets positions right-anchor button mirroring rollover delta inward`() throws {
+        let store = MockChromeStore()
+        let rasterizer = MockPDFRasterizer()
+        let composite = ChromeImage(data: Data("c".utf8), size: Size(width: 100, height: 200))
+        let btn = ChromeImage(data: Data("b".utf8), size: Size(width: 36, height: 67))
+        let merged = ChromeImage(data: Data("m".utf8), size: Size(width: 106, height: 200))
+
+        given(store).profilePlistData(deviceName: .any).willReturn(Self.fixturePlist)
+        given(store).chromeJSONData(chromeIdentifier: .any)
+            .willReturn(Self.fixtureChromeJSONRightAnchorHover)
+        given(store).chromeAssetPDF(chromeIdentifier: .any, imageName: .value("PhoneComposite"))
+            .willReturn(Data("composite-pdf".utf8))
+        given(store).chromeAssetPDF(chromeIdentifier: .any, imageName: .value("SIDE"))
+            .willReturn(Data("side-pdf".utf8))
+        given(rasterizer).rasterize(pdfData: .value(Data("composite-pdf".utf8)))
+            .willReturn(composite)
+        given(rasterizer).rasterize(pdfData: .value(Data("side-pdf".utf8)))
+            .willReturn(btn)
+        given(rasterizer).compose(canvasSize: .any, layers: .any).willReturn(merged)
+
+        let chromes = LiveChromes(store: store, rasterizer: rasterizer)
+        _ = chromes.assets(forDeviceName: "Apple Watch Ultra 2 (49mm)")
+
+        verify(rasterizer).compose(
+            canvasSize: .any,
+            layers: .matching { layers in
+                guard let layer = layers.first(where: { $0.image == btn }) else { return false }
+                return layer.topLeft == Point(x: 65, y: 160)
+            }
+        ).called(1)
+    }
+
     // Watch-style chrome: the orange action button (`onTop: true`)
     // must layer ON TOP of the composite, otherwise the bezel hides
     // it. Older watch chromes (watch ≤ watch5b/5s) have the same need
@@ -554,6 +610,28 @@ private extension LiveChromesTests {
     /// One `onTop: false` button and one `onTop: true` button. Drives
     /// the layering split inside `assemble()` so a watch-shaped chrome
     /// renders its overlaid action button above the bezel.
+    /// Right-anchor button with distinct normal / rollover offsets
+    /// (the side-button "has hover" case). normal=(-30, 160),
+    /// rollover=(-25, 160), image 36×67, on a 100-wide composite,
+    /// devicePadding.right=6 so the merged canvas (composite +
+    /// margins) is exactly 106 wide and the at-rest cap right edge
+    /// (100 - 30 + 36 = 106) lands flush with the canvas right edge.
+    static let fixtureChromeJSONRightAnchorHover: Data = Data(#"""
+    {
+      "identifier": "com.apple.dt.devicekit.chrome.watch4",
+      "images": {
+        "composite": "PhoneComposite",
+        "sizing": { "leftWidth": 0, "rightWidth": 0, "topHeight": 0, "bottomHeight": 0 },
+        "devicePadding": { "top": 0, "left": 0, "bottom": 0, "right": 6 }
+      },
+      "paths": { "simpleOutsideBorder": { "cornerRadiusX": 0 } },
+      "inputs": [
+        { "name": "side", "image": "SIDE", "anchor": "right",
+          "offsets": { "normal": { "x": -30, "y": 160 }, "rollover": { "x": -25, "y": 160 } } }
+      ]
+    }
+    """#.utf8)
+
     static let fixtureChromeJSONOnTopMix: Data = Data(#"""
     {
       "identifier": "com.apple.dt.devicekit.chrome.watch4",
