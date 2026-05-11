@@ -3,10 +3,11 @@ import ArgumentParser
 @main
 struct Baguette: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "baguette",
-        abstract: "Headless iOS simulator control",
-        version: baguetteVersion,
+        commandName: "agent-sim",
+        abstract: "Agent-driven iOS simulator control, capture, markup, and review",
+        version: agentSimVersion,
         subcommands: [
+            AgentCommand.self,
             ListCommand.self,
             BootCommand.self,
             ShutdownCommand.self,

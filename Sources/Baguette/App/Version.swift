@@ -3,4 +3,5 @@
 // `.github/workflows/release.yml` step "Inject release version") so
 // shipped binaries report their actual tag. The value committed here
 // is what local debug / Homebrew-from-source builds report.
-let baguetteVersion = "0.1.61"
+let agentSimVersion = "0.2.0"
+let baguetteVersion = agentSimVersion

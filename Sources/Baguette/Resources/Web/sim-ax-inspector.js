@@ -161,6 +161,28 @@
     for (let i = 0; i < kids.length; i++) forEachVisible(kids[i], fn);
   }
 
+  // Geometry helpers used by brush + rectangle tools. Mirror the
+  // half-open `[origin, origin+size)` intersection convention in
+  // `ReviewMarkupHitTest.swift` (Domain) — same algorithm, two
+  // languages.
+
+  function intersectsAB(rect, frame) {
+    const aMinX = rect.x, aMaxX = rect.x + rect.w;
+    const aMinY = rect.y, aMaxY = rect.y + rect.h;
+    const bMinX = frame.x, bMaxX = frame.x + frame.width;
+    const bMinY = frame.y, bMaxY = frame.y + frame.height;
+    return aMinX < bMaxX && bMinX < aMaxX
+        && aMinY < bMaxY && bMinY < aMaxY;
+  }
+
+  function containsFP(frame, p) {
+    const minX = frame.x;
+    const minY = frame.y;
+    const maxX = minX + frame.width;
+    const maxY = minY + frame.height;
+    return p.x >= minX && p.x < maxX && p.y >= minY && p.y < maxY;
+  }
+
   class AXInspector {
     constructor(opts) {
       this.host           = opts.host || null;       // optional sidebar mount
@@ -189,17 +211,32 @@
     }
 
     setSelectionMode(mode) {
-      const m = mode === 'select' ? 'select' : 'inspect';
+      const allowed = ['inspect', 'select', 'brush', 'rectangle'];
+      const m = allowed.includes(mode) ? mode : 'inspect';
       if (m === this.selectionMode) return;
       this.selectionMode = m;
       // Switching modes clears the cross-mode state so the user
       // doesn't see stale picks.
       this.selected = null;
       this.selections.clear();
+      this._activeStroke = null;
+      this._activeRect = null;
+      this._dragging = false;
+      this._updateToolButtonStates();
       this._renderInfo();
       this._draw();
       this._fireSelectionChange();
       if (this.onSelect) this.onSelect(null);
+    }
+
+    _updateToolButtonStates() {
+      if (!this.toolButtonEls) return;
+      this.toolButtonEls.forEach((btn) => {
+        const active = btn.dataset.mode === this.selectionMode;
+        btn.dataset.active = active ? '1' : '0';
+        btn.style.background = active ? 'var(--accent, #2563eb)' : 'transparent';
+        btn.style.color      = active ? '#fff' : 'inherit';
+      });
     }
 
     getSelections() {
@@ -274,6 +311,8 @@
       if (this.enabled) return;
       this.enabled = true;
       if (this.toggleEl) this.toggleEl.checked = true;
+      if (this.toolsEl)  this.toolsEl.style.display = 'flex';
+      this._updateToolButtonStates();
       this.overlay.style.display = '';
       this.overlay.style.pointerEvents = 'auto';
       this._refresh();
@@ -284,6 +323,7 @@
       if (!this.enabled) return;
       this.enabled = false;
       if (this.toggleEl) this.toggleEl.checked = false;
+      if (this.toolsEl)  this.toolsEl.style.display = 'none';
       this.overlay.style.pointerEvents = 'none';
       this.overlay.style.display = 'none';
       this.tree = null;
@@ -291,6 +331,9 @@
       this.selected = null;
       const hadSelections = this.selections.size > 0;
       this.selections.clear();
+      this._activeStroke = null;
+      this._activeRect = null;
+      this._dragging = false;
       this._setStatus('');
       this._renderInfo();
       this._draw();
@@ -322,10 +365,20 @@
           '<span>Inspect (hover)</span>' +
           '<span data-role="status" style="margin-left:auto;color:var(--text-muted);font-size:10px"></span>' +
         '</label>' +
+        '<div data-role="tools" style="margin-top:8px;display:none;gap:4px">' +
+          '<button data-mode="select"    type="button" style="flex:1;padding:4px 6px;border:1px solid var(--border,#cbd5e1);border-radius:4px;font-size:11px;cursor:pointer">Select</button>' +
+          '<button data-mode="brush"     type="button" style="flex:1;padding:4px 6px;border:1px solid var(--border,#cbd5e1);border-radius:4px;font-size:11px;cursor:pointer">Brush</button>' +
+          '<button data-mode="rectangle" type="button" style="flex:1;padding:4px 6px;border:1px solid var(--border,#cbd5e1);border-radius:4px;font-size:11px;cursor:pointer">Rect</button>' +
+        '</div>' +
         '<div data-role="info" style="margin-top:8px;display:none"></div>';
-      this.toggleEl = this.host.querySelector('[data-role="toggle"]');
-      this.statusEl = this.host.querySelector('[data-role="status"]');
-      this.infoEl   = this.host.querySelector('[data-role="info"]');
+      this.toggleEl  = this.host.querySelector('[data-role="toggle"]');
+      this.statusEl  = this.host.querySelector('[data-role="status"]');
+      this.infoEl    = this.host.querySelector('[data-role="info"]');
+      this.toolsEl   = this.host.querySelector('[data-role="tools"]');
+      this.toolButtonEls = Array.from(this.toolsEl.querySelectorAll('button[data-mode]'));
+      this.toolButtonEls.forEach((btn) => {
+        btn.addEventListener('click', () => this.setSelectionMode(btn.dataset.mode));
+      });
       this.toggleEl.addEventListener('change', () => {
         if (this.toggleEl.checked) this.enable(); else this.disable();
       });
@@ -357,7 +410,9 @@
         if (this.enabled) this._refresh();
       });
       ov.addEventListener('mousemove', (e) => {
-        if (this.enabled) this._handleMove(e);
+        if (!this.enabled) return;
+        if (this._dragging) this._handleDragMove(e);
+        else this._handleMove(e);
       });
       ov.addEventListener('mouseleave', () => {
         if (!this.enabled) return;
@@ -368,9 +423,21 @@
         if (!this.enabled) return;
         e.preventDefault();
         e.stopPropagation();
+        if (this.selectionMode === 'brush' || this.selectionMode === 'rectangle') {
+          this._handleDragStart(e);
+        }
+      });
+      ov.addEventListener('mouseup', (e) => {
+        if (!this.enabled || !this._dragging) return;
+        e.preventDefault();
+        e.stopPropagation();
+        this._handleDragEnd(e);
       });
       ov.addEventListener('click', (e) => {
         if (!this.enabled) return;
+        // Brush + rectangle handle their submit on mouseup; click is
+        // the legacy single-pick path for select / inspect.
+        if (this.selectionMode === 'brush' || this.selectionMode === 'rectangle') return;
         e.preventDefault();
         e.stopPropagation();
         this._handleClick(e);
@@ -378,7 +445,11 @@
       // Right-click on a selected element removes it from the set
       // (only meaningful in select-mode).
       ov.addEventListener('contextmenu', (e) => {
-        if (!this.enabled || this.selectionMode !== 'select') return;
+        if (!this.enabled) return;
+        const multiMode = this.selectionMode === 'select'
+                       || this.selectionMode === 'brush'
+                       || this.selectionMode === 'rectangle';
+        if (!multiMode) return;
         e.preventDefault();
         e.stopPropagation();
         if (this.hover && this.hover._path && this.selections.has(this.hover._path)) {
@@ -413,6 +484,113 @@
         this.hover = hit;
         this._draw();
       }
+    }
+
+    // --- internal: brush / rectangle drag ----------------------
+
+    _handleDragStart(e) {
+      const p = this._toDevicePoint(e);
+      const additive = !!(e && (e.shiftKey || e.metaKey || e.ctrlKey));
+      if (!additive) this.selections.clear();
+      this._dragging = true;
+      if (this.selectionMode === 'brush') {
+        this._activeStroke = [p];
+        this._activeRect = null;
+      } else {
+        this._activeStroke = null;
+        this._activeRect = { ax: p.x, ay: p.y, bx: p.x, by: p.y };
+      }
+      this._draw();
+    }
+
+    _handleDragMove(e) {
+      const p = this._toDevicePoint(e);
+      if (this.selectionMode === 'brush' && this._activeStroke) {
+        // Down-sample: only push when we've moved at least 4 device-
+        // points from the last sample. Keeps hit-test linear in the
+        // visible stroke length, not the mouse-event count.
+        const last = this._activeStroke[this._activeStroke.length - 1];
+        if (Math.hypot(p.x - last.x, p.y - last.y) >= 4) {
+          this._activeStroke.push(p);
+        }
+      } else if (this.selectionMode === 'rectangle' && this._activeRect) {
+        this._activeRect.bx = p.x;
+        this._activeRect.by = p.y;
+      }
+      this._draw();
+    }
+
+    _handleDragEnd(e) {
+      const p = this._toDevicePoint(e);
+      let hits = [];
+      if (this.selectionMode === 'brush' && this._activeStroke) {
+        if (this._activeStroke.length === 0 || this._activeStroke[this._activeStroke.length - 1] !== p) {
+          this._activeStroke.push(p);
+        }
+        hits = this._hitTestBrush(this._activeStroke);
+      } else if (this.selectionMode === 'rectangle' && this._activeRect) {
+        this._activeRect.bx = p.x;
+        this._activeRect.by = p.y;
+        const rect = this._rectFromActive(this._activeRect);
+        hits = this._hitTestRect(rect);
+      }
+      hits.forEach((node) => {
+        if (!node._path) return;
+        this.selections.set(node._path, node);
+      });
+      this._activeStroke = null;
+      this._activeRect = null;
+      this._dragging = false;
+      this._draw();
+      this._refresh();
+      this._fireSelectionChange();
+    }
+
+    _rectFromActive(active) {
+      const minX = Math.min(active.ax, active.bx);
+      const minY = Math.min(active.ay, active.by);
+      return {
+        x: minX, y: minY,
+        w: Math.abs(active.bx - active.ax),
+        h: Math.abs(active.by - active.ay),
+      };
+    }
+
+    /// Walks the AX tree and returns the nodes whose frames intersect
+    /// `rect` (in device points). Mirrors `ReviewMarkupHitTest.rectangleHits`
+    /// in Swift — same half-open intersection convention. Zero-area
+    /// rect falls back to a single-point brush so a tiny drag selects
+    /// just the element under the click.
+    _hitTestRect(rect) {
+      if (!this.tree) return [];
+      if (rect.w === 0 && rect.h === 0) {
+        return this._hitTestBrush([{ x: rect.x, y: rect.y }]);
+      }
+      const out = [];
+      forEachVisible(this.tree, (n) => {
+        if (!n.frame) return;
+        if (intersectsAB(rect, n.frame)) out.push(n);
+      });
+      return out;
+    }
+
+    _hitTestBrush(points) {
+      if (!this.tree || !points.length) return [];
+      const seen = new Set();
+      const out = [];
+      forEachVisible(this.tree, (n) => {
+        if (!n.frame) return;
+        for (const p of points) {
+          if (containsFP(n.frame, p)) {
+            if (n._path && !seen.has(n._path)) {
+              seen.add(n._path);
+              out.push(n);
+            }
+            return;
+          }
+        }
+      });
+      return out;
     }
 
     _handleClick(e) {
@@ -484,10 +662,14 @@
         ctx.strokeRect(x, y, w, h);
       };
 
-      // Hybrid: dim outline on every visible node when in select-mode,
-      // so the user can see the full hit-map at a glance without
+      // Hybrid: dim outline on every visible node when in any
+      // multi-selection mode (select / brush / rectangle), so the
+      // user can see the full hit-map at a glance without
       // hover-discovery.
-      if (this.selectionMode === 'select' && this.tree) {
+      const multiMode = this.selectionMode === 'select'
+                     || this.selectionMode === 'brush'
+                     || this.selectionMode === 'rectangle';
+      if (multiMode && this.tree) {
         ctx.lineWidth = 0.5;
         ctx.strokeStyle = 'rgba(15, 23, 42, 0.35)';
         forEachVisible(this.tree, (n) => {
@@ -512,6 +694,29 @@
       }
       // Hover always paints last so it stays visible above selections.
       drawNode(this.hover, 'rgba(37, 99, 235, 0.95)', 'rgba(37, 99, 235, 0.12)', 2);
+
+      // In-progress brush stroke / rectangle drag. Render last so the
+      // drag preview sits above the static element outlines.
+      if (this._activeStroke && this._activeStroke.length > 1) {
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(37, 99, 235, 0.85)';
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(this._activeStroke[0].x * sx, this._activeStroke[0].y * sy);
+        for (let i = 1; i < this._activeStroke.length; i++) {
+          ctx.lineTo(this._activeStroke[i].x * sx, this._activeStroke[i].y * sy);
+        }
+        ctx.stroke();
+      }
+      if (this._activeRect) {
+        const r = this._rectFromActive(this._activeRect);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(37, 99, 235, 0.85)';
+        ctx.fillStyle   = 'rgba(37, 99, 235, 0.12)';
+        ctx.fillRect(r.x * sx, r.y * sy, r.w * sx, r.h * sy);
+        ctx.strokeRect(r.x * sx, r.y * sy, r.w * sx, r.h * sy);
+      }
 
       if (this.hover) this._drawTooltip(ctx, this.hover, sx, sy);
     }

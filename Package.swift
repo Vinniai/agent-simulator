@@ -13,8 +13,11 @@ import PackageDescription
 // lives anywhere other than `/Applications/Xcode.app` (issue #1). The
 // runtime dlopen path already handles every install location correctly.
 let package = Package(
-    name: "Baguette",
+    name: "agent-sim",
     platforms: [.macOS(.v15)],
+    products: [
+        .executable(name: "agent-sim", targets: ["Baguette"]),
+    ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.7.1"),
         // `@Mockable` auto-generates `MockXxx` classes from `@Mockable`
