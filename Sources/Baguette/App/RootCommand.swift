@@ -27,6 +27,7 @@ struct Baguette: AsyncParsableCommand {
             OrientationCommand.self,
             DiagDigitizerTrackpadCommand.self,
             ReviewTasksCommand.self,
+            DoctorCommand.self,
         ]
     )
 }

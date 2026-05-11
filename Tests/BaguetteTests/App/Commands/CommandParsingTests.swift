@@ -21,6 +21,7 @@ struct CommandParsingTests {
             "key", "type",
             "chrome", "screenshot", "describe-ui", "logs", "serve",
             "orientation", "diag-digitizer-trackpad", "review-tasks",
+            "doctor",
         ])
     }
 
@@ -412,5 +413,25 @@ struct CommandParsingTests {
         #expect(cmd.status == "open")
         #expect(cmd.interval == 0.25)
         #expect(cmd.once == true)
+    }
+
+    // MARK: - doctor
+
+    @Test func `doctor defaults to localhost on 8421 with text output`() throws {
+        let cmd = try DoctorCommand.parse([])
+        #expect(cmd.base == "http://127.0.0.1:8421")
+        #expect(cmd.timeout == 2.0)
+        #expect(cmd.json == false)
+    }
+
+    @Test func `doctor --json flag and custom base override defaults`() throws {
+        let cmd = try DoctorCommand.parse([
+            "--base", "http://127.0.0.1:9001",
+            "--timeout", "0.5",
+            "--json",
+        ])
+        #expect(cmd.base == "http://127.0.0.1:9001")
+        #expect(cmd.timeout == 0.5)
+        #expect(cmd.json == true)
     }
 }

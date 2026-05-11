@@ -17,6 +17,9 @@ For releases prior to this changelog, see the
 ### Changed
 - **`baguette review-tasks next` and `claim` accept `--actor` as an alias for `--agent-id`.** Same identity flag now works across every `review-tasks` subcommand (`event` / `result` / `add-code-change` already used `--actor`). Either spelling parses identically; existing scripts that pass `--agent-id` keep working. Eliminates the per-subcommand flag-name lookup that was a recurring foot-gun for agent integrators.
 
+### Added (continued)
+- **`baguette doctor` + `GET /version`.** New diagnostics subcommand reports CLI version, debug/release build mode, booted-simulator count, server reachability, and detects version drift between the local CLI and the running server. Status surface: `healthy` (versions match), `drift` (server version differs), `stale` (server up but predates the `/version` endpoint), `offline` (server unreachable). `--json` emits a scriptable `DoctorReport`; default is a two-column text block. The companion `GET /version` route returns `{service, version}` — usable by CI, watchdogs, and any tooling that needs reachability without parsing a richer payload.
+
 ---
 
 ## [0.1.70] - 2026-05-11

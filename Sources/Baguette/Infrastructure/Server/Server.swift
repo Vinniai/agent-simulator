@@ -93,6 +93,12 @@ struct Server: Sendable {
                 ) ? .upgrade([:]) : .dontUpgrade
             }
 
+        // Health / version probe. Used by `baguette doctor` to detect
+        // a drift between the local CLI binary and the running server,
+        // and by external tooling (CI, watchdogs) to confirm reachability
+        // without needing to parse a richer payload.
+        router.get("/version") { _, _ in Self.versionJSON() }
+
         // List page (HTML + sibling assets).
         router.get("/") { _, _ in Self.redirect(to: "/simulators") }
         router.get("/simulators") { _, _ in Self.staticAsset("sim.html") }
@@ -457,6 +463,15 @@ struct Server: Sendable {
             status: .ok,
             headers: [.contentType: "application/json", .cacheControl: "no-cache"],
             body: .init(byteBuffer: ByteBuffer(string: simulators.listJSON))
+        )
+    }
+
+    private static func versionJSON() -> Response {
+        let body = #"{"service":"baguette","version":"\#(baguetteVersion)"}"#
+        return Response(
+            status: .ok,
+            headers: [.contentType: "application/json", .cacheControl: "no-cache"],
+            body: .init(byteBuffer: ByteBuffer(string: body))
         )
     }
 

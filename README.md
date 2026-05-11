@@ -170,6 +170,13 @@ baguette <command> [options]
   pinch   --udid … --cx … --cy … --startSpread … --endSpread … --width … --height …
   pan     --udid … --x1 … --y1 … --x2 … --y2 … --dx … --dy … --width … --height …
   press   --udid … --button home|lock
+
+  # Diagnostics. Reports CLI version, build mode, booted-sim count,
+  # whether the server is reachable, and surfaces version drift
+  # between this CLI binary and the running `baguette serve` binary
+  # (status: healthy | drift | stale | offline). Add --json for
+  # scriptable output.
+  doctor   [--base http://127.0.0.1:8421] [--timeout 2.0] [--json]
 ```
 
 ## `baguette serve` — the web UI
@@ -194,6 +201,7 @@ served root for live-iteration without rebuilding.
 | Method | Path                                       | Backed by                    |
 |--------|--------------------------------------------|------------------------------|
 | `GET`  | `/`                                        | 302 → `/simulators`          |
+| `GET`  | `/version`                                 | `{service, version}` (health probe) |
 | `GET`  | `/simulators`                              | list HTML                    |
 | `GET`  | `/simulators.json`                         | list JSON `{running, available}` |
 | `GET`  | `/simulators/:udid`                        | stream HTML                  |
