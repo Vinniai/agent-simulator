@@ -196,7 +196,8 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         switch button {
         case .home, .lock:
             return pressLegacyButton(button, holdUs: holdUs, on: c)
-        case .power, .volumeUp, .volumeDown, .action:
+        case .power, .volumeUp, .volumeDown, .action,
+             .digitalCrown, .sideButton, .leftSideButton:
             guard let usage = button.standardHIDUsage else { return false }
             return pressArbitraryHID(button, usage: usage, holdUs: holdUs, on: c)
         case .appSwitcher:
@@ -359,6 +360,7 @@ final class IndigoHIDInput: Input, @unchecked Sendable {
         case .home: return (0x0, 0x33)
         case .lock: return (0x1, 0x33)
         case .power, .volumeUp, .volumeDown, .action,
+             .digitalCrown, .sideButton, .leftSideButton,
              .appSwitcher, .swipeToAppSwitcher, .swipeToHome,
              .pullDownToLockScreen, .pullDownToNotificationCenter:
             // Caller routes these through pressArbitraryHID or the

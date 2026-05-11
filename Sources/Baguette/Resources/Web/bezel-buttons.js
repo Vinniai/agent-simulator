@@ -47,13 +47,21 @@
   // (usagePage, usage) declared in each device's chrome.json.
   // Anything outside this table renders but is inert with a tooltip.
   const WIRE_BUTTON = {
-    power:         'power',
-    'side-button': 'power',  // future-proof if DeviceKit renames
-    'volume-up':   'volume-up',
-    'volume-down': 'volume-down',
-    action:        'action',
-    home:          'home',
-    lock:          'lock',
+    power:              'power',
+    'volume-up':        'volume-up',
+    'volume-down':      'volume-down',
+    action:             'action',
+    home:               'home',
+    lock:               'lock',
+    // Apple Watch hardware buttons — each rides the arbitrary-HID
+    // path keyed by its own (page, usage) from chrome.json. They are
+    // distinct wire names (NOT aliases for power/action) because
+    // the watch side-button and left-side-button use HID codes
+    // different from the iPhone power and action buttons — aliasing
+    // would silently send the wrong code to the simulator.
+    'digital-crown':    'digital-crown',
+    'side-button':      'side-button',
+    'left-side-button': 'left-side-button',
   };
 
   function BezelButtons({ udid, layout, onPress }) {
