@@ -166,4 +166,116 @@ struct SQLiteReviewTaskStoreTests {
             "Sources/Save/SaveStore.swift",
         ])
     }
+
+    @Test("bulkCreateTasks creates every supplied task with shared defaults")
+    func bulkCreateAllSucceed() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("baguette-task-tests-\(UUID().uuidString)")
+        let store = SQLiteReviewTaskStore(url: dir.appendingPathComponent("tasks.sqlite"))
+
+        let result = try store.bulkCreateTasks(
+            input: ReviewTaskBulkCreateInput(
+                sessionId: "review-bulk",
+                defaults: ReviewTaskBulkDefaults(
+                    priority: "high",
+                    assignee: "agent-import",
+                    instructions: nil,
+                    title: nil
+                ),
+                tasks: [
+                    ReviewTaskBulkItem(
+                        title: "Fix /home",
+                        instructions: "Re-align hero card",
+                        elements: [
+                            ReviewTaskElementInput(
+                                snapshotId: "snap-1", axNodePath: "/", commentText: "card off-grid"
+                            )
+                        ]
+                    ),
+                    ReviewTaskBulkItem(
+                        title: "Fix /search",
+                        instructions: "Move filter button right",
+                        elements: [
+                            ReviewTaskElementInput(
+                                snapshotId: "snap-2", axNodePath: "/", commentText: nil
+                            )
+                        ]
+                    ),
+                ]
+            )
+        )
+
+        #expect(result.errors.isEmpty)
+        #expect(result.created.count == 2)
+        #expect(result.created.map(\.title) == ["Fix /home", "Fix /search"])
+        #expect(result.created.map(\.priority) == ["high", "high"])
+        #expect(result.created.map(\.assignee) == ["agent-import", "agent-import"])
+        #expect(result.created.map { $0.elements.count } == [1, 1])
+        #expect(result.created[0].elements[0].snapshotId == "snap-1")
+        #expect(result.created[0].events.contains { $0.type == "created" })
+
+        // Both tasks should be findable.
+        let listed = try store.listTasks(sessionId: "review-bulk", status: nil)
+        #expect(Set(listed.map(\.title)) == ["Fix /home", "Fix /search"])
+    }
+
+    @Test("bulkCreateTasks records per-item errors without aborting the batch")
+    func bulkCreatePartialFailure() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("baguette-task-tests-\(UUID().uuidString)")
+        let store = SQLiteReviewTaskStore(url: dir.appendingPathComponent("tasks.sqlite"))
+
+        let result = try store.bulkCreateTasks(
+            input: ReviewTaskBulkCreateInput(
+                sessionId: "review-bulk-2",
+                defaults: nil,
+                tasks: [
+                    ReviewTaskBulkItem(title: "Good", instructions: "ok", elements: []),
+                    ReviewTaskBulkItem(title: "", instructions: "", elements: []),   // blank title — rejected
+                    ReviewTaskBulkItem(title: "Also good", instructions: "ok", elements: []),
+                ]
+            )
+        )
+
+        #expect(result.created.count == 2)
+        #expect(result.errors.count == 1)
+        #expect(result.errors[0].index == 1)
+        #expect(result.created.map(\.title) == ["Good", "Also good"])
+    }
+
+    @Test("bulkCreateTasks per-task title beats defaults; defaults beat fallback")
+    func bulkCreateDefaultsResolution() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("baguette-task-tests-\(UUID().uuidString)")
+        let store = SQLiteReviewTaskStore(url: dir.appendingPathComponent("tasks.sqlite"))
+
+        let result = try store.bulkCreateTasks(
+            input: ReviewTaskBulkCreateInput(
+                sessionId: "review-bulk-3",
+                defaults: ReviewTaskBulkDefaults(
+                    priority: "low",
+                    assignee: "from-default",
+                    instructions: "default-instructions",
+                    title: "Default Title"
+                ),
+                tasks: [
+                    ReviewTaskBulkItem(title: "Explicit", instructions: nil, elements: []),
+                    ReviewTaskBulkItem(title: nil, instructions: "Explicit instructions", elements: []),
+                ]
+            )
+        )
+
+        #expect(result.errors.isEmpty)
+        // Explicit title beats default
+        #expect(result.created[0].title == "Explicit")
+        // No title → falls through to default
+        #expect(result.created[1].title == "Default Title")
+        // No instructions on first → falls through to default
+        #expect(result.created[0].instructions == "default-instructions")
+        // Explicit instructions on second
+        #expect(result.created[1].instructions == "Explicit instructions")
+        // Both inherit default priority + assignee
+        #expect(result.created.map(\.priority) == ["low", "low"])
+        #expect(result.created.map(\.assignee) == ["from-default", "from-default"])
+    }
 }

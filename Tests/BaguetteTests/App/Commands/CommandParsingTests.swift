@@ -353,7 +353,7 @@ struct CommandParsingTests {
 
     @Test func `review-tasks exposes agent queue subcommands`() {
         let names = ReviewTasksCommand.configuration.subcommands.map { $0.configuration.commandName }
-        #expect(Set(names) == ["list", "next", "show", "claim", "event", "result", "verify", "add-code-change", "watch"])
+        #expect(Set(names) == ["list", "next", "show", "claim", "event", "result", "verify", "add-code-change", "bulk-create", "watch"])
     }
 
     @Test func `review-tasks next parses agent id`() throws {
@@ -413,6 +413,31 @@ struct CommandParsingTests {
         #expect(cmd.status == "open")
         #expect(cmd.interval == 0.25)
         #expect(cmd.once == true)
+    }
+
+    // MARK: - review-tasks bulk-create
+
+    @Test func `review-tasks bulk-create parses session and file flags`() throws {
+        let cmd = try ReviewTasksCommand.BulkCreate.parse([
+            "--session-id", "review-bulk",
+            "--file", "/tmp/tasks.json",
+            "--assignee", "agent-import",
+            "--priority", "high",
+        ])
+        #expect(cmd.sessionId == "review-bulk")
+        #expect(cmd.file == "/tmp/tasks.json")
+        #expect(cmd.assignee == "agent-import")
+        #expect(cmd.priority == "high")
+        #expect(cmd.title == nil)
+        #expect(cmd.instructions == nil)
+    }
+
+    @Test func `review-tasks bulk-create accepts stdin via -`() throws {
+        let cmd = try ReviewTasksCommand.BulkCreate.parse([
+            "--session-id", "review-bulk",
+            "--file", "-",
+        ])
+        #expect(cmd.file == "-")
     }
 
     // MARK: - doctor

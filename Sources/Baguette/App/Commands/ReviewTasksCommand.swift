@@ -14,6 +14,7 @@ struct ReviewTasksCommand: ParsableCommand {
             Result.self,
             Verify.self,
             AddCodeChange.self,
+            BulkCreate.self,
             Watch.self,
         ]
     )
@@ -245,6 +246,87 @@ struct ReviewTasksCommand: ParsableCommand {
                 taskId: id,
                 input: ReviewTaskCodeChangesInput(actor: actor, changes: changes)
             ))
+        }
+    }
+
+    struct BulkCreate: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "bulk-create",
+            abstract: "Create many review tasks in one call from a JSON file or stdin"
+        )
+
+        @Option(name: .long, help: "Review session id every task attaches to")
+        var sessionId: String
+
+        @Option(
+            name: .long,
+            help: "Path to a JSON ReviewTaskBulkCreateInput (tasks[]) or a bare array of ReviewTaskBulkItem. Use '-' for stdin."
+        )
+        var file: String
+
+        @Option(name: .long, help: "Default priority for items that don't supply one")
+        var priority: String?
+
+        @Option(name: .long, help: "Default assignee for items that don't supply one")
+        var assignee: String?
+
+        @Option(name: .long, help: "Default instructions for items that don't supply any")
+        var instructions: String?
+
+        @Option(name: .long, help: "Default title for items that don't supply one")
+        var title: String?
+
+        func run() throws {
+            let raw: Data
+            if file == "-" {
+                raw = FileHandle.standardInput.readDataToEndOfFile()
+            } else {
+                raw = try Data(contentsOf: URL(fileURLWithPath: file))
+            }
+            let decoder = JSONDecoder()
+            // Accept either the full envelope or a bare items array.
+            let items: [ReviewTaskBulkItem]
+            var providedDefaults: ReviewTaskBulkDefaults? = nil
+            if let envelope = try? decoder.decode(ReviewTaskBulkCreateInput.self, from: raw) {
+                items = envelope.tasks
+                providedDefaults = envelope.defaults
+            } else {
+                items = try decoder.decode([ReviewTaskBulkItem].self, from: raw)
+            }
+            let cliDefaults = ReviewTaskBulkDefaults(
+                priority: priority,
+                assignee: assignee,
+                instructions: instructions,
+                title: title
+            )
+            let defaults = merge(file: providedDefaults, cli: cliDefaults)
+            try printJSON(SQLiteReviewTaskStore().bulkCreateTasks(
+                input: ReviewTaskBulkCreateInput(
+                    sessionId: sessionId,
+                    defaults: defaults,
+                    tasks: items
+                )
+            ))
+        }
+
+        /// CLI-level overrides win over file-level defaults so an
+        /// operator can re-tag a batch (e.g. assign all to a single
+        /// agent) without rewriting the JSON.
+        private func merge(
+            file fileDefaults: ReviewTaskBulkDefaults?,
+            cli: ReviewTaskBulkDefaults
+        ) -> ReviewTaskBulkDefaults? {
+            let merged = ReviewTaskBulkDefaults(
+                priority: cli.priority ?? fileDefaults?.priority,
+                assignee: cli.assignee ?? fileDefaults?.assignee,
+                instructions: cli.instructions ?? fileDefaults?.instructions,
+                title: cli.title ?? fileDefaults?.title
+            )
+            if merged.priority == nil && merged.assignee == nil
+                && merged.instructions == nil && merged.title == nil {
+                return nil
+            }
+            return merged
         }
     }
 

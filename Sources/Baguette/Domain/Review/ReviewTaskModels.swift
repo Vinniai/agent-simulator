@@ -203,3 +203,64 @@ struct ReviewTaskCodeChangesInput: Codable, Equatable, Sendable {
     var actor: String?
     var changes: [ReviewTaskCodeChangeInput]
 }
+
+/// One row in a bulk-create batch. Skinny on purpose — bulk-create
+/// does not run the bundle / context.md generation that the
+/// operator-driven `POST /reviews/:id/tasks` flow does. Callers that
+/// want context.md per-task can supply it via `contextMarkdown` and
+/// the store will write it verbatim.
+struct ReviewTaskBulkItem: Codable, Equatable, Sendable {
+    var title: String?
+    var instructions: String?
+    var priority: String?
+    var assignee: String?
+    var bundleId: String?
+    var elements: [ReviewTaskElementInput]
+    var contextMarkdown: String?
+
+    init(
+        title: String? = nil,
+        instructions: String? = nil,
+        priority: String? = nil,
+        assignee: String? = nil,
+        bundleId: String? = nil,
+        elements: [ReviewTaskElementInput] = [],
+        contextMarkdown: String? = nil
+    ) {
+        self.title = title
+        self.instructions = instructions
+        self.priority = priority
+        self.assignee = assignee
+        self.bundleId = bundleId
+        self.elements = elements
+        self.contextMarkdown = contextMarkdown
+    }
+}
+
+/// Defaults applied to every item in a bulk batch when the item
+/// itself doesn't carry the corresponding field. Per-task explicit
+/// values always win.
+struct ReviewTaskBulkDefaults: Codable, Equatable, Sendable {
+    var priority: String?
+    var assignee: String?
+    var instructions: String?
+    var title: String?
+}
+
+struct ReviewTaskBulkCreateInput: Codable, Equatable, Sendable {
+    var sessionId: String
+    var defaults: ReviewTaskBulkDefaults?
+    var tasks: [ReviewTaskBulkItem]
+}
+
+struct ReviewTaskBulkCreateError: Codable, Equatable, Sendable {
+    let index: Int
+    let message: String
+}
+
+/// Partial-success result. `created.count + errors.count == input.tasks.count`
+/// always holds; callers know exactly which item by `index`.
+struct ReviewTaskBulkCreateResult: Codable, Equatable, Sendable {
+    let created: [ReviewTask]
+    let errors: [ReviewTaskBulkCreateError]
+}

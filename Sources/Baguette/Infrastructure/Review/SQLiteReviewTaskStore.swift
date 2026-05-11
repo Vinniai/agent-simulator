@@ -119,6 +119,98 @@ final class SQLiteReviewTaskStore: ReviewTaskStore, @unchecked Sendable {
         }
     }
 
+    func bulkCreateTasks(input: ReviewTaskBulkCreateInput) throws -> ReviewTaskBulkCreateResult {
+        var created: [ReviewTask] = []
+        var errors: [ReviewTaskBulkCreateError] = []
+        for (index, item) in input.tasks.enumerated() {
+            do {
+                let task = try buildBulkTask(
+                    item: item,
+                    defaults: input.defaults,
+                    sessionId: input.sessionId,
+                    index: index
+                )
+                let stored = try createTask(task)
+                created.append(stored)
+            } catch let error as ReviewTaskStoreError {
+                errors.append(ReviewTaskBulkCreateError(
+                    index: index, message: String(describing: error)
+                ))
+            } catch {
+                errors.append(ReviewTaskBulkCreateError(
+                    index: index, message: error.localizedDescription
+                ))
+            }
+        }
+        return ReviewTaskBulkCreateResult(created: created, errors: errors)
+    }
+
+    private func buildBulkTask(
+        item: ReviewTaskBulkItem,
+        defaults: ReviewTaskBulkDefaults?,
+        sessionId: String,
+        index: Int
+    ) throws -> ReviewTask {
+        let title = nonBlank(item.title) ?? nonBlank(defaults?.title)
+            ?? "Bulk-created task \(index + 1)"
+        let instructions = nonBlank(item.instructions) ?? nonBlank(defaults?.instructions)
+            ?? "Review the attached element and apply the requested change."
+        let priority = nonBlank(item.priority) ?? nonBlank(defaults?.priority) ?? "normal"
+        let assignee = nonBlank(item.assignee) ?? nonBlank(defaults?.assignee)
+
+        // Reject blank-after-defaults — keeps the partial-success contract honest.
+        if nonBlank(item.title) == nil && nonBlank(defaults?.title) == nil
+            && item.title != nil {
+            throw ReviewTaskStoreError.sqlite("title is blank and no default supplied")
+        }
+
+        let now = Date()
+        let taskId = FileReviewStore.makeID(prefix: "task")
+        let elements: [ReviewTaskElement] = item.elements.map { input in
+            ReviewTaskElement(
+                id: FileReviewStore.makeID(prefix: "taskel"),
+                taskId: taskId,
+                snapshotId: input.snapshotId,
+                axNodePath: input.axNodePath,
+                role: nil,
+                label: nil,
+                frame: nil,
+                commentText: input.commentText
+            )
+        }
+        return ReviewTask(
+            id: taskId,
+            sessionId: sessionId,
+            bundleId: item.bundleId,
+            title: title,
+            instructions: instructions,
+            status: "open",
+            priority: priority,
+            assignee: assignee,
+            contextPath: nil,
+            bundleJSONPath: nil,
+            bundleMarkdownPath: nil,
+            resultSummary: nil,
+            verificationSnapshotId: nil,
+            createdAt: now,
+            updatedAt: now,
+            claimedAt: nil,
+            completedAt: nil,
+            elements: elements,
+            events: [
+                ReviewTaskEvent(
+                    id: FileReviewStore.makeID(prefix: "event"),
+                    taskId: taskId,
+                    type: "created",
+                    actor: assignee,
+                    message: "Bulk-created task",
+                    metadataJSON: nil,
+                    createdAt: now
+                )
+            ]
+        )
+    }
+
     func appendCodeChanges(taskId: String, input: ReviewTaskCodeChangesInput) throws -> ReviewTask {
         try locked {
             _ = try loadTaskUnlocked(id: taskId)
@@ -578,3 +670,9 @@ private struct TaskRow {
 }
 
 private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
+private func nonBlank(_ value: String?) -> String? {
+    guard let value else { return nil }
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+}

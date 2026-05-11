@@ -287,6 +287,60 @@ baguette review-tasks claim <task-id> --actor <id>
 The HTTP and CLI paths share storage (`SQLiteReviewTaskStore`), so a
 mixed setup — agent over HTTP, operator over CLI — is fine.
 
+## Bulk-creating tasks
+
+When an external source (a route walker, a sitemap crawler, an MCP
+host) has N items it wants queued in one call, use the bulk-create
+endpoint instead of N single-task POSTs:
+
+```
+POST /reviews/:sessionId/tasks/bulk
+content-type: application/json
+
+{ "sessionId":  "<ignored — path id wins>",
+  "defaults":   { "priority": "normal", "assignee": "agent-import" },
+  "tasks": [
+    { "title": "Fix /home",   "instructions": "Re-align hero card",
+      "elements": [ { "snapshotId": "snap-home",    "axNodePath": "/", "commentText": "card off-grid" } ] },
+    { "title": "Fix /search", "instructions": "Move filter button right",
+      "elements": [ { "snapshotId": "snap-search",  "axNodePath": "/", "commentText": null } ] }
+  ] }
+```
+
+Response is a partial-success envelope so a failing row doesn't abort
+the rest:
+
+```json
+{ "created": [ { "id": "task_01HX…", … }, { "id": "task_01HX…", … } ],
+  "errors":  [ { "index": 7, "message": "title is blank and no default supplied" } ] }
+```
+
+`created.count + errors.count` always equals `tasks.count` so the
+caller knows exactly which item failed. The route does NOT generate
+per-task bundles or `context.md` files — the single-task interactive
+flow keeps the bundle machinery. Use bulk-create for external
+ingestion (route walker, sitemap, manifest); use single-create when
+the operator is interactively marking up live captures.
+
+CLI mirror — pipe a JSON file or stream from stdin:
+
+```bash
+baguette review-tasks bulk-create \
+    --session-id review_01HX… \
+    --file path/to/tasks.json \
+    --assignee agent-import \
+    --priority high
+
+# Stdin form — handy with adapters that emit the envelope.
+agent_canvas_to_baguette --manifest agent-canvas/latest/manifest.json \
+                         --session-id review_01HX… \
+    | baguette review-tasks bulk-create --session-id review_01HX… --file -
+```
+
+CLI overrides (`--assignee` / `--priority` / `--title` / `--instructions`)
+win over file-level `defaults` so an operator can re-tag a batch
+without rewriting the JSON.
+
 ## Reference agents
 
 Two self-contained Python loops ship in the repo:
@@ -299,6 +353,11 @@ Two self-contained Python loops ship in the repo:
   compares before/after snapshots, and records a `pass` / `fail`
   verdict. Snapshot-only — never drives the simulator, so it can run
   alongside a worker without contending for the device. Pure stdlib.
+- [`../examples/agent/agent_canvas_to_baguette.py`](../examples/agent/agent_canvas_to_baguette.py)
+  — adapter that reads an `agent-canvas/latest/manifest.json` (Expo
+  Router route inventory) and emits the bulk-create envelope on
+  stdout. Pipe it into `baguette review-tasks bulk-create --file -`
+  to queue one task per route. Pure stdlib.
 
 Copy either as a starting point for an MCP server, a CI hook, or an
 autonomous-test runner. The logic is intentionally <200 LOC each so

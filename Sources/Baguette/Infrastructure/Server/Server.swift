@@ -278,6 +278,13 @@ struct Server: Sendable {
                 taskStore: reviewTaskStore
             )
         }
+        router.post("/reviews/:id/tasks/bulk") { [reviewTaskStore] r, _ in
+            await Self.bulkCreateReviewTasks(
+                id: Self.reviewIdParam(r),
+                request: r,
+                taskStore: reviewTaskStore
+            )
+        }
         router.post("/reviews/:id/flows") { [reviewStore] r, _ in
             await Self.createReviewFlow(
                 id: Self.reviewIdParam(r),
@@ -1263,6 +1270,34 @@ struct Server: Sendable {
         do {
             let input = try await decodeJSON(ReviewSourceSearchInput.self, from: request)
             let result = try ReviewSourceSearcher.search(input)
+            return jsonResponse(try jsonEncoder.encode(result))
+        } catch {
+            return errorJSON(String(describing: error), status: .badRequest)
+        }
+    }
+
+    /// Skinny bulk create — accepts a JSON envelope of N items + shared
+    /// defaults, returns `{created, errors}` so partial-success is
+    /// visible. Does NOT generate per-task bundles or context.md;
+    /// callers that need those go through the single-task route
+    /// (`POST /reviews/:id/tasks`) which keeps the interactive bundle
+    /// flow. Use case: external sources (e.g. an agent-canvas route
+    /// inventory) want to queue N tasks for the agent in one call.
+    private static func bulkCreateReviewTasks(
+        id: String,
+        request: Request,
+        taskStore: any ReviewTaskStore
+    ) async -> Response {
+        do {
+            let bodyInput = try await decodeJSON(ReviewTaskBulkCreateInput.self, from: request)
+            // Path id wins so the caller can't accidentally retarget
+            // a batch by mutating the body alone.
+            let input = ReviewTaskBulkCreateInput(
+                sessionId: id,
+                defaults: bodyInput.defaults,
+                tasks: bodyInput.tasks
+            )
+            let result = try taskStore.bulkCreateTasks(input: input)
             return jsonResponse(try jsonEncoder.encode(result))
         } catch {
             return errorJSON(String(describing: error), status: .badRequest)
