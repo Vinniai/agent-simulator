@@ -11,11 +11,12 @@ struct CommandParsingTests {
 
     // MARK: - root
 
-    @Test func `baguette root lists every subcommand`() {
+    @Test func `agent-sim root lists every subcommand`() {
         let cfg = Baguette.configuration
-        #expect(cfg.commandName == "baguette")
+        #expect(cfg.commandName == "agent-sim")
         let names = cfg.subcommands.map { $0.configuration.commandName }
         #expect(Set(names) == [
+            "agent",
             "list", "boot", "shutdown", "input", "stream",
             "tap", "swipe", "pinch", "pan", "press",
             "key", "type",
@@ -25,9 +26,14 @@ struct CommandParsingTests {
         ])
     }
 
-    @Test func `baguette root exposes version`() {
-        #expect(Baguette.configuration.version == baguetteVersion)
-        #expect(!baguetteVersion.isEmpty)
+    @Test func `agent-sim root exposes version`() {
+        #expect(Baguette.configuration.version == agentSimVersion)
+        #expect(!agentSimVersion.isEmpty)
+    }
+
+    @Test func `agent command exposes feedback-loop subcommands`() {
+        let names = AgentCommand.configuration.subcommands.map { $0.configuration.commandName }
+        #expect(Set(names) == ["bootstrap", "status", "quality-gate"])
     }
 
     // MARK: - list

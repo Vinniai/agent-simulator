@@ -19,7 +19,11 @@ final class FileReviewStore: ReviewStore, @unchecked Sendable {
 
     static func defaultRoot() -> URL {
         let home = FileManager.default.homeDirectoryForCurrentUser
-        return home.appendingPathComponent(".baguette/reviews", isDirectory: true)
+        if let override = ProcessInfo.processInfo.environment["AGENT_SIM_REVIEW_ROOT"],
+           !override.isEmpty {
+            return URL(fileURLWithPath: override, isDirectory: true)
+        }
+        return home.appendingPathComponent(".agent-sim/reviews", isDirectory: true)
     }
 
     func createSession(name: String) throws -> ReviewSession {
@@ -115,4 +119,3 @@ final class FileReviewStore: ReviewStore, @unchecked Sendable {
         "\(prefix)-\(UUID().uuidString.lowercased())"
     }
 }
-

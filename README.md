@@ -1,13 +1,13 @@
 <p align="center">
-  <img src="assets/logo.png" alt="Baguette" width="240">
+  <img src="assets/logo.png" alt="Agent Sim" width="240">
 </p>
 
-<h1 align="center">Baguette</h1>
+<h1 align="center">Agent Sim</h1>
 
-<p align="center"><em>Bon appétit.</em></p>
+<p align="center"><em>Agentic simulator feedback loops for mobile teams.</em></p>
 
 <p align="center">
-  Headless iOS Simulator manager + host-side input injection for iOS 26.
+  Headless iOS Simulator control, screenshot capture, markup, review tasks, and quality gates for Expo and native mobile apps.
 </p>
 
 <p align="center">
@@ -20,11 +20,14 @@
   <img src="https://img.shields.io/badge/Xcode-26-1575F9?logo=xcode" alt="Xcode 26">
 </p>
 
-A single Swift CLI — **`baguette`** — that creates / boots / shuts down
+A single Swift CLI — **`agent-sim`** — that creates / boots / shuts down
 simulator devices, streams their screens at 60 fps, and injects taps
 / swipes / multi-finger touches without booting the Simulator.app GUI.
 Optionally serves a self-contained web UI on `localhost` so you can
-control any booted simulator from a browser.
+control any booted simulator from a browser. Agent Sim also records
+review sessions: screenshots, accessibility trees, markups, source
+changes, verification snapshots, and score gates that let an agent run a
+self-building feedback loop.
 
 ## Demo
 
@@ -45,18 +48,22 @@ https://github.com/user-attachments/assets/65dc62ee-f0c7-48fb-9c57-5bd267c8c02f
   all through SimulatorKit's 9-argument
   `IndigoHIDMessageForMouseNSEvent` from Xcode 26's preview-kit. No dylib
   injection, no `DYLD_INSERT_LIBRARIES`, no per-app priming.
-- **Accessibility tree** — `baguette describe-ui` returns the on-screen
+- **Agent loop** — `agent-sim agent bootstrap` creates a review session
+  and starter tasks for capture → markup → enhance → verify. `agent-sim
+  agent quality-gate` records the "no high recommendations, 8/10+"
+  screen-review gate against the task history.
+- **Accessibility tree** — `agent-sim describe-ui` returns the on-screen
   AX tree as JSON: per-node `role`, `label`, `value`, `identifier`, and
   `frame` in the same device-point coordinates as `tap` / `swipe`. Hit-test
   mode (`--x --y`) returns the topmost node under a coordinate. Powered by
   the private `AccessibilityPlatformTranslation` framework with a
   `bridgeTokenDelegate` we install ourselves to make the dispatcher work
   out of Simulator.app.
-- **Live unified-log stream** — `baguette logs --udid <X>` streams the
+- **Live unified-log stream** — `agent-sim logs --udid <X>` streams the
   booted simulator's `os_log` output line-by-line to stdout; `WS
   /simulators/:udid/logs` does the same to a browser. Predicate /
   bundle-id filters supported.
-- **Standalone web UI** — `baguette serve` opens `http://localhost:8421/simulators`
+- **Standalone web UI** — `agent-sim serve` opens `http://localhost:8421/simulators`
   with a list page, live stream, gesture input, and DeviceKit-sourced
   bezels for every simulator family.
 - **Device farm** — `http://localhost:8421/farm` is an interactive
@@ -75,17 +82,17 @@ https://github.com/user-attachments/assets/65dc62ee-f0c7-48fb-9c57-5bd267c8c02f
 ## Install
 
 ```bash
-brew install tddworks/tap/baguette
+brew install tddworks/tap/agent-sim
 ```
 
-Apple Silicon only. Requires Xcode 26 — `baguette` links against private
+Apple Silicon only. Requires Xcode 26 — `agent-sim` links against private
 SimulatorKit / CoreSimulator frameworks shipped with Xcode.
 
 ## Quickstart
 
 ```bash
 # Start the web UI
-baguette serve
+agent-sim serve
 
 # Single-device dashboard — list, boot/shutdown, per-device stream pages
 open http://localhost:8421/simulators
@@ -104,9 +111,9 @@ mouse/touch input, and the DeviceKit-sourced bezel.
 Headless from the terminal works too:
 
 ```bash
-baguette list
-baguette boot --udid <UDID>
-baguette tap --udid <UDID> --x 219 --y 478 --width 438 --height 954
+agent-sim list
+agent-sim boot --udid <UDID>
+agent-sim tap --udid <UDID> --x 219 --y 478 --width 438 --height 954
 ```
 
 ## Build from source
@@ -125,8 +132,13 @@ linking `CoreSimulator`, `SimulatorKit`, `IOSurface`, `VideoToolbox`,
 ## CLI
 
 ```
-baguette <command> [options]
+agent-sim <command> [options]
 
+  agent bootstrap [--project <path>] [--bundle-id <id>] [--name <name>]
+                                             Create a review session and starter
+                                             feedback-loop tasks
+  agent status [--session-id <id>]           Summarize sessions and task states
+  agent quality-gate <task-id> --score <n>   Record the 8/10+ review gate
   list [--json]                              List devices (default + custom sets;
                                              --json emits {"running":[…],"available":[…]})
   boot     --udid <UDID>                     Boot headlessly
@@ -179,11 +191,11 @@ baguette <command> [options]
   doctor   [--base http://127.0.0.1:8421] [--timeout 2.0] [--json]
 ```
 
-## `baguette serve` — the web UI
+## `agent-sim serve` — the web UI
 
 ```bash
-baguette serve --port 8421
-# [baguette] listening on http://127.0.0.1:8421/simulators
+agent-sim serve --port 8421
+# [agent-sim] listening on http://127.0.0.1:8421/simulators
 ```
 
 Open `http://localhost:8421/simulators` in any browser. You get the

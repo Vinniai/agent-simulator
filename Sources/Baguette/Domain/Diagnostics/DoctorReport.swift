@@ -21,7 +21,7 @@ struct DoctorReport: Codable, Equatable, Sendable {
     }
 
     func textReport() -> String {
-        var lines: [String] = ["baguette doctor"]
+        var lines: [String] = ["agent-sim doctor"]
         lines.append("  cli version       \(cliVersion)")
         lines.append("  build mode        \(isDebugBuild ? "debug" : "release")")
         lines.append("  booted sims       \(bootedSimulatorCount.map(String.init(describing:)) ?? "unknown")")

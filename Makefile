@@ -1,8 +1,8 @@
-Baguette:
+agent-sim:
 	./build.sh
 
 clean:
 	swift package clean 2>/dev/null || true
-	rm -f Baguette
+	rm -f agent-sim Baguette
 
-.PHONY: Baguette clean
+.PHONY: agent-sim clean

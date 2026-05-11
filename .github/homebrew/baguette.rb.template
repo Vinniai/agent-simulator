@@ -1,14 +1,14 @@
 # typed: false
 # frozen_string_literal: true
 
-class Baguette < Formula
-  desc "Headless iOS Simulator manager + host-side input injection for iOS 26"
+class AgentSim < Formula
+  desc "Agent-driven iOS simulator control, capture, markup, and review"
   homepage "https://github.com/tddworks/baguette"
   version "__VERSION__"
   license "Apache-2.0"
 
   on_arm do
-    url "https://github.com/tddworks/baguette/releases/download/__VERSION__/baguette___VERSION___macOS_arm64.tar.gz"
+    url "https://github.com/tddworks/baguette/releases/download/__VERSION__/agent-sim___VERSION___macOS_arm64.tar.gz"
     sha256 "__SHA256_ARM64__"
   end
 
@@ -21,20 +21,20 @@ class Baguette < Formula
     # runtime — WebRoot resolves the bundle via dladdr from the
     # executable's directory. Install both into libexec and symlink
     # the binary into bin.
-    libexec.install "Baguette" => "baguette"
+    libexec.install "agent-sim"
     libexec.install "Baguette_Baguette.bundle"
-    bin.install_symlink libexec/"baguette"
+    bin.install_symlink libexec/"agent-sim"
   end
 
   def caveats
     <<~EOS
-      baguette links against private SimulatorKit and CoreSimulator
+      agent-sim links against private SimulatorKit and CoreSimulator
       frameworks shipped with Xcode 26. Make sure Xcode 26 is installed
-      and `xcode-select` points at it before running `baguette serve`.
+      and `xcode-select` points at it before running `agent-sim serve`.
     EOS
   end
 
   test do
-    assert_match "baguette", shell_output("#{bin}/baguette --help")
+    assert_match "agent-sim", shell_output("#{bin}/agent-sim --help")
   end
 end
