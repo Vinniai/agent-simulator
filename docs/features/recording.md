@@ -6,10 +6,11 @@ farm focus pane) toggles it on; clicking again stops, the file shows
 up as a download link in the sidebar list.
 
 The recording reuses what the live view already has on the page —
-the bezel `<img>` DeviceFrame loaded, the chrome layout already
-fetched, the live decoded canvas StreamSession is painting, and
-PinchOverlay's existing dot positions. Nothing extra is fetched or
-allocated until Record is pressed.
+the bezel `<img>` the Baguette SDK loaded, the screen geometry from
+the SDK's `SimulatorDefinition.screen` (viewport / rect / clipRadius),
+the live decoded canvas StreamSession is painting, and PinchOverlay's
+existing dot positions. Nothing extra is fetched or allocated until
+Record is pressed.
 
 If you want the end-to-end tap-to-`UITouch` story, read
 [`../ARCHITECTURE.md`](../ARCHITECTURE.md). This doc is scoped to
@@ -40,28 +41,28 @@ client-side.
 GET /recorder.js                    — BrowserRecorder module
 ```
 
-No new server endpoints. The bezel image and chrome layout the
-recorder uses are the same `/simulators/:udid/bezel.png` and
-`/simulators/:udid/chrome.json` the live view already fetches; the
-recorder doesn't refetch them — it reuses the references DeviceFrame
-already holds.
+No new server endpoints. The bezel image and screen geometry the
+recorder uses are the same `/simulators/:udid/bezel.png` (the bare
+variant via `?buttons=false`) and `/simulators/:udid/definition.json`
+the SDK already fetches; the recorder doesn't refetch them — it
+reuses the references the SDK's `Bezel` part already holds.
 
 ## Pipeline
 
 ```
 Live view (DOM, untouched while idle)
-  ├── DeviceFrame: <img bezel> + <div screenArea> + <canvas>
-  └── PinchOverlay: <div container> + <div> dots
+  ├── SDK Bezel: <img bezel> + <div screenArea> + <canvas>
+  └── PinchOverlay (SDK gesture): <div container> + <div> dots
 
    ── Record pressed ──────────────────────────────────────
    ↓
 BrowserRecorder.start()
-   1. allocate compose canvas at layout.composite size
+   1. allocate compose canvas at screen.viewport size
    2. start rAF compose loop:
         clearRect
         drawImage(frameImg)                     ← bezel under
-        clip(roundRect screen)
-          drawImage(sourceCanvas, screenRect)   ← live frames
+        clip(roundRect screen.rect, clipRadius)
+          drawImage(sourceCanvas, screen.rect)  ← live frames
           paintOverlayDots(overlayHost)         ← pinch dots
    3. compose.captureStream(60) → MediaRecorder
 
@@ -120,10 +121,10 @@ recording matches what the user sees post-bezel, post-overlay.
 
 ```js
 const rec = new BrowserRecorder({
-  canvas,        // surface.canvas — already painting
-  frameImg,      // surface.frameImg — already loaded
-  layout,        // chrome.json layout — already fetched
-  overlayHost,   // pinchOverlay.container — already in DOM
+  canvas,        // sim.canvas — already painting
+  frameImg,      // sim._bezel.frameImg — already loaded
+  screen,        // sim.screen.def — SDK SimulatorDefinition.screen
+  overlayHost,   // sim.pinchOverlayContainer — already in DOM
   fps: 60,
 });
 rec.start();
@@ -240,8 +241,8 @@ this.focus.show(device, tile, {
   getRecorderContext: () => ({
     canvas:      tile?.canvas || null,
     frameImg:    focusScreen?.querySelector('img'),
-    layout:      this.chromeLayouts.get(udid) || null,
-    overlayHost: tile?.pinchOverlay?.container || null,
+    screen:      this.definitions.get(udid)?.screen || null,
+    overlayHost: tile?.overlayContainer() || null,
   }),
 });
 ```
@@ -257,13 +258,15 @@ Resources/Web/
 ├── recorder.js           BrowserRecorder (this feature)
 ├── stream-session.js     decode + paint loop (unchanged)
 ├── frame-decoder.js      MJPEG / AVCC decoders (unchanged)
-├── device-frame.js       bezel chrome for the live view (unchanged)
-├── capture-gallery.js    one-shot screenshot composite (unchanged)
-├── sim-input.js          PinchOverlay + MouseGestureSource (unchanged)
+├── capture-gallery.js    one-shot screenshot composite (SDK shape)
+├── baguette/             Baguette SDK
+│   ├── parts/bezel.js    bezel chrome for the live view
+│   ├── parts/screen.js   screen + PointerInterpreter + PinchOverlay
+│   └── …
 ├── sim-stream.js         single-device orchestrator
 └── farm/
     ├── farm-focus.js     focus pane
-    ├── farm-tile.js      per-device StreamSession
+    ├── farm-tile.js      per-device StreamSession + SDK Simulator
     └── …
 ```
 
