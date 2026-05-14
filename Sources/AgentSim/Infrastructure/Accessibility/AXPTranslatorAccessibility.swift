@@ -92,7 +92,31 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
 
     // MARK: - tree fetch
 
-    private func fetchTree(hitTest: Point?) throws -> AXNode? {
+    /// The pieces every AXP entry point needs: a working translator,
+    /// a registered token, the frontmost app's root element (which
+    /// carries the host-window frame), an `AXFrameTransform` for
+    /// projecting/unprojecting coordinates, and the per-call deadline.
+    /// Held together inside the closure passed to
+    /// `withAXPContext(_:)`, which owns the dispatcher register +
+    /// unregister around it.
+    private struct AXPContext {
+        let translator: NSObject
+        let token: String
+        let frontmostRoot: NSObject
+        let transform: AXFrameTransform
+        let deadline: Date
+    }
+
+    /// Run `body` inside a fully-prepared AXP context. Handles the
+    /// dispatcher token lifecycle (register on entry, unregister on
+    /// exit), translator + frontmost-app resolution, and the
+    /// host-coord ↔ device-point `AXFrameTransform` setup. Returns
+    /// `nil` if any setup step fails (framework not loaded, device
+    /// missing, frontmost app not resolvable, etc.) — same nil
+    /// semantics each entry point had pre-refactor.
+    private func withAXPContext<T>(
+        _ body: (AXPContext) throws -> T?
+    ) throws -> T? {
         guard Self.isAvailable else {
             logErr("[ax] framework / dispatcher not available")
             return nil
@@ -117,23 +141,36 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
         }
         Self.stamp(token: token, on: translation)
 
-        guard let rootElement = Self.macPlatformElement(
+        guard let frontmostRoot = Self.macPlatformElement(
             translator: translator, translation: translation
         ) else {
             log("[ax] no mac platform element from translation")
             return nil
         }
-        Self.stampElementTranslation(token: token, on: rootElement)
-        Self.stampSubtree(rootElement, token: token, depthCap: Self.maxDepth)
-
         let pointSize = Self.devicePointSize(for: device)
-        let rootFrame = AXElementReader.frame(of: rootElement)
-        return AXNode.walk(
-            from: rootElement,
-            transform: AXFrameTransform(rootFrame: rootFrame, pointSize: pointSize),
-            depthCap: Self.maxDepth,
+        let rootFrame = AXElementReader.frame(of: frontmostRoot)
+        let transform = AXFrameTransform(rootFrame: rootFrame, pointSize: pointSize)
+
+        return try body(AXPContext(
+            translator: translator,
+            token: token,
+            frontmostRoot: frontmostRoot,
+            transform: transform,
             deadline: deadline
-        )
+        ))
+    }
+
+    private func fetchTree(hitTest: Point?) throws -> AXNode? {
+        try withAXPContext { ctx in
+            Self.stampElementTranslation(token: ctx.token, on: ctx.frontmostRoot)
+            Self.stampSubtree(ctx.frontmostRoot, token: ctx.token, depthCap: Self.maxDepth)
+            return AXNode.walk(
+                from: ctx.frontmostRoot,
+                transform: ctx.transform,
+                depthCap: Self.maxDepth,
+                deadline: ctx.deadline
+            )
+        }
     }
 
     /// Server-side hit-test path. Walks the same handshake as
@@ -150,69 +187,35 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
     /// `fetchTree` uses, so callers get identical value-type
     /// semantics either way.
     private func hitTestServerSide(point: Point) throws -> AXNode? {
-        guard Self.isAvailable else {
-            logErr("[ax] framework / dispatcher not available")
-            return nil
+        try withAXPContext { ctx in
+            let hostPoint = ctx.transform.unmap(CGPoint(x: point.x, y: point.y))
+
+            guard let hitTranslation = Self.objectAtPoint(
+                translator: ctx.translator,
+                point: hostPoint,
+                displayId: 0,
+                token: ctx.token
+            ) else {
+                // No element under that point. Distinct from "selector
+                // missing" — that case is gated by
+                // `supportsServerSideHitTest` upstream.
+                return nil
+            }
+            Self.stamp(token: ctx.token, on: hitTranslation)
+
+            guard let hitElement = Self.macPlatformElement(
+                translator: ctx.translator, translation: hitTranslation
+            ) else { return nil }
+            Self.stampElementTranslation(token: ctx.token, on: hitElement)
+            Self.stampSubtree(hitElement, token: ctx.token, depthCap: Self.maxDepth)
+
+            return AXNode.walk(
+                from: hitElement,
+                transform: ctx.transform,
+                depthCap: Self.maxDepth,
+                deadline: ctx.deadline
+            )
         }
-        guard let device = resolveDevice() else {
-            logErr("[ax] device not found: \(udid)")
-            return nil
-        }
-
-        let token = UUID().uuidString
-        let deadline = Date().addingTimeInterval(Self.xpcTimeoutSeconds)
-        Self.sharedDispatcher.register(device: device, token: token, deadline: deadline)
-        defer { Self.sharedDispatcher.unregister(token: token) }
-
-        guard let translator = Self.sharedTranslator else { return nil }
-
-        // We need the frontmost app's root frame to invert the
-        // caller's device-point coordinate back into the host
-        // coordinate space that AXP's `objectAtPoint` expects.
-        guard let frontmost = Self.frontmostApplication(
-            translator: translator, token: token
-        ) else {
-            log("[ax] no frontmost application for udid=\(udid)")
-            return nil
-        }
-        Self.stamp(token: token, on: frontmost)
-
-        guard let frontmostRoot = Self.macPlatformElement(
-            translator: translator, translation: frontmost
-        ) else {
-            log("[ax] no mac platform element from translation")
-            return nil
-        }
-        let pointSize = Self.devicePointSize(for: device)
-        let rootFrame = AXElementReader.frame(of: frontmostRoot)
-        let transform = AXFrameTransform(rootFrame: rootFrame, pointSize: pointSize)
-        let hostPoint = transform.unmap(CGPoint(x: point.x, y: point.y))
-
-        guard let hitTranslation = Self.objectAtPoint(
-            translator: translator,
-            point: hostPoint,
-            displayId: 0,
-            token: token
-        ) else {
-            // No element under that point. Distinct from "selector
-            // missing" — that case is gated by
-            // `supportsServerSideHitTest` upstream.
-            return nil
-        }
-        Self.stamp(token: token, on: hitTranslation)
-
-        guard let hitElement = Self.macPlatformElement(
-            translator: translator, translation: hitTranslation
-        ) else { return nil }
-        Self.stampElementTranslation(token: token, on: hitElement)
-        Self.stampSubtree(hitElement, token: token, depthCap: Self.maxDepth)
-
-        return AXNode.walk(
-            from: hitElement,
-            transform: transform,
-            depthCap: Self.maxDepth,
-            deadline: deadline
-        )
     }
 
     /// Stamp every reachable child translation with `token` so
