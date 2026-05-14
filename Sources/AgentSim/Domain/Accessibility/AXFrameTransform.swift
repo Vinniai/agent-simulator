@@ -33,4 +33,27 @@ struct AXFrameTransform: Equatable, Sendable {
             height: macFrame.size.height * scale
         )
     }
+
+    /// Inverse of `map(_:)`: takes a device-point coordinate (the
+    /// units callers pass into the gesture wire) and projects it
+    /// back to macOS host-window coordinates. Needed when feeding
+    /// AXP APIs that work in host coordinates — most notably
+    /// `objectAtPoint:displayId:bridgeDelegateToken:`, where the
+    /// translator interprets the point in its own host coordinate
+    /// space, not in device points. Falls back to identity under
+    /// the same zero-dimension conditions as `map(_:)`.
+    func unmap(_ devicePoint: CGPoint) -> CGPoint {
+        guard rootFrame.width > 0,
+              rootFrame.height > 0,
+              pointSize.width > 0,
+              pointSize.height > 0
+        else { return devicePoint }
+
+        let scale = pointSize.width / rootFrame.width
+        let yOffset = (pointSize.height - rootFrame.height * scale) / 2
+        return CGPoint(
+            x: devicePoint.x / scale + rootFrame.origin.x,
+            y: (devicePoint.y - yOffset) / scale + rootFrame.origin.y
+        )
+    }
 }
