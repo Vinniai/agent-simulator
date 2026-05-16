@@ -22,8 +22,15 @@ struct CommandParsingTests {
             "key", "type",
             "chrome", "screenshot", "describe-ui", "logs", "serve",
             "orientation", "diag-digitizer-trackpad", "review-tasks",
+            "notes",
             "doctor",
         ])
+    }
+
+    @Test func `notes command exposes send + listen subcommands`() {
+        let names = NotesCommand.configuration.subcommands
+            .map { $0.configuration.commandName }
+        #expect(Set(names) == ["list", "add", "promote", "watch"])
     }
 
     @Test func `agent-sim root exposes version`() {

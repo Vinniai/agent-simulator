@@ -28,6 +28,7 @@ struct AgentSim: AsyncParsableCommand {
             OrientationCommand.self,
             DiagDigitizerTrackpadCommand.self,
             ReviewTasksCommand.self,
+            NotesCommand.self,
             DoctorCommand.self,
         ]
     )
