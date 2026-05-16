@@ -442,6 +442,20 @@ struct Server: Sendable {
                 outbound: outbound
             )
         }
+        // Session-less notes inbox, pushed live. Same store the
+        // `notes watch` CLI polls and the `/m/:udid` composer writes
+        // to — the WS just diff-pushes the snapshot so a phone drawer
+        // updates without a 4 s poll. Read-only upstream: a client
+        // sends `{"type":"stop"}` (or closes) to end; writes still go
+        // through `POST /notes`.
+        router.ws("/notes/stream") { [notes] inbound, outbound, context in
+            await Self.notesWS(
+                status: context.request.uri.queryParameters.get("status"),
+                store: notes,
+                inbound: inbound,
+                outbound: outbound
+            )
+        }
         router.get("/reviews/:id/artifact") { [reviewStore] r, _ in
             Self.reviewArtifact(
                 id: Self.reviewIdParam(r),
@@ -1520,6 +1534,22 @@ struct Server: Sendable {
         return String(decoding: data, as: UTF8.self)
     }
 
+    /// The status-filtered inbox wrapped in a `notes_snapshot`
+    /// envelope (newest-first), or nil on a store failure. This is the
+    /// frame `WS /notes/stream` diff-and-pushes; `status` is parsed
+    /// leniently through `NoteFilter` (nil / unknown ⇒ all).
+    static func notesStreamSnapshotJSONString(
+        store: any Notes,
+        status: String?
+    ) -> String? {
+        guard let inbox = try? store.list() else { return nil }
+        let filtered = NoteFilter.from(status).apply(to: inbox)
+        guard let data = try? jsonEncoder.encode(NotesStreamSnapshot(notes: filtered)) else {
+            return nil
+        }
+        return String(decoding: data, as: UTF8.self)
+    }
+
     /// Flip a note to promoted, returning it as JSON. Nil when no note
     /// has that id (→ 404).
     static func promotedNoteJSONString(id: String, store: any Notes) -> String? {
@@ -1682,7 +1712,7 @@ struct Server: Sendable {
                     for try await frame in inbound {
                         guard frame.opcode == .text else { continue }
                         let line = String(buffer: frame.data)
-                        if Self.isReviewTaskWSStop(line) { break }
+                        if Self.isWSStopFrame(line) { break }
                         if await handleReviewTaskWSLine(
                             line: line,
                             taskStore: taskStore,
@@ -1699,6 +1729,51 @@ struct Server: Sendable {
             group.cancelAll()
         }
         try? await outbound.write(.text(#"{"type":"task_stream_stopped"}"#))
+    }
+
+    /// Push-only notes inbox stream. Diffs the `notes_snapshot`
+    /// envelope produced by the unit-tested
+    /// `notesStreamSnapshotJSONString` and re-emits only on change;
+    /// the inbound side just drains until `{"type":"stop"}` or close.
+    private static func notesWS(
+        status: String?,
+        store: any Notes,
+        inbound: WebSocketInboundStream,
+        outbound: WebSocketOutboundWriter
+    ) async {
+        try? await outbound.write(.text(#"{"type":"notes_stream_started"}"#))
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                var last = ""
+                while !Task.isCancelled {
+                    if let snapshot = notesStreamSnapshotJSONString(store: store, status: status) {
+                        if snapshot != last {
+                            last = snapshot
+                            try? await outbound.write(.text(snapshot))
+                        }
+                    } else {
+                        try? await outbound.write(.text(
+                            #"{"type":"notes_stream_error","error":"inbox unavailable"}"#
+                        ))
+                    }
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                }
+            }
+            group.addTask {
+                do {
+                    for try await frame in inbound {
+                        guard frame.opcode == .text else { continue }
+                        let line = String(buffer: frame.data)
+                        if Self.isWSStopFrame(line) { break }
+                    }
+                } catch {
+                    // socket closed; sibling task is cancelled below
+                }
+            }
+            await group.next()
+            group.cancelAll()
+        }
+        try? await outbound.write(.text(#"{"type":"notes_stream_stopped"}"#))
     }
 
     private static func handleReviewTaskWSLine(
@@ -1775,7 +1850,7 @@ struct Server: Sendable {
         }
     }
 
-    private static func isReviewTaskWSStop(_ line: String) -> Bool {
+    private static func isWSStopFrame(_ line: String) -> Bool {
         guard let data = line.data(using: .utf8),
               let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return false
@@ -2180,6 +2255,11 @@ private struct TaskStreamSnapshot: Codable, Sendable {
 private struct TaskStreamTask: Codable, Sendable {
     var type: String
     var task: ReviewTask
+}
+
+private struct NotesStreamSnapshot: Codable, Sendable {
+    var type = "notes_snapshot"
+    var notes: [Note]
 }
 
 private enum ReviewTaskWSError: Error, CustomStringConvertible {

@@ -49,7 +49,10 @@
   let logPanel = null;
   let axInspector = null;
   let lastAxNode = null;    // last element picked while in mobile select-mode
-  let activityTimer = null; // poll handle for the activity drawer
+  let activityTimer = null;     // fallback poll handle (only while WS down)
+  let activityStream = null;    // `WS /notes/stream` socket (primary)
+  let activityReconnect = null; // backoff timer for socket reconnect
+  let activityClosed = false;   // page unloading — stop reconnecting
   let lastPaintedSize = { w: 0, h: 0 };
   let layout = null;
   let deviceName = '';
@@ -785,9 +788,50 @@
   // drawer reflects notes other clients add and promotions picked up
   // by the review side. Always refreshes the header counts; only
   // re-renders the list body when the drawer is expanded.
+  // Live by default: subscribe to `WS /notes/stream` so a note left
+  // from anywhere (this composer, the `notes` CLI, another phone)
+  // lands in the drawer within the server's 0.5 s diff tick. The
+  // `/notes.json` poll is kept only as a fallback while the socket is
+  // down — one immediate fetch for first paint, then a slow 8 s
+  // backstop that the socket clears the moment it delivers.
   function startActivityPolling() {
     refreshActivity();
-    activityTimer = setInterval(refreshActivity, 4000);
+    connectActivityStream();
+  }
+
+  function connectActivityStream() {
+    let ws;
+    try {
+      const loc = window.location;
+      const proto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(proto + '//' + loc.host + '/notes/stream');
+    } catch (_) { startActivityFallback(); return; }
+    activityStream = ws;
+    ws.onopen = () => { stopActivityFallback(); };
+    ws.onmessage = (ev) => {
+      let env;
+      try { env = JSON.parse(ev.data); } catch (_) { return; }
+      if (!env || env.type !== 'notes_snapshot') return;
+      renderActivity(Array.isArray(env.notes) ? env.notes : []);
+    };
+    ws.onclose = () => {
+      activityStream = null;
+      if (activityClosed) return;
+      startActivityFallback();
+      activityReconnect = setTimeout(connectActivityStream, 3000);
+    };
+    ws.onerror = () => { try { ws.close(); } catch (_) { /* ignore */ } };
+  }
+
+  function startActivityFallback() {
+    if (activityTimer) return;
+    activityTimer = setInterval(refreshActivity, 8000);
+  }
+
+  function stopActivityFallback() {
+    if (!activityTimer) return;
+    clearInterval(activityTimer);
+    activityTimer = null;
   }
 
   async function refreshActivity() {
@@ -796,7 +840,12 @@
       const r = await fetch('/notes.json', { cache: 'no-store' });
       if (r.ok) notes = await r.json();
     } catch (_) { return; /* keep the last good render */ }
-    if (!Array.isArray(notes)) notes = [];
+    renderActivity(Array.isArray(notes) ? notes : []);
+  }
+
+  // Paint header counts always; only re-render the (potentially long)
+  // list body when the drawer is actually expanded.
+  function renderActivity(notes) {
     const queued = notes.filter((n) => !n.promoted).length;
     const picked = notes.filter((n) => n.promoted).length;
     const counts = document.querySelector('[data-role="naq-counts"]');
@@ -1025,7 +1074,10 @@
       try { if (touchSource) touchSource.detach(); } catch (_) { /* ignore */ }
       try { if (keyboardCapture) keyboardCapture.stop(); } catch (_) { /* ignore */ }
       try { if (axInspector) axInspector.detach(); } catch (_) { /* ignore */ }
+      activityClosed = true;
       try { if (activityTimer) clearInterval(activityTimer); } catch (_) { /* ignore */ }
+      try { if (activityReconnect) clearTimeout(activityReconnect); } catch (_) { /* ignore */ }
+      try { if (activityStream) activityStream.close(); } catch (_) { /* ignore */ }
     });
   }
 

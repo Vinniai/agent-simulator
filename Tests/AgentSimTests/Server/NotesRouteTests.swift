@@ -54,6 +54,38 @@ struct NotesRouteTests {
         #expect(Server.promotedNoteJSONString(id: "ghost", store: InMemoryNotes()) == nil)
     }
 
+    @Test func `notesStreamSnapshotJSONString wraps the inbox newest-first under a notes_snapshot envelope`() throws {
+        let store = InMemoryNotes()
+        _ = try store.add(NoteCreateInput(udid: "U", text: "first"))
+        _ = try store.add(NoteCreateInput(udid: "U", text: "second"))
+
+        let json = try #require(Server.notesStreamSnapshotJSONString(store: store, status: nil))
+
+        let snap = try Self.decoder.decode(NotesSnapshotProbe.self, from: Data(json.utf8))
+        #expect(snap.type == "notes_snapshot")
+        #expect(snap.notes.map(\.text) == ["second", "first"])
+    }
+
+    @Test func `notesStreamSnapshotJSONString honours the status filter`() throws {
+        let store = InMemoryNotes()
+        let promotable = try store.add(NoteCreateInput(udid: "U", text: "picked up one"))
+        _ = try store.add(NoteCreateInput(udid: "U", text: "still queued"))
+        _ = try store.promote(id: promotable.id)
+
+        let json = try #require(
+            Server.notesStreamSnapshotJSONString(store: store, status: "promoted")
+        )
+
+        let snap = try Self.decoder.decode(NotesSnapshotProbe.self, from: Data(json.utf8))
+        #expect(snap.notes.map(\.text) == ["picked up one"])
+        #expect(snap.notes.allSatisfy { $0.promoted })
+    }
+
+    private struct NotesSnapshotProbe: Decodable {
+        let type: String
+        let notes: [Note]
+    }
+
     // MARK: -
 
     private static let decoder: JSONDecoder = {
