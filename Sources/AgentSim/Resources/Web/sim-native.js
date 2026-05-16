@@ -14,13 +14,14 @@
   'use strict';
 
   // --- Activation gate ---------------------------------------------
-  // Match `/simulators/<udid>`; reject `/simulators` and
-  // `/simulators/`. UDIDs never contain `/`, so the second segment
-  // being non-empty is the discriminator.
+  // Match `/simulators/<udid>` (desktop deep-link) or `/m/<udid>`
+  // (mobile entry point); reject the bare `/simulators` and `/m`
+  // list/dashboard paths. UDIDs never contain `/`, so the second
+  // segment being non-empty is the discriminator.
   function deepLinkUdid() {
     const parts = location.pathname.split('/').filter(Boolean);
     if (parts.length !== 2) return null;
-    if (parts[0] !== 'simulators') return null;
+    if (parts[0] !== 'simulators' && parts[0] !== 'm') return null;
     const u = decodeURIComponent(parts[1]);
     if (!u) return null;
     return u;
@@ -30,16 +31,25 @@
   if (!udid) return; // not deep-link mode; let sim-list run.
   window.__agentSimNativeMode = true;
 
+  // `/m/<udid>` is the on-the-move mobile screen: same focus chrome,
+  // but stripped to the live stream + AX element picker + a
+  // chat-to-queue composer (no toolbar actions / format / logs). The
+  // first path segment is the discriminator (`m` vs `simulators`).
+  const isMobile = location.pathname.split('/').filter(Boolean)[0] === 'm';
+
   // --- State -------------------------------------------------------
   let session = null;
   let frame = null;
   let surface = null;
   let simInput = null;
   let mouseSource = null;
+  let touchSource = null;   // real multi-touch on phones/tablets
   let pinchOverlay = null;
   let keyboardCapture = null;
   let logPanel = null;
   let axInspector = null;
+  let lastAxNode = null;    // last element picked while in mobile select-mode
+  let activityTimer = null; // poll handle for the activity drawer
   let lastPaintedSize = { w: 0, h: 0 };
   let layout = null;
   let deviceName = '';
@@ -278,6 +288,18 @@
     applyStoredTheme();
     reflectActionable();
 
+    // Mobile-mode chrome: tag the root so the stylesheet hides the
+    // desktop toolbar clutter (format picker, actionable, rotate,
+    // logs/home/screenshot/app-switcher, sidebar/theme toggles),
+    // then mount the bottom dock — a collapsible activity drawer
+    // (what's queued / picked up) above the chat-to-queue composer.
+    if (isMobile) {
+      const root = document.getElementById('simNativeView');
+      if (root) root.setAttribute('data-mobile', 'true');
+      injectBottomDock();
+      startActivityPolling();
+    }
+
     // Reset iOS to portrait on page boot. Without this, a page
     // reload would leave our JS state at `currentOrientation =
     // 'portrait'` (rotation degrees 0) while iOS still holds
@@ -390,7 +412,11 @@
       screenArea: surface.screenArea,
       send: (payload) => session && session.send(payload),
       getDeviceSize: () => frame.screenSize(),
-      onSelect: (node) => renderAxPanel(panel, node),
+      onSelect: (node) => {
+        lastAxNode = node;
+        renderAxPanel(panel, node);
+        updateComposerContext();
+      },
       onEnableChange: (enabled) => {
         const btn = document.getElementById('nativeAxToggle');
         if (btn) btn.classList.toggle('active', enabled);
@@ -400,6 +426,12 @@
         }
       },
     });
+    // On the on-the-move screen the picker IS the primary interaction
+    // (tap = select an element to attach a note to), so it's on by
+    // default — the AX toggle in the bar still flips back to drive-mode.
+    if (isMobile) {
+      try { axInspector.enable(); } catch (_) { /* ignore */ }
+    }
   }
 
   function reflectFormat(format) {
@@ -467,6 +499,7 @@
     // be bound to the new session. Without the detach the old
     // overlay handlers stack up and pinch dots leak.
     if (mouseSource) { try { mouseSource.detach(); } catch (_) {} mouseSource = null; }
+    if (touchSource) { try { touchSource.detach(); } catch (_) {} touchSource = null; }
     if (pinchOverlay) { try { pinchOverlay.clear(); } catch (_) {} pinchOverlay = null; }
 
     const log = (msg) => console.log('[native]', msg);
@@ -493,6 +526,17 @@
       getOrientation: () => currentOrientation,
     });
     mouseSource.attach();
+    // Real touch (phones/tablets). Orientation remap is handled at the
+    // transport + overlay layer (both shared via simInput / pinchOverlay),
+    // so the touch source needs no getOrientation of its own. preventDefault()
+    // in its handlers stops the browser synthesising duplicate mouse events.
+    touchSource = new window.TouchGestureSource({
+      el: surface.screenArea,
+      input: simInput,
+      overlay: pinchOverlay,
+      log,
+    });
+    touchSource.attach();
   }
 
   // Wrap SimInputBridge's transport with a normalized-coord
@@ -675,6 +719,248 @@
     );
   }
 
+  // --- Bottom dock: activity drawer + chat-to-queue composer -------
+  // The on-the-move screen is just: live stream + AX element picker +
+  // this dock. The dock is one fixed glass bar at the bottom holding
+  // a collapsible Activity drawer (the inbox: what's queued vs picked
+  // up) above the composer. Typing a message + send POSTs to the
+  // session-less notes queue (`POST /notes`); if an AX element is
+  // picked its `_path` rides along so the note is anchored to the
+  // tapped element — promotable later into a review task. No session,
+  // no task id; the inbox is `GET /notes.json`.
+  function injectBottomDock() {
+    const root = document.getElementById('simNativeView');
+    if (!root || document.getElementById('nativeBottomDock')) return;
+    const dock = document.createElement('div');
+    dock.id = 'nativeBottomDock';
+    root.appendChild(dock);
+    injectActivityDrawer(dock);
+    injectQueueComposer(dock);
+  }
+
+  // Collapsible Activity drawer. Header is a button (counts +
+  // chevron) that shrinks/expands the list so the user can keep an
+  // eye on what's in progress without giving up the device view.
+  // Collapsed by default — the device stays as big as possible; the
+  // header still shows live counts.
+  const ACTIVITY_OPEN_KEY = 'agentsim.activityOpen';
+  function injectActivityDrawer(dock) {
+    const sec = document.createElement('section');
+    sec.id = 'nativeActivity';
+    sec.innerHTML =
+        '<button type="button" id="naqToggle" class="naq-head" ' +
+          'aria-label="Toggle activity">' +
+          '<svg class="naq-chev" viewBox="0 0 24 24" fill="none" ' +
+            'stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
+            'stroke-linejoin="round" width="14" height="14">' +
+            '<polyline points="6 9 12 15 18 9"/>' +
+          '</svg>' +
+          '<span class="naq-title">Activity</span>' +
+          '<span class="naq-counts" data-role="naq-counts">—</span>' +
+        '</button>' +
+        '<div class="naq-list" data-role="naq-list"></div>';
+    dock.appendChild(sec);
+    const open = localStorage.getItem(ACTIVITY_OPEN_KEY) === '1';
+    if (open) sec.setAttribute('data-open', 'true');
+    document.getElementById('naqToggle').addEventListener('click', () => {
+      const isOpen = sec.getAttribute('data-open') === 'true';
+      setActivityOpen(!isOpen);
+    });
+  }
+
+  function setActivityOpen(open) {
+    const sec = document.getElementById('nativeActivity');
+    if (!sec) return;
+    if (open) {
+      sec.setAttribute('data-open', 'true');
+      localStorage.setItem(ACTIVITY_OPEN_KEY, '1');
+      refreshActivity();
+    } else {
+      sec.removeAttribute('data-open');
+      localStorage.removeItem(ACTIVITY_OPEN_KEY);
+    }
+  }
+
+  // Poll the inbox every few seconds while the screen is open so the
+  // drawer reflects notes other clients add and promotions picked up
+  // by the review side. Always refreshes the header counts; only
+  // re-renders the list body when the drawer is expanded.
+  function startActivityPolling() {
+    refreshActivity();
+    activityTimer = setInterval(refreshActivity, 4000);
+  }
+
+  async function refreshActivity() {
+    let notes = [];
+    try {
+      const r = await fetch('/notes.json', { cache: 'no-store' });
+      if (r.ok) notes = await r.json();
+    } catch (_) { return; /* keep the last good render */ }
+    if (!Array.isArray(notes)) notes = [];
+    const queued = notes.filter((n) => !n.promoted).length;
+    const picked = notes.filter((n) => n.promoted).length;
+    const counts = document.querySelector('[data-role="naq-counts"]');
+    if (counts) {
+      counts.textContent = notes.length
+          ? `${queued} queued · ${picked} picked up`
+          : 'empty';
+    }
+    const sec = document.getElementById('nativeActivity');
+    if (sec && sec.getAttribute('data-open') === 'true') {
+      renderActivityList(notes);
+    }
+  }
+
+  function renderActivityList(notes) {
+    const list = document.querySelector('[data-role="naq-list"]');
+    if (!list) return;
+    if (!notes.length) {
+      list.innerHTML = '<div class="naq-empty">No messages yet. ' +
+          'Pick an element and leave one below.</div>';
+      return;
+    }
+    list.innerHTML = notes.map((n) => {
+      const picked = !!n.promoted;
+      const badge = picked
+          ? '<span class="naq-badge picked">Picked up</span>'
+          : '<span class="naq-badge queued">Queued</span>';
+      const anchor = n.axPath
+          ? '<span class="naq-anchor" title="' + esc(n.axPath) + '">⌖ '
+              + esc(shortPath(n.axPath)) + '</span>'
+          : '';
+      return '<div class="naq-item' + (picked ? ' is-picked' : '') + '">' +
+               '<div class="naq-item-top">' + badge +
+                 '<span class="naq-time">' + esc(relativeTime(n.createdAt))
+                 + '</span></div>' +
+               '<div class="naq-text">' + esc(n.text || '') + '</div>' +
+               anchor +
+             '</div>';
+    }).join('');
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // Trim a JSON-pointer-ish AX path to its tail so it fits the chip.
+  function shortPath(p) {
+    const parts = String(p || '').split('/').filter(Boolean);
+    return parts.length <= 2 ? p : '…/' + parts.slice(-2).join('/');
+  }
+
+  function relativeTime(iso) {
+    const t = Date.parse(iso);
+    if (!Number.isFinite(t)) return '';
+    const s = Math.max(0, Math.round((Date.now() - t) / 1000));
+    if (s < 45) return 'just now';
+    const m = Math.round(s / 60);
+    if (m < 60) return m + 'm ago';
+    const h = Math.round(m / 60);
+    if (h < 24) return h + 'h ago';
+    return Math.round(h / 24) + 'd ago';
+  }
+
+  function injectQueueComposer(dock) {
+    if (document.getElementById('nativeQueueComposer')) return;
+    const form = document.createElement('form');
+    form.id = 'nativeQueueComposer';
+    form.setAttribute('autocomplete', 'off');
+    form.innerHTML =
+        '<div id="nqcContext" class="nqc-context" hidden>' +
+          '<span class="nqc-ctx-dot"></span>' +
+          '<span class="nqc-ctx-label" data-role="nqc-ctx-label"></span>' +
+          '<button type="button" class="nqc-ctx-clear" data-role="nqc-ctx-clear" ' +
+            'aria-label="Detach element">×</button>' +
+        '</div>' +
+        '<div class="nqc-row">' +
+          '<input id="nqcInput" class="nqc-input" type="text" ' +
+            'placeholder="Leave a message for the queue…" ' +
+            'enterkeyhint="send" autocapitalize="sentences" />' +
+          '<button id="nqcSend" class="nqc-send" type="submit" ' +
+            'aria-label="Add to queue">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+              'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ' +
+              'width="18" height="18">' +
+              '<path d="M4 12 20 4 14 20l-3-7z"/>' +
+            '</svg>' +
+          '</button>' +
+        '</div>' +
+        '<div id="nqcStatus" class="nqc-status" role="status"></div>';
+    dock.appendChild(form);
+    form.addEventListener('submit', (e) => { e.preventDefault(); submitNote(); });
+    form.querySelector('[data-role="nqc-ctx-clear"]')
+        .addEventListener('click', () => {
+          lastAxNode = null;
+          if (axInspector) try { axInspector.clearSelections(); } catch (_) {}
+          renderAxPanel(document.getElementById('nativeAxHost'), null);
+          updateComposerContext();
+        });
+    updateComposerContext();
+  }
+
+  // Reflect the picked AX element as a chip above the input so the
+  // user can see what their next note will be anchored to (and detach
+  // it). Falls back to "No element — note will be unanchored".
+  function updateComposerContext() {
+    const ctx = document.getElementById('nqcContext');
+    if (!ctx) return;
+    const label = ctx.querySelector('[data-role="nqc-ctx-label"]');
+    if (lastAxNode && (lastAxNode.label || lastAxNode.role || lastAxNode._path)) {
+      const name = lastAxNode.label || lastAxNode.role || 'element';
+      const role = lastAxNode.role && lastAxNode.label ? ' · ' + lastAxNode.role : '';
+      if (label) label.textContent = name + role;
+      ctx.hidden = false;
+    } else {
+      ctx.hidden = true;
+    }
+  }
+
+  function setComposerStatus(text, kind) {
+    const el = document.getElementById('nqcStatus');
+    if (!el) return;
+    el.textContent = text || '';
+    el.dataset.kind = kind || '';
+  }
+
+  // POST the message onto the session-less notes queue. axPath rides
+  // along when an element is picked. On success: clear the input,
+  // drop the anchor, flash a confirmation. The note is now in the
+  // inbox (`GET /notes.json`) and promotable to a review task.
+  async function submitNote() {
+    const input = document.getElementById('nqcInput');
+    const send = document.getElementById('nqcSend');
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) { input.focus(); return; }
+    if (send) send.disabled = true;
+    setComposerStatus('Sending…', '');
+    try {
+      const body = { udid, text };
+      if (lastAxNode && lastAxNode._path) body.axPath = lastAxNode._path;
+      const r = await fetch('/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      input.value = '';
+      lastAxNode = null;
+      if (axInspector) try { axInspector.clearSelections(); } catch (_) {}
+      renderAxPanel(document.getElementById('nativeAxHost'), null);
+      updateComposerContext();
+      setComposerStatus('Added to queue', 'ok');
+      setTimeout(() => setComposerStatus('', ''), 2400);
+      refreshActivity();
+    } catch (err) {
+      setComposerStatus('Could not send — tap to retry', 'err');
+      console.warn('[native] note submit failed', err);
+    } finally {
+      if (send) send.disabled = false;
+    }
+  }
+
   // Log sheet: lazy-mount on first open, leave the LogPanel attached
   // across subsequent toggles so a "close → reopen" doesn't drop the
   // backlog. Only `unmount` on page unload (or explicit close button
@@ -708,6 +994,7 @@
   function remountFrame() {
     if (!frame) return;
     if (mouseSource) { try { mouseSource.detach(); } catch (_) {} mouseSource = null; }
+    if (touchSource) { try { touchSource.detach(); } catch (_) {} touchSource = null; }
     if (pinchOverlay) { try { pinchOverlay.clear(); } catch (_) {} pinchOverlay = null; }
     if (keyboardCapture) { try { keyboardCapture.stop(); } catch (_) {} keyboardCapture = null; }
     if (surface && surface.bezelButtons) {
@@ -735,8 +1022,10 @@
     window.addEventListener('beforeunload', () => {
       try { if (session) session.stop(); } catch (_) { /* ignore */ }
       try { if (mouseSource) mouseSource.detach(); } catch (_) { /* ignore */ }
+      try { if (touchSource) touchSource.detach(); } catch (_) { /* ignore */ }
       try { if (keyboardCapture) keyboardCapture.stop(); } catch (_) { /* ignore */ }
       try { if (axInspector) axInspector.detach(); } catch (_) { /* ignore */ }
+      try { if (activityTimer) clearInterval(activityTimer); } catch (_) { /* ignore */ }
     });
   }
 

@@ -395,7 +395,8 @@
     _buildOverlay() {
       const ov = document.createElement('canvas');
       ov.style.cssText =
-        'position:absolute;inset:0;pointer-events:none;display:none;z-index:5';
+        'position:absolute;inset:0;pointer-events:none;display:none;' +
+        'z-index:5;touch-action:none';
       this.overlay = ov;
       this.screenArea.appendChild(ov);
       this._sizeOverlay();
@@ -456,6 +457,61 @@
           this.removeSelection(this.hover._path);
         }
       });
+
+      // Touch path (phones / tablets). The mouse handlers above
+      // never fire on a touch-only device, and the browser's
+      // synthetic click arrives with no preceding hover (touch has
+      // no hover state), so picks would target nothing. We drive
+      // hover + pick straight from the touch points. preventDefault
+      // + stopPropagation keep the tap from bubbling to the
+      // TouchGestureSource bound on `screenArea` underneath — while
+      // the inspector is enabled the overlay OWNS the touch (select
+      // an element); while disabled it's pointer-events:none and the
+      // simulator gets the touch (drive it normally).
+      const touchPoint = (t) => ({
+        clientX: t.clientX, clientY: t.clientY,
+        shiftKey: false, metaKey: false, ctrlKey: false,
+        preventDefault() {}, stopPropagation() {},
+      });
+      const isDragMode = () =>
+        this.selectionMode === 'brush' || this.selectionMode === 'rectangle';
+      ov.addEventListener('touchstart', (e) => {
+        if (!this.enabled) return;
+        e.preventDefault(); e.stopPropagation();
+        if (!this.tree) this._refresh();
+        const t = e.touches[0]; if (!t) return;
+        const pt = touchPoint(t);
+        if (isDragMode()) this._handleDragStart(pt);
+        else this._handleMove(pt);   // highlight element under finger
+      }, { passive: false });
+      ov.addEventListener('touchmove', (e) => {
+        if (!this.enabled) return;
+        e.preventDefault(); e.stopPropagation();
+        const t = e.touches[0]; if (!t) return;
+        const pt = touchPoint(t);
+        if (this._dragging) this._handleDragMove(pt);
+        else this._handleMove(pt);
+      }, { passive: false });
+      ov.addEventListener('touchend', (e) => {
+        if (!this.enabled) return;
+        e.preventDefault(); e.stopPropagation();
+        const t = e.changedTouches[0];
+        const pt = t ? touchPoint(t) : null;
+        if (isDragMode()) {
+          if (pt) this._handleDragEnd(pt);
+        } else {
+          if (pt) this._handleMove(pt);   // lift point is the pick
+          this._handleClick(pt || { shiftKey: false });
+        }
+      }, { passive: false });
+      ov.addEventListener('touchcancel', (e) => {
+        if (!this.enabled) return;
+        e.preventDefault(); e.stopPropagation();
+        this._dragging = false;
+        this._activeStroke = null;
+        this._activeRect = null;
+        this._draw();
+      }, { passive: false });
     }
 
     _sizeOverlay() {

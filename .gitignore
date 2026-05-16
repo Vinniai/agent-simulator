@@ -7,3 +7,6 @@ DerivedData/
 /AgentSim
 /Baguette
 .claude/scheduled_tasks.lock
+
+# Built release binary (build.sh output)
+/agent-sim

@@ -1,0 +1,4 @@
+# Upstream tddworks/baguette commits absorbed by manual port or deliberate skip.
+# Format: <short-sha>  <ported:|skip:> <one-line note>
+# Cherry-picked commits do NOT need an entry (the git -x trailer covers them).
+# See docs/UPSTREAM.md.

@@ -58,7 +58,11 @@
     frameImg.onerror = () => { frameImg.style.display = 'none'; };
 
     const screenArea = document.createElement('div');
-    screenArea.style.cssText = 'position:absolute;overflow:hidden;cursor:crosshair;z-index:2;';
+    // touch-action:none — the screen surface is a gesture target, not a
+    // scroll/zoom region. Without it mobile Safari/Chrome consume one-finger
+    // drags as page pan and two-finger as pinch-zoom before our
+    // TouchGestureSource ever sees them.
+    screenArea.style.cssText = 'position:absolute;overflow:hidden;cursor:crosshair;z-index:2;touch-action:none;';
     screenArea.tabIndex = 0;
     screenArea.style.outline = 'none';
 

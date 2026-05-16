@@ -22,6 +22,7 @@
   let gallery = null;       // CaptureGallery
   let simInput = null;
   let mouseSource = null;
+  let touchSource = null;   // real multi-touch on phones/tablets
   let pinchOverlay = null;
   let logPanel = null;
   let axInspector = null;   // AXInspector — accessibility-tree overlay
@@ -238,6 +239,7 @@
     if (axInspector) { axInspector.detach(); axInspector = null; }
     if (session) { session.stop(); session = null; }
     if (mouseSource) { mouseSource.detach(); mouseSource = null; }
+    if (touchSource) { touchSource.detach(); touchSource = null; }
     if (pinchOverlay) { pinchOverlay.clear(); pinchOverlay = null; }
     if (logPanel) { logPanel.detach(); logPanel = null; }
     simInput = null;
@@ -275,6 +277,16 @@
       log,
     });
     mouseSource.attach();
+    // Real touch (phones/tablets). Coexists with the mouse source: its
+    // touchstart/move/end handlers call preventDefault(), so the browser
+    // never synthesises the duplicate mouse events that would double-fire.
+    touchSource = new TouchGestureSource({
+      el: surface.screenArea,
+      input: simInput,
+      overlay: pinchOverlay,
+      log,
+    });
+    touchSource.attach();
   }
 
   function wireKeyboard() {
