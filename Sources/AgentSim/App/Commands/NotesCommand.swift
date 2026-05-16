@@ -94,13 +94,13 @@ struct NotesCommand: ParsableCommand {
     struct Watch: ParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "watch",
-            abstract: "Poll the inbox; print a JSON line whenever it changes"
+            abstract: "Poll — or live-consume — the inbox, printing a JSON line on every change"
         )
 
         @Option(name: .long, help: "Filter: queued | promoted | all")
         var status: String?
 
-        @Option(name: .long, help: "Polling interval in seconds")
+        @Option(name: .long, help: "Polling interval in seconds (poll mode)")
         var interval: Double = 1
 
         @Flag(name: .long, help: "Print one snapshot and exit")
@@ -109,29 +109,92 @@ struct NotesCommand: ParsableCommand {
         @Option(name: .long, help: "POST each changed snapshot to this URL")
         var webhook: String?
 
+        @Option(name: .long, help: "Consume a live WS /notes/stream URL instead of polling local SQLite")
+        var stream: String?
+
         func run() throws {
-            guard interval > 0 else {
-                throw ValidationError("--interval must be greater than zero")
-            }
-            let store = SQLiteNotes()
             let filter = NoteFilter.from(status)
             let hookURL = webhook.flatMap(URL.init(string:))
             if webhook != nil, hookURL == nil {
                 throw ValidationError("--webhook is not a valid URL")
             }
+            if let stream {
+                guard let url = URL(string: stream),
+                      let scheme = url.scheme?.lowercased(),
+                      scheme == "ws" || scheme == "wss" else {
+                    throw ValidationError("--stream must be a ws:// or wss:// URL")
+                }
+                try runStream(url: url, filter: filter, hookURL: hookURL)
+                return
+            }
+            guard interval > 0 else {
+                throw ValidationError("--interval must be greater than zero")
+            }
+            try runPoll(store: SQLiteNotes(), filter: filter, hookURL: hookURL)
+        }
+
+        /// Poll local SQLite, emitting on every inbox change.
+        private func runPoll(store: any Notes, filter: NoteFilter, hookURL: URL?) throws {
             var previous = ""
             repeat {
-                let notes = filter.apply(to: try store.list())
-                let line = try jsonLine(notes)
-                if line != previous {
-                    print(line)
-                    fflush(stdout)
-                    previous = line
-                    if let hookURL { postWebhook(hookURL, body: line) }
-                }
+                _ = try emit(filter.apply(to: store.list()),
+                             previous: &previous, hookURL: hookURL)
                 if once { return }
                 Thread.sleep(forTimeInterval: interval)
             } while true
+        }
+
+        /// Print a JSON line (and forward it to the webhook) only when
+        /// the filtered inbox actually changed. Shared by poll and
+        /// stream mode so "what gets emitted" is identical regardless
+        /// of how the snapshot arrived. Returns whether it emitted.
+        @discardableResult
+        private func emit(_ notes: [Note], previous: inout String, hookURL: URL?) throws -> Bool {
+            let line = try jsonLine(notes)
+            guard line != previous else { return false }
+            print(line)
+            fflush(stdout)
+            previous = line
+            if let hookURL { postWebhook(hookURL, body: line) }
+            return true
+        }
+
+        /// Live-consume `WS /notes/stream`. The frame decode
+        /// (`NotesStreamFrame.notes(in:)`) and the change/emit logic
+        /// are unit-tested; only the `URLSessionWebSocketTask` receive
+        /// loop here is integration-only — bridged to the blocking CLI
+        /// with a semaphore exactly like `postWebhook`. Lifecycle and
+        /// error frames decode to nil and are skipped; a closed socket
+        /// ends the watch (warned on stderr).
+        private func runStream(url: URL, filter: NoteFilter, hookURL: URL?) throws {
+            let task = URLSession.shared.webSocketTask(with: url)
+            task.resume()
+            defer { task.cancel(with: .goingAway, reason: nil) }
+            var previous = ""
+            while true {
+                let sem = DispatchSemaphore(value: 0)
+                var outcome: Result<URLSessionWebSocketTask.Message, Error>?
+                task.receive { outcome = $0; sem.signal() }
+                sem.wait()
+                switch outcome {
+                case .success(let message):
+                    let text: String
+                    switch message {
+                    case .string(let s): text = s
+                    case .data(let d):   text = String(decoding: d, as: UTF8.self)
+                    @unknown default:    text = ""
+                    }
+                    guard let notes = NotesStreamFrame.notes(in: text) else { continue }
+                    try emit(filter.apply(to: notes), previous: &previous, hookURL: hookURL)
+                    if once { return }
+                case .failure(let error):
+                    FileHandle.standardError.write(Data(
+                        "notes stream closed: \(error.localizedDescription)\n".utf8))
+                    return
+                case .none:
+                    return
+                }
+            }
         }
 
         /// Best-effort fire-and-wait POST. The CLI is a blocking
