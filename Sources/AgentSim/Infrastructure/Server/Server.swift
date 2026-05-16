@@ -365,8 +365,10 @@ struct Server: Sendable {
             }
             return jsonResponse(Data(json.utf8))
         }
-        router.post("/notes/:id/promote") { [notes] r, _ in
-            guard let json = Self.promotedNoteJSONString(id: Self.taskIdParam(r), store: notes) else {
+        router.post("/notes/:id/promote") { [notes, reviewTaskStore] r, _ in
+            guard let json = Self.promoteNoteJSONString(
+                id: Self.taskIdParam(r), notes: notes, taskStore: reviewTaskStore
+            ) else {
                 return errorJSON("unknown note", status: .notFound)
             }
             return jsonResponse(Data(json.utf8))
@@ -1550,11 +1552,25 @@ struct Server: Sendable {
         return String(decoding: data, as: UTF8.self)
     }
 
-    /// Flip a note to promoted, returning it as JSON. Nil when no note
-    /// has that id (→ 404).
-    static func promotedNoteJSONString(id: String, store: any Notes) -> String? {
-        guard let note = try? store.promote(id: id),
-              let data = try? jsonEncoder.encode(note) else {
+    /// Promote a note: flip it to picked-up *and* file it as a real
+    /// review task in the shared `notes` backlog (anchored to its AX
+    /// node when it had one). Returns a `{note, task}` envelope as
+    /// JSON. Nil when no note has that id (→ 404). The flag flip is
+    /// the source of truth for "picked up"; if bulk-create yields no
+    /// task we still surface the promoted note with `task: null`
+    /// rather than failing the pick-up.
+    static func promoteNoteJSONString(
+        id: String,
+        notes: any Notes,
+        taskStore: any ReviewTaskStore
+    ) -> String? {
+        guard let note = try? notes.promote(id: id) else { return nil }
+        let task = (try? taskStore.bulkCreateTasks(
+            input: note.reviewTaskBulkCreateInput()
+        ))?.created.first
+        guard let data = try? jsonEncoder.encode(
+            NotePromotionResult(note: note, task: task)
+        ) else {
             return nil
         }
         return String(decoding: data, as: UTF8.self)
@@ -2260,6 +2276,13 @@ private struct TaskStreamTask: Codable, Sendable {
 private struct NotesStreamSnapshot: Codable, Sendable {
     var type = "notes_snapshot"
     var notes: [Note]
+}
+
+/// `POST /notes/:id/promote` result: the picked-up note plus the
+/// review task it became (`null` only if bulk-create produced none).
+private struct NotePromotionResult: Codable, Sendable {
+    var note: Note
+    var task: ReviewTask?
 }
 
 private enum ReviewTaskWSError: Error, CustomStringConvertible {

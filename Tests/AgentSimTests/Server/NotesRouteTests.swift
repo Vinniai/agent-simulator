@@ -6,7 +6,7 @@ import Foundation
 ///
 /// As with the bezel routes we test the pure data-producing helpers
 /// (`createdNoteJSONString`, `notesInboxJSONString`,
-/// `promotedNoteJSONString`) rather than the Hummingbird `Response`
+/// `promoteNoteJSONString`) rather than the Hummingbird `Response`
 /// builders that wrap them — the route closure stays a thin
 /// `Optional<String> → 200 / 4xx` shim over a `Notes` aggregate.
 @Suite("Server notes routes")
@@ -39,19 +39,43 @@ struct NotesRouteTests {
         #expect(inbox.map(\.text) == ["second", "first"])
     }
 
-    @Test func `promotedNoteJSONString flips the note and returns it`() throws {
+    @Test func `promoteNoteJSONString flips the note and creates an anchored review task`() throws {
         let store = InMemoryNotes()
-        let note = try store.add(NoteCreateInput(udid: "U", text: "ship it"))
+        let tasks = Self.tempTaskStore()
+        let note = try store.add(NoteCreateInput(
+            udid: "U", text: "Empty state copy is wrong", axPath: "/win[0]/label[Empty]"
+        ))
 
-        let json = try #require(Server.promotedNoteJSONString(id: note.id, store: store))
+        let json = try #require(
+            Server.promoteNoteJSONString(id: note.id, notes: store, taskStore: tasks)
+        )
 
-        let promoted = try Self.decoder.decode(Note.self, from: Data(json.utf8))
-        #expect(promoted.id == note.id)
-        #expect(promoted.promoted)
+        let result = try Self.decoder.decode(NotePromotionProbe.self, from: Data(json.utf8))
+        #expect(result.note.id == note.id)
+        #expect(result.note.promoted)
+        let task = try #require(result.task)
+        #expect(task.sessionId == "notes")
+        #expect(task.instructions == "Empty state copy is wrong")
+        #expect(task.elements.map(\.axNodePath) == ["/win[0]/label[Empty]"])
+        // and it is now discoverable in the shared notes backlog
+        #expect(try tasks.listTasks(sessionId: "notes", status: nil).count == 1)
     }
 
-    @Test func `promotedNoteJSONString is nil for an unknown id`() {
-        #expect(Server.promotedNoteJSONString(id: "ghost", store: InMemoryNotes()) == nil)
+    @Test func `promoteNoteJSONString is nil for an unknown id`() {
+        #expect(Server.promoteNoteJSONString(
+            id: "ghost", notes: InMemoryNotes(), taskStore: Self.tempTaskStore()
+        ) == nil)
+    }
+
+    private struct NotePromotionProbe: Decodable {
+        let note: Note
+        let task: ReviewTask?
+    }
+
+    private static func tempTaskStore() -> SQLiteReviewTaskStore {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("agent-sim-notes-promote-\(UUID().uuidString)")
+        return SQLiteReviewTaskStore(url: dir.appendingPathComponent("tasks.sqlite"))
     }
 
     @Test func `notesStreamSnapshotJSONString wraps the inbox newest-first under a notes_snapshot envelope`() throws {

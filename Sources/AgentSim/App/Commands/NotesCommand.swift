@@ -65,13 +65,30 @@ struct NotesCommand: ParsableCommand {
         @Argument(help: "Note id")
         var id: String
 
+        /// Flip the note *and* file it as a review task in the shared
+        /// `notes` backlog (`Note.reviewTaskBulkCreateInput()` — unit
+        /// tested). The flag flip is the source of truth for picked-up;
+        /// a failed bulk-create still reports the promoted note with a
+        /// null task rather than aborting the pick-up.
         func run() throws {
+            let note: Note
             do {
-                try printJSON(SQLiteNotes().promote(id: id))
+                note = try SQLiteNotes().promote(id: id)
             } catch NotesError.notFound {
                 throw ValidationError("no note with id '\(id)'")
             }
+            let task = (try? SQLiteReviewTaskStore().bulkCreateTasks(
+                input: note.reviewTaskBulkCreateInput()
+            ))?.created.first
+            try printJSON(PromotedNote(note: note, task: task))
         }
+    }
+
+    /// `notes promote` output: the picked-up note and the review task
+    /// it became (`task` null only when bulk-create produced none).
+    private struct PromotedNote: Encodable {
+        let note: Note
+        let task: ReviewTask?
     }
 
     struct Watch: ParsableCommand {
