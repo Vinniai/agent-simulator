@@ -37,23 +37,34 @@ struct Server: Sendable {
     let chromes: any Chromes
     let reviewStore: any ReviewStore
     let reviewTaskStore: any ReviewTaskStore
+    /// Session-less notes queue — messages left from the mobile sim
+    /// view, promotable into a review task.
+    let notes: any Notes
     let host: String
     let port: Int
+    /// Extra hostnames trusted in addition to the bind host — e.g. a
+    /// Tailscale MagicDNS name so the UI is reachable over the tailnet
+    /// while still bound to loopback. Empty = loopback-only (default).
+    let trustedHosts: Set<String>
 
     init(
         simulators: any Simulators,
         chromes: any Chromes,
         reviewStore: any ReviewStore = FileReviewStore(),
         reviewTaskStore: any ReviewTaskStore = SQLiteReviewTaskStore(),
+        notes: any Notes = SQLiteNotes(),
         host: String = "127.0.0.1",
-        port: Int = 8421
+        port: Int = 8421,
+        trustedHosts: Set<String> = []
     ) {
         self.simulators = simulators
         self.chromes = chromes
         self.reviewStore = reviewStore
         self.reviewTaskStore = reviewTaskStore
+        self.notes = notes
         self.host = host
         self.port = port
+        self.trustedHosts = trustedHosts
     }
 
     func run() async throws {
@@ -80,16 +91,17 @@ struct Server: Sendable {
     private func registerRoutes(on router: Router<BasicWebSocketRequestContext>) {
         let bindHost = self.host
         let bindPort = self.port
+        let trusted = self.trustedHosts
         let rejectUntrustedBrowser: @Sendable (Request) -> Response? = { request in
             Self.rejectUntrustedBrowserRequest(
-                request, bindHost: bindHost, bindPort: bindPort
+                request, bindHost: bindHost, bindPort: bindPort, trustedHosts: trusted
             )
         }
         let trustedWebSocketUpgrade:
             @Sendable (Request, BasicWebSocketRequestContext) async throws -> RouterShouldUpgrade = {
                 request, _ in
                 Self.isTrustedBrowserRequest(
-                    request, bindHost: bindHost, bindPort: bindPort
+                    request, bindHost: bindHost, bindPort: bindPort, trustedHosts: trusted
                 ) ? .upgrade([:]) : .dontUpgrade
             }
 
@@ -101,14 +113,19 @@ struct Server: Sendable {
 
         // List page (HTML + sibling assets).
         router.get("/") { _, _ in Self.redirect(to: "/simulators") }
-        router.get("/simulators") { _, _ in Self.staticAsset("sim.html") }
+        router.get("/simulators") { r, _ in Self.staticAsset(Self.shellAsset(forPath: r.uri.path)) }
         router.get("/simulators.json") { [simulators] r, _ in
             if let rejected = rejectUntrustedBrowser(r) { return rejected }
             return Self.listJSON(simulators)
         }
 
         // Stream page — same sim.html, JS routes the inner view based on URL.
-        router.get("/simulators/:udid") { _, _ in Self.staticAsset("sim.html") }
+        router.get("/simulators/:udid") { r, _ in Self.staticAsset(Self.shellAsset(forPath: r.uri.path)) }
+
+        // Mobile single-sim entry — thumb-friendly focus view, same shell;
+        // the JS activation gate also accepts the `/m/<udid>` prefix.
+        router.get("/m/:udid")  { r, _ in Self.staticAsset(Self.shellAsset(forPath: r.uri.path)) }
+        router.head("/m/:udid") { r, _ in Self.staticAsset(Self.shellAsset(forPath: r.uri.path)) }
 
         // Simulator actions.
         router.post("/simulators/:udid/boot")     { [simulators] r, _ in
@@ -211,10 +228,10 @@ struct Server: Sendable {
         // the `farm/` subfolder; sibling assets (CSS + per-component
         // JS) resolve against `/farm/<file>`. Registered before the
         // catch-all `/:file` so `/farm` doesn't get hijacked.
-        router.get("/farm") { _, _ in Self.staticAsset("farm/farm.html") }
-        router.head("/farm") { _, _ in Self.staticAsset("farm/farm.html") }
-        router.get("/m") { _, _ in Self.staticAsset("farm/farm.html") }
-        router.head("/m") { _, _ in Self.staticAsset("farm/farm.html") }
+        router.get("/farm")  { r, _ in Self.staticAsset(Self.shellAsset(forPath: r.uri.path)) }
+        router.head("/farm") { r, _ in Self.staticAsset(Self.shellAsset(forPath: r.uri.path)) }
+        router.get("/m")     { r, _ in Self.staticAsset(Self.shellAsset(forPath: r.uri.path)) }
+        router.head("/m")    { r, _ in Self.staticAsset(Self.shellAsset(forPath: r.uri.path)) }
         router.get("/farm/:file") { r, _ in
             let name = String(r.uri.path.split(separator: "/").last ?? "")
                 .removingPercentEncoding ?? ""
@@ -331,6 +348,31 @@ struct Server: Sendable {
                 taskStore: reviewTaskStore
             )
         }
+        router.post("/notes") { [notes] r, _ in
+            do {
+                let input = try await decodeJSON(NoteCreateInput.self, from: r)
+                guard let json = Self.createdNoteJSONString(input, store: notes) else {
+                    return errorJSON("empty or rejected note", status: .badRequest)
+                }
+                return jsonResponse(Data(json.utf8))
+            } catch {
+                return errorJSON(String(describing: error), status: .badRequest)
+            }
+        }
+        router.get("/notes.json") { [notes] _, _ in
+            guard let json = Self.notesInboxJSONString(store: notes) else {
+                return errorJSON("notes unavailable", status: .internalServerError)
+            }
+            return jsonResponse(Data(json.utf8))
+        }
+        router.post("/notes/:id/promote") { [notes, reviewTaskStore] r, _ in
+            guard let json = Self.promoteNoteJSONString(
+                id: Self.taskIdParam(r), notes: notes, taskStore: reviewTaskStore
+            ) else {
+                return errorJSON("unknown note", status: .notFound)
+            }
+            return jsonResponse(Data(json.utf8))
+        }
         router.get("/review-task/:id.json") { [reviewTaskStore] r, _ in
             Self.reviewTaskJSON(id: Self.trailingIDParam(r), taskStore: reviewTaskStore)
         }
@@ -402,6 +444,20 @@ struct Server: Sendable {
                 outbound: outbound
             )
         }
+        // Session-less notes inbox, pushed live. Same store the
+        // `notes watch` CLI polls and the `/m/:udid` composer writes
+        // to — the WS just diff-pushes the snapshot so a phone drawer
+        // updates without a 4 s poll. Read-only upstream: a client
+        // sends `{"type":"stop"}` (or closes) to end; writes still go
+        // through `POST /notes`.
+        router.ws("/notes/stream") { [notes] inbound, outbound, context in
+            await Self.notesWS(
+                status: context.request.uri.queryParameters.get("status"),
+                store: notes,
+                inbound: inbound,
+                outbound: outbound
+            )
+        }
         router.get("/reviews/:id/artifact") { [reviewStore] r, _ in
             Self.reviewArtifact(
                 id: Self.reviewIdParam(r),
@@ -447,6 +503,26 @@ struct Server: Sendable {
     }
 
     // MARK: - handlers
+
+    /// Maps a shell route path to the static HTML file that serves it.
+    ///
+    /// Both `/simulators/<udid>` and `/m/<udid>` return `sim.html` — the
+    /// client JS reads the URL path and routes the inner focus view (the
+    /// `/m/` prefix is the thumb-friendly mobile entry point). A *bare*
+    /// `/m` or `/farm` (no second path segment) stays the device-farm
+    /// dashboard. The discriminator is the same one the JS activation
+    /// gate uses: a non-empty second segment means "single device".
+    static func shellAsset(forPath path: String) -> String {
+        let segments = path.split(separator: "/").map(String.init)
+        switch segments.first {
+        case "m", "farm":
+            return segments.count >= 2 ? "sim.html" : "farm/farm.html"
+        default:
+            // `/simulators`, `/simulators/<udid>`, and anything else that
+            // reaches a shell route render the sim shell.
+            return "sim.html"
+        }
+    }
 
     static func staticAsset(_ name: String) -> Response {
         guard let data = WebRoot.data(named: name) else {
@@ -805,11 +881,13 @@ struct Server: Sendable {
         let simulators = self.simulators
         let bindHost = self.host
         let bindPort = self.port
+        let trusted = self.trustedHosts
         let trustedWebSocketUpgrade:
             @Sendable (Request, BasicWebSocketRequestContext) async throws -> RouterShouldUpgrade = {
                 request, _ in
                 Self.isTrustedBrowserRequest(
-                    request, bindHost: bindHost, bindPort: bindPort
+                    request, bindHost: bindHost, bindPort: bindPort,
+                    trustedHosts: trusted
                 ) ? .upgrade([:]) : .dontUpgrade
             }
         router.ws(
@@ -1436,6 +1514,68 @@ struct Server: Sendable {
         }
     }
 
+    // MARK: - Notes queue (session-less)
+
+    /// Append a left message. Returns the stored note as JSON, or nil
+    /// when the message is blank or the store rejects it (→ 400).
+    static func createdNoteJSONString(_ input: NoteCreateInput, store: any Notes) -> String? {
+        guard !input.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let note = try? store.add(input),
+              let data = try? jsonEncoder.encode(note) else {
+            return nil
+        }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    /// The inbox newest-first as JSON, or nil on a store failure (→ 500).
+    static func notesInboxJSONString(store: any Notes) -> String? {
+        guard let inbox = try? store.list(),
+              let data = try? jsonEncoder.encode(inbox) else {
+            return nil
+        }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    /// The status-filtered inbox wrapped in a `notes_snapshot`
+    /// envelope (newest-first), or nil on a store failure. This is the
+    /// frame `WS /notes/stream` diff-and-pushes; `status` is parsed
+    /// leniently through `NoteFilter` (nil / unknown ⇒ all).
+    static func notesStreamSnapshotJSONString(
+        store: any Notes,
+        status: String?
+    ) -> String? {
+        guard let inbox = try? store.list() else { return nil }
+        let filtered = NoteFilter.from(status).apply(to: inbox)
+        guard let data = try? jsonEncoder.encode(NotesStreamSnapshot(notes: filtered)) else {
+            return nil
+        }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    /// Promote a note: flip it to picked-up *and* file it as a real
+    /// review task in the shared `notes` backlog (anchored to its AX
+    /// node when it had one). Returns a `{note, task}` envelope as
+    /// JSON. Nil when no note has that id (→ 404). The flag flip is
+    /// the source of truth for "picked up"; if bulk-create yields no
+    /// task we still surface the promoted note with `task: null`
+    /// rather than failing the pick-up.
+    static func promoteNoteJSONString(
+        id: String,
+        notes: any Notes,
+        taskStore: any ReviewTaskStore
+    ) -> String? {
+        guard let note = try? notes.promote(id: id) else { return nil }
+        let task = (try? taskStore.bulkCreateTasks(
+            input: note.reviewTaskBulkCreateInput()
+        ))?.created.first
+        guard let data = try? jsonEncoder.encode(
+            NotePromotionResult(note: note, task: task)
+        ) else {
+            return nil
+        }
+        return String(decoding: data, as: UTF8.self)
+    }
+
     private static func claimNextReviewTask(
         request: Request,
         taskStore: any ReviewTaskStore
@@ -1588,7 +1728,7 @@ struct Server: Sendable {
                     for try await frame in inbound {
                         guard frame.opcode == .text else { continue }
                         let line = String(buffer: frame.data)
-                        if Self.isReviewTaskWSStop(line) { break }
+                        if Self.isWSStopFrame(line) { break }
                         if await handleReviewTaskWSLine(
                             line: line,
                             taskStore: taskStore,
@@ -1605,6 +1745,51 @@ struct Server: Sendable {
             group.cancelAll()
         }
         try? await outbound.write(.text(#"{"type":"task_stream_stopped"}"#))
+    }
+
+    /// Push-only notes inbox stream. Diffs the `notes_snapshot`
+    /// envelope produced by the unit-tested
+    /// `notesStreamSnapshotJSONString` and re-emits only on change;
+    /// the inbound side just drains until `{"type":"stop"}` or close.
+    private static func notesWS(
+        status: String?,
+        store: any Notes,
+        inbound: WebSocketInboundStream,
+        outbound: WebSocketOutboundWriter
+    ) async {
+        try? await outbound.write(.text(#"{"type":"notes_stream_started"}"#))
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                var last = ""
+                while !Task.isCancelled {
+                    if let snapshot = notesStreamSnapshotJSONString(store: store, status: status) {
+                        if snapshot != last {
+                            last = snapshot
+                            try? await outbound.write(.text(snapshot))
+                        }
+                    } else {
+                        try? await outbound.write(.text(
+                            #"{"type":"notes_stream_error","error":"inbox unavailable"}"#
+                        ))
+                    }
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                }
+            }
+            group.addTask {
+                do {
+                    for try await frame in inbound {
+                        guard frame.opcode == .text else { continue }
+                        let line = String(buffer: frame.data)
+                        if Self.isWSStopFrame(line) { break }
+                    }
+                } catch {
+                    // socket closed; sibling task is cancelled below
+                }
+            }
+            await group.next()
+            group.cancelAll()
+        }
+        try? await outbound.write(.text(#"{"type":"notes_stream_stopped"}"#))
     }
 
     private static func handleReviewTaskWSLine(
@@ -1681,7 +1866,7 @@ struct Server: Sendable {
         }
     }
 
-    private static func isReviewTaskWSStop(_ line: String) -> Bool {
+    private static func isWSStopFrame(_ line: String) -> Bool {
         guard let data = line.data(using: .utf8),
               let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return false
@@ -1909,9 +2094,13 @@ struct Server: Sendable {
     private static func rejectUntrustedBrowserRequest(
         _ request: Request,
         bindHost: String,
-        bindPort: Int
+        bindPort: Int,
+        trustedHosts: Set<String> = []
     ) -> Response? {
-        guard !isTrustedBrowserRequest(request, bindHost: bindHost, bindPort: bindPort) else {
+        guard !isTrustedBrowserRequest(
+            request, bindHost: bindHost, bindPort: bindPort,
+            trustedHosts: trustedHosts
+        ) else {
             return nil
         }
         return errorJSON("forbidden origin", status: .forbidden)
@@ -1920,12 +2109,24 @@ struct Server: Sendable {
     /// Browsers can drive localhost services from another site unless the
     /// service checks `Origin`. For a loopback bind, also reject DNS-rebind
     /// style `Host` values that are not loopback names.
+    ///
+    /// `trustedHosts` is the operator-supplied allowlist (e.g. a Tailscale
+    /// MagicDNS name). An allowlisted `Host` bypasses the loopback-only
+    /// DNS-rebind guard so a tailnet client can reach a loopback bind, but it
+    /// still has to clear the same-origin check below — a cross-site page
+    /// served from the trusted name must not be able to drive the simulator.
     static func isTrustedBrowserRequest(
         _ request: Request,
         bindHost: String,
-        bindPort: Int
+        bindPort: Int,
+        trustedHosts: Set<String> = []
     ) -> Bool {
-        if isLoopbackBind(bindHost),
+        let allowed = Set(trustedHosts.map { $0.lowercased() })
+        let requestHost = request.head.authority
+            .flatMap { parseAuthority($0)?.host.lowercased() }
+        let isAllowlisted = requestHost.map { allowed.contains($0) } ?? false
+
+        if isLoopbackBind(bindHost), !isAllowlisted,
            let authority = request.head.authority,
            let requestHost = parseAuthority(authority)?.host,
            !isLoopbackHost(requestHost) {
@@ -1948,7 +2149,7 @@ struct Server: Sendable {
         let requestPort = requestAuthority.port ?? bindPort
         let originPort = originURL.port ?? defaultPort(for: originURL.scheme)
 
-        if isLoopbackBind(bindHost) {
+        if isLoopbackBind(bindHost), !isAllowlisted {
             return isLoopbackHost(originHost)
                 && isLoopbackHost(requestAuthority.host)
                 && (originPort ?? requestPort) == requestPort
@@ -2070,6 +2271,18 @@ private struct TaskStreamSnapshot: Codable, Sendable {
 private struct TaskStreamTask: Codable, Sendable {
     var type: String
     var task: ReviewTask
+}
+
+private struct NotesStreamSnapshot: Codable, Sendable {
+    var type = "notes_snapshot"
+    var notes: [Note]
+}
+
+/// `POST /notes/:id/promote` result: the picked-up note plus the
+/// review task it became (`null` only if bulk-create produced none).
+private struct NotePromotionResult: Codable, Sendable {
+    var note: Note
+    var task: ReviewTask?
 }
 
 private enum ReviewTaskWSError: Error, CustomStringConvertible {

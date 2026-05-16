@@ -167,6 +167,8 @@ agent-sim <command> [options]
   # dashboard) and /farm (multi-device dashboard) — both backed by the
   # same WS endpoint and HID pipeline.
   serve    [--port 8421] [--host 127.0.0.1] [--device-set <path>]
+           [--trusted-host <name> …]            Reach a loopback bind
+                                                over Tailscale/VPN
 
   # DeviceKit chrome / bezel data.
   chrome layout    --udid <UDID>             Print bezel layout JSON
@@ -244,6 +246,33 @@ The same WS carries everything for a viewing session:
 
 No `/event` POST, no UDID-keyed registry — the WS handler closure owns
 the live stream + simulator handle for the duration.
+
+### Reaching a sim on the move (Tailscale / VPN)
+
+`serve` defaults to a `127.0.0.1` bind and a same-origin + DNS-rebind
+guard, so a browser on another machine can't reach it. To drive a sim
+from your phone over a private mesh, keep the trust model and
+allowlist the mesh hostname instead of opening the bind up:
+
+```bash
+# Bind to the Tailscale interface (or 0.0.0.0) and allowlist the
+# MagicDNS name the phone will use. Repeat --trusted-host as needed;
+# a Tailscale 100.x IP works too.
+agent-sim serve --host 0.0.0.0 \
+  --trusted-host mac.tailnet.ts.net \
+  --trusted-host 100.101.102.103
+```
+
+Then open `http://mac.tailnet.ts.net:8421/m/<udid>` from the phone
+(still on the tailnet). An allowlisted `Host` passes the DNS-rebind
+guard, but **same-origin still holds** — a cross-site page served from
+the trusted name cannot drive the simulator. An un-allowlisted host on
+a loopback bind is still `403`. Nothing is exposed publicly; reach is
+exactly your tailnet.
+
+`/m/:udid` is the mobile-first single-sim view: live stream, a
+touch AX element picker, a notes composer, and a collapsible activity
+drawer that live-updates over `WS /notes/stream`.
 
 ## Device farm
 

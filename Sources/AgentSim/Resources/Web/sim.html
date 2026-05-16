@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Simulators — ASC Pro</title>
 <style>
   /* Minimal tokens so the injected sim-list / sim-stream markup renders
@@ -21,7 +21,14 @@
   }
   html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
                font: 400 13px/1.4 -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, sans-serif; }
-  body { min-height: 100vh; }
+  /* 100dvh tracks the *dynamic* viewport so the device frame isn't clipped
+     by mobile Safari's collapsing toolbar; safe-area insets keep content
+     clear of the notch / home indicator under viewport-fit=cover. */
+  body { min-height: 100dvh;
+         padding: env(safe-area-inset-top) env(safe-area-inset-right)
+                  env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  /* Kill the 300ms tap delay and double-tap-zoom on every control. */
+  button, a, [role="button"] { touch-action: manipulation; }
 </style>
 </head>
 <body>

@@ -22,8 +22,15 @@ struct CommandParsingTests {
             "key", "type",
             "chrome", "screenshot", "describe-ui", "logs", "serve",
             "orientation", "diag-digitizer-trackpad", "review-tasks",
+            "notes",
             "doctor",
         ])
+    }
+
+    @Test func `notes command exposes send + listen subcommands`() {
+        let names = NotesCommand.configuration.subcommands
+            .map { $0.configuration.commandName }
+        #expect(Set(names) == ["list", "add", "promote", "watch"])
     }
 
     @Test func `agent-sim root exposes version`() {
@@ -341,6 +348,7 @@ struct CommandParsingTests {
         #expect(cmd.host == "127.0.0.1")
         #expect(cmd.port == 8421)
         #expect(cmd.deviceSet == nil)
+        #expect(cmd.trustedHost == [])
         #expect(ServeCommand.configuration.commandName == "serve")
     }
 
@@ -353,6 +361,15 @@ struct CommandParsingTests {
         #expect(cmd.host == "0.0.0.0")
         #expect(cmd.port == 9000)
         #expect(cmd.deviceSet == "/tmp/sims")
+    }
+
+    @Test func `serve --trusted-host is repeatable for a Tailscale bind`() throws {
+        let cmd = try ServeCommand.parse([
+            "--host", "0.0.0.0",
+            "--trusted-host", "mac.tailnet.ts.net",
+            "--trusted-host", "100.101.102.103",
+        ])
+        #expect(cmd.trustedHost == ["mac.tailnet.ts.net", "100.101.102.103"])
     }
 
     // MARK: - review-tasks
