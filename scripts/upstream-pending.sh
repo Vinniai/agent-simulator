@@ -40,16 +40,19 @@ fi
 BASE="$(git merge-base HEAD "$REMOTE/main")"
 
 # SHAs already absorbed: cherry-pick trailers + manual-port ledger.
+# Normalise every candidate to its full 40-char SHA so abbreviations of
+# different lengths (git -x trailers, %h, 7-char ledger entries) compare cleanly.
 PORTED="$(mktemp)"
 trap 'rm -f "$PORTED"' EXIT
-git log --grep='cherry picked from commit' -E -o --pretty=%b \
-    | grep -oE '[0-9a-f]{7,40}' | cut -c1-9 | sort -u > "$PORTED" || true
+resolve() { while read -r s; do [ -n "$s" ] && git rev-parse "$s" 2>/dev/null; done; }
+git log --grep='cherry picked from commit' -E --pretty=%b \
+    | grep -oE '[0-9a-f]{7,40}' | resolve | sort -u > "$PORTED" || true
 if [ -f "$LEDGER" ]; then
-    grep -oE '^[0-9a-f]{7,40}' "$LEDGER" | cut -c1-9 | sort -u >> "$PORTED" || true
+    grep -oE '^[0-9a-f]{7,40}' "$LEDGER" | resolve | sort -u >> "$PORTED" || true
 fi
 sort -u -o "$PORTED" "$PORTED"
 
-LOG_ARGS=(--reverse --pretty='%h %s')
+LOG_ARGS=(--reverse --pretty='%H %s')
 [ "$FULL" = "1" ] || LOG_ARGS+=(--no-merges)
 
 PENDING=0
@@ -57,11 +60,10 @@ echo "Upstream commits not yet absorbed (base $(echo "$BASE" | cut -c1-9) .. $RE
 echo
 while read -r sha rest; do
     [ -z "$sha" ] && continue
-    short="$(echo "$sha" | cut -c1-9)"
-    grep -qx "$short" "$PORTED" && continue
+    grep -qx "$sha" "$PORTED" && continue
     PENDING=$((PENDING + 1))
     [ "$FULL" = "0" ] && [ "$PENDING" -gt 80 ] && continue
-    printf '  %s  %s\n' "$short" "$rest"
+    printf '  %s  %s\n' "$(echo "$sha" | cut -c1-9)" "$rest"
 done < <(git log "${LOG_ARGS[@]}" "$BASE..$REMOTE/main")
 
 echo

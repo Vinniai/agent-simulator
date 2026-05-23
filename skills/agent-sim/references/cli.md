@@ -302,6 +302,82 @@ agent-sim chrome composite --device-name "iPhone 17 Pro Max" > bezel.png
 Returns the device chrome (rounded glass + buttons) as a PNG, suitable
 for compositing under a captured screenshot.
 
+## Review-task queue — `review-tasks` / `agent`
+
+The autonomous loop surface: a queue of UI-review / fix work items
+backed by `SQLiteReviewTaskStore` (shared by the CLI *and* the HTTP/WS
+routes — mixed operator-CLI + agent-HTTP is fine). Full protocol with
+HTTP equivalents and reference Python agents: `docs/AGENT-API.md`.
+
+### Poll for new work — `review-tasks watch`
+
+```bash
+agent-sim review-tasks watch                       # all tasks, 1s interval
+agent-sim review-tasks watch --status open         # only open work
+agent-sim review-tasks watch --session-id <id> --interval 2
+agent-sim review-tasks watch --status open --once  # one snapshot, then exit
+```
+
+Blocks and prints **one compact JSON line per change** (state is
+dedup'd — an unchanged poll prints nothing), `fflush`'d so it pipes
+cleanly into a watcher/dispatcher. `--once` prints a single snapshot
+and exits (good for cron / a one-shot check).
+
+| Flag           | Default | Effect                                            |
+|----------------|---------|---------------------------------------------------|
+| `--status`     | unset   | Filter to one task status (`open`, `claimed`, …). |
+| `--session-id` | unset   | Filter to one review session.                     |
+| `--interval`   | `1`     | Poll seconds; must be `> 0`.                      |
+| `--once`       | off     | Emit one snapshot and exit (no loop).             |
+
+Websocket alternative (server pushes, no poll loop) during
+`agent-sim serve` — see `wire-protocol.md` → "WS /review-tasks/stream".
+
+### Claim / progress / submit — the loop
+
+```bash
+agent-sim review-tasks list   [--session-id <id>] [--status <s>]
+agent-sim review-tasks next   --agent-id <id>              # atomic claim → JSON task | null
+agent-sim review-tasks claim  <task-id> --agent-id <id>    # claim a specific task
+agent-sim review-tasks show   <task-id>
+agent-sim review-tasks event  <task-id> --type progress --actor <id> --message "…"   # '-' = stdin
+agent-sim review-tasks add-code-change <task-id> --path /abs/File.swift \
+        --summary "…" --start-line 42 --end-line 58 \
+        --commit-sha "$(git rev-parse HEAD)" --branch "$(git branch --show-current)" \
+        --language swift --diff-file /tmp/x.diff --actor <id>
+agent-sim review-tasks add-code-change <task-id> --changes-file changes.json   # batch form
+agent-sim review-tasks result <task-id> --status readyForVerify --summary "…" \
+        --verification-snapshot-id snap_… --actor <id>     # '-' = stdin on --summary
+agent-sim review-tasks verify <task-id> --status pass --after-snapshot-id snap_… [--notes -]
+agent-sim review-tasks bulk-create --session-id <id> --file tasks.json \
+        [--assignee <id>] [--priority high] [--title …] [--instructions …]
+agent-sim review-tasks bulk-create --session-id <id> --file -        # envelope on stdin
+```
+
+- `next` / `claim` accept **`--actor` as an alias for `--agent-id`**, so
+  one identity flag works across every subcommand. The claim is
+  **atomic** against SQLite — concurrent pollers are safe; exactly one
+  agent gets any given task (`open → claimed`, `assignee` set).
+- `--message` / `--summary` / `--notes` accept `-` to read stdin.
+- `bulk-create` takes either a full `ReviewTaskBulkCreateInput` envelope
+  or a bare item array; CLI `--assignee/--priority/--title/--instructions`
+  override file-level `defaults` (re-tag a batch without rewriting JSON).
+  Returns a partial-success envelope: `created.count + errors.count == tasks.count`.
+
+### Session + gate — `agent`
+
+```bash
+agent-sim agent bootstrap [--name …] [--project <path>] [--bundle-id <id>] \
+                          [--agent-id agent-sim] [--json]   # → session + 3 starter tasks
+agent-sim agent status   [--session-id <id>] [--json]       # session/task rollup
+agent-sim agent quality-gate <task-id> --score 8 \
+                          [--highest-recommendation none] [--after-snapshot-id snap_…] \
+                          [--actor agent-sim]                # pass iff score≥8 & no high/critical/p0/p1
+```
+
+`bootstrap` prints the review URL `http://127.0.0.1:8421/reviews/<id>`
+and the created task ids; pair with `serve` to drive the loop.
+
 ## Exit codes
 
 `0` on success. `1` on any error; the JSON error body explains. Errors

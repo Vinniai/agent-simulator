@@ -51,7 +51,12 @@ https://github.com/user-attachments/assets/65dc62ee-f0c7-48fb-9c57-5bd267c8c02f
 - **Agent loop** — `agent-sim agent bootstrap` creates a review session
   and starter tasks for capture → markup → enhance → verify. `agent-sim
   agent quality-gate` records the "no high recommendations, 8/10+"
-  screen-review gate against the task history.
+  screen-review gate against the task history. Agents consume the queue
+  by **polling** (`agent-sim review-tasks watch --status open` — one
+  JSON line per change) or by **subscribing** over WebSocket
+  (`WS /review-tasks/stream`, server-pushed `task_update` frames, with
+  inbound claim/update/event on the same socket). Full protocol +
+  reference Python agents: [`docs/AGENT-API.md`](docs/AGENT-API.md).
 - **Accessibility tree** — `agent-sim describe-ui` returns the on-screen
   AX tree as JSON: per-node `role`, `label`, `value`, `identifier`, and
   `frame` in the same device-point coordinates as `tap` / `swipe`. Hit-test

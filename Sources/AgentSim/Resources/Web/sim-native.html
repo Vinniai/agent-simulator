@@ -307,6 +307,37 @@
   #simNativeView .sidebar-view-toggle:active { transform: scale(0.96); }
   #simNativeView .sidebar-view-toggle svg { display: block; }
 
+  /* Comment toggle — floating glass pill sitting just inboard of
+     the sidebar-view pill (bottom-left pair). Click opens the
+     in-screen comment + queue composer (the same select-mode /
+     Activity-sheet flow the toolbar's queue toggle drives), so
+     comments can be left without leaving focus mode. When the
+     composer is open the pill goes accent-filled — it mirrors the
+     toolbar `nativeQueueToggle` so the two stay visibly in sync. */
+  #simNativeView .comment-toggle {
+    position: fixed; left: 60px; bottom: 16px;
+    width: 36px; height: 36px;
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 0;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 999px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    cursor: pointer;
+    transition: background 0.12s ease, transform 0.12s ease, color 0.12s ease;
+    z-index: 50;
+  }
+  #simNativeView .comment-toggle:hover  { background: var(--nv-btn-hover); }
+  #simNativeView .comment-toggle:active { transform: scale(0.96); }
+  #simNativeView .comment-toggle.active {
+    background: var(--nv-accent); color: var(--nv-accent-text);
+    border-color: transparent;
+  }
+  #simNativeView .comment-toggle svg { display: block; }
+
   /* Theme toggle — floating glass pill at the bottom-right
      corner. Carries one icon (sun in light theme, moon in dark
      theme); click flips the manual override. The same pill
@@ -483,6 +514,7 @@
   #simNativeView[data-mobile] #nativeRotate,
   #simNativeView[data-mobile] .tb-actions,
   #simNativeView[data-mobile] .sidebar-view-toggle,
+  #simNativeView[data-mobile] .comment-toggle,
   #simNativeView[data-mobile] .theme-toggle,
   #simNativeView[data-mobile] .ax-host {
     display: none !important;
@@ -491,13 +523,18 @@
      activity header ≈ 40) so the centered device floats above it.
      When the drawer is expanded it grows upward over the lower
      device area — expected for a drawer. */
-  #simNativeView[data-mobile] {
+  #simNativeView[data-mobile],
+  #simNativeView[data-comment-dock="open"] {
     padding-bottom: calc(env(safe-area-inset-bottom) + 116px);
   }
   #simNativeView[data-mobile] #nativeDeviceFrame,
   #simNativeView[data-mobile] #nativeDeviceFrame > div,
   #simNativeView[data-mobile] #nativeDeviceFrame img,
-  #simNativeView[data-mobile] #nativeDeviceFrame canvas {
+  #simNativeView[data-mobile] #nativeDeviceFrame canvas,
+  #simNativeView[data-comment-dock="open"] #nativeDeviceFrame,
+  #simNativeView[data-comment-dock="open"] #nativeDeviceFrame > div,
+  #simNativeView[data-comment-dock="open"] #nativeDeviceFrame img,
+  #simNativeView[data-comment-dock="open"] #nativeDeviceFrame canvas {
     max-height: calc(100dvh - 68px
                      - env(safe-area-inset-bottom) - 116px) !important;
   }
@@ -507,7 +544,8 @@
   /* Bottom dock — one fixed glass bar, notch-safe, holding the
      activity drawer then the composer. */
   #simNativeView #nativeBottomDock { display: none; }
-  #simNativeView[data-mobile] #nativeBottomDock {
+  #simNativeView[data-mobile] #nativeBottomDock,
+  #simNativeView[data-comment-dock="open"] #nativeBottomDock {
     display: flex; flex-direction: column;
     position: fixed; left: 0; right: 0; bottom: 0;
     z-index: 70;
@@ -527,13 +565,30 @@
     min-height: 0;
     border-bottom: 1px solid var(--nv-bar-border);
   }
+  #simNativeView .naq-head-row {
+    display: flex; align-items: center;
+  }
   #simNativeView .naq-head {
     appearance: none; border: 0; background: transparent;
     display: flex; align-items: center; gap: 8px;
-    width: 100%; height: 40px; padding: 0 14px;
+    flex: 1; min-width: 0; height: 40px; padding: 0 14px;
     color: var(--nv-text); cursor: pointer;
     font: 600 12px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
   }
+  /* Close lives only in the desktop comment-dock state — on `/m`
+     the dock is the primary surface and must stay put, so the
+     close is hidden there even though the markup is shared. */
+  #simNativeView .naq-close {
+    appearance: none; border: 0; background: transparent;
+    display: none; align-items: center; justify-content: center;
+    width: 40px; height: 40px; flex-shrink: 0; padding: 0;
+    color: var(--nv-text-muted); cursor: pointer;
+  }
+  #simNativeView[data-comment-dock="open"]:not([data-mobile]) .naq-close {
+    display: inline-flex;
+  }
+  #simNativeView .naq-close:hover { color: var(--nv-text); }
+  #simNativeView .naq-close:active { transform: scale(0.92); }
   #simNativeView .naq-chev {
     color: var(--nv-text-muted); flex-shrink: 0;
     transition: transform 0.18s ease;
@@ -600,7 +655,8 @@
   /* Composer — lays out inside the dock; the dock provides the
      glass + safe-area chrome. */
   #simNativeView #nativeQueueComposer { display: none; }
-  #simNativeView[data-mobile] #nativeQueueComposer {
+  #simNativeView[data-mobile] #nativeQueueComposer,
+  #simNativeView[data-comment-dock="open"] #nativeQueueComposer {
     display: block;
     flex-shrink: 0;
     padding: 10px 12px;
@@ -832,6 +888,20 @@
          stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
       <rect x="3" y="4" width="18" height="16" rx="2.2"/>
       <line x1="14" y1="4" x2="14" y2="20"/>
+    </svg>
+  </button>
+
+  <button class="comment-toggle" id="nativeCommentToggle"
+          title="Leave a comment / queue review"
+          aria-label="Open the comment and queue composer"
+          onclick="window.__nativeToggleQueue && window.__nativeToggleQueue()">
+    <!-- Speech-bubble glyph: opens the in-screen comment + queue
+         composer (mirrors the toolbar queue toggle). -->
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+      <path d="M4 5.5h16a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H9l-4 3.5V16.5H4A1.5 1.5 0 0 1 2.5 15V7A1.5 1.5 0 0 1 4 5.5z"/>
+      <line x1="7" y1="10" x2="17" y2="10"/>
+      <line x1="7" y1="13" x2="13" y2="13"/>
     </svg>
   </button>
 

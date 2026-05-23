@@ -246,6 +246,50 @@ rejects `notice / error / fault` (host macOS supports them; the
 simulator's slimmer interface does not). For higher-severity-only
 filtering, use `predicate=messageType == "error"`.
 
+## Review-task queue WebSocket — `WS /review-tasks/stream`
+
+The push alternative to polling `agent-sim review-tasks watch`. Filter
+is fixed at connect time via query string (same filters as the CLI):
+
+```
+WS /review-tasks/stream?status=open
+WS /review-tasks/stream?sessionId=review_01HXZ…
+```
+
+Server → client text frames:
+
+```json
+{"type":"task_stream_started"}
+{"type":"task_update","task":{ /* full ReviewTask */ }}
+```
+
+On connect the handler writes `task_stream_started`, then a snapshot of
+all matching tasks (one `task_update` per task), then a `task_update`
+on every subsequent change — so a fresh subscriber is immediately
+caught up without a separate list call.
+
+Client → server: the same socket accepts the inbound loop verbs, so an
+agent can claim and report on one connection instead of mixing WS +
+HTTP:
+
+```json
+{"type":"claim","id":"task_01HXZ…","agentId":"claude-code@host"}
+{"type":"event","id":"task_01HXZ…","eventType":"progress","actor":"claude-code@host","message":"tapped Save"}
+{"type":"update","id":"task_01HXZ…","status":"readyForVerify","resultSummary":"done"}
+```
+
+Each accepted inbound frame echoes the resulting `task_update` back on
+the same socket (and to every other matching subscriber), so a watcher
+UI lights up with no extra wiring. Inbound shape mirrors the HTTP routes
+in `docs/AGENT-API.md`; the inbound handler is `Server.swift:1206`+.
+
+Note: this is a **different socket** from `/simulators/<udid>/stream`
+(gestures + frames) and `/simulators/<udid>/logs` (unified log). The
+gesture verbs above do **not** apply here, and `task_*` frames do not
+appear on the simulator sockets. An agent driving the full loop opens
+*both*: `/review-tasks/stream` for work, `/simulators/<udid>/stream`
+for the device.
+
 ## Debugging a "tap missed"
 
 If a tap visibly happens on the wrong spot:

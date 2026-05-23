@@ -17,6 +17,13 @@ description: |
       `agent-sim serve`, or `agent-sim stream` by name
   (6) An iOS smoke-test / fixture / SwiftUI verification needs to actually
       *touch* the running app, not just inspect static code
+  (7) The agent needs to consume a queue of UI-review / fix tasks — poll
+      `agent-sim review-tasks watch`, subscribe `WS /review-tasks/stream`,
+      claim work with `review-tasks next`, and report back results /
+      code-changes (the autonomous "queries come in → implement →
+      verify" loop). Triggers: "poll review tasks", "task queue",
+      "subscribe to review tasks over websocket", "agent-sim watch",
+      "claim the next review task".
   Avoid using this skill for plain "open the iOS Simulator" / "install Xcode"
   questions — those are about Xcode itself, not about driving a sim.
 ---
@@ -241,6 +248,58 @@ The natural loop when an agent edits a SwiftUI app:
 If the human wants to follow along visually, also point them at
 `http://localhost:8421/simulators/<udid>` (after starting `agent-sim serve`)
 — that's a focused single-tab view of the sim, no Xcode window juggling.
+
+## The task-queue agent loop (poll / websocket)
+
+Beyond one-off gesture driving, `agent-sim` ships a **review-task queue**:
+an operator (or a bulk importer / route walker) queues work items; an
+agent claims them, drives the sim to implement each, and reports results
+back for verification. This is the "queries come in → implement →
+verify" autonomous loop.
+
+Two ways to learn about new work — pick by latency tolerance:
+
+```bash
+# A. POLL — one JSON line per change, dedup'd. Easiest to shell-wrap
+#    (e.g. feed into a Monitor / watcher that dispatches sub-agents).
+agent-sim serve &                                  # HTTP+WS on :8421
+agent-sim review-tasks watch --status open         # blocks, emits on change
+agent-sim review-tasks watch --status open --once  # single snapshot, exit
+agent-sim review-tasks watch --session-id <id> --interval 2
+
+# B. WEBSOCKET — server pushes, no poll loop. Subscribe + run the whole
+#    loop on one socket (inbound claim/update/event accepted too).
+#    WS /review-tasks/stream?status=open
+#    → {"type":"task_stream_started"} → snapshot → {"type":"task_update","task":{…}}
+```
+
+Claim → implement → report (CLI mirror; every step also has an HTTP route):
+
+```bash
+TASK=$(agent-sim review-tasks next --agent-id claude-code@host | jq -r .id)
+# ...drive the sim per task.elements[*].frame, edit source...
+agent-sim review-tasks event  "$TASK" --type progress --actor claude-code@host --message "tapped Save"
+agent-sim review-tasks add-code-change "$TASK" --path /abs/File.swift \
+    --summary "fix validation" --branch "$(git branch --show-current)" \
+    --diff-file /tmp/x.diff --actor claude-code@host
+agent-sim review-tasks result "$TASK" --status readyForVerify \
+    --summary "done" --actor claude-code@host
+```
+
+`review-tasks next` / `claim` are **atomic** against the SQLite store —
+many concurrent pollers are safe, only one agent gets a given task.
+Bulk-queue from an external source with `review-tasks bulk-create
+--session-id <id> --file -`. Session setup + scoring gate live under
+`agent-sim agent bootstrap|status|quality-gate`.
+
+Full protocol (HTTP routes, idempotency rules, reference Python agents):
+`docs/AGENT-API.md`. CLI flag-by-flag: `references/cli.md`
+("review-tasks / agent"). WS frame spec: `references/wire-protocol.md`
+("WS /review-tasks/stream").
+
+> Name clash warning: an unrelated `scripts/agent-sim` Python shim may
+> exist in *consumer* repos (e.g. a Convex-HTTP poller). It is **not**
+> this CLI. Resolve this binary on `PATH` / via `brew` for the queue loop.
 
 ## Reference files
 
