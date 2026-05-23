@@ -7,17 +7,17 @@ without driving the simulator at all. Snapshot-only verification means
 the verifier never races a worker on the shared device.
 
 Loop:
-    1. Poll `/review-tasks/list?status=readyForVerify` for tasks submitted
+    1. Poll `GET /review-tasks.json` (all statuses) for tasks submitted
        by a worker we recognise (prefix match on `assignee`).
     2. Skip if any other task is currently `claimed` (worker mid-flight)
        — the sim-idle gate. Snapshot reads are safe but we keep them out
        of the way of any concurrent capture.
     3. For each candidate: pull the before snapshot (first element's
        `snapshotId`) and the worker-supplied `verificationSnapshotId`.
-    4. Compare images byte-for-byte and (optionally) by pixel-difference
-       ratio. The reference impl uses byte comparison + size delta;
-       swap in PIL / OpenCV for real perceptual comparison if you need
-       it.
+    4. Compare images perceptually: decode both JPEGs, normalise to a
+       small grayscale grid, and take the mean absolute pixel difference
+       (Pillow). Falls back to a crude byte-diff when Pillow is absent so
+       the script still runs on a bare stdlib.
     5. If clearly different (the screen moved, the worker did something):
        record `pass` with a one-line summary. If identical: `fail` with
        "no visual delta". If ambiguous: leave the task untouched so the
@@ -27,9 +27,11 @@ Usage:
     python3 agentsim_verifier.py --agent-prefix claude
     python3 agentsim_verifier.py --agent-prefix voyage-claude --interval 3.0
 
-Dependencies: stdlib only. The byte-diff heuristic is intentionally
-simple — production verifiers should swap in perceptual hashing or
-a vision-model call to judge "does the after-state match the
+Dependencies: stdlib, plus optional Pillow for the perceptual diff
+(`pip install pillow`). Without Pillow it degrades to a crude byte
+heuristic. Even the perceptual diff only answers "did the screen
+change"; production verifiers should add perceptual hashing or a
+vision-model call to judge "does the after-state match the
 operator's instructions". This file is a starting point, not the
 finished product.
 """
@@ -73,8 +75,12 @@ def http_post(base: str, path: str, body: dict) -> dict | None:
 
 def list_tasks(base: str) -> list[dict]:
     """All tasks in any status. We filter client-side so a single fetch
-    covers both the sim-idle gate and the readyForVerify candidates."""
-    out = http_get(base, "/review-tasks/list")
+    covers both the sim-idle gate and the readyForVerify candidates.
+
+    The route is `GET /review-tasks.json` (returns a bare JSON array);
+    it accepts `?status=` for server-side filtering, but we want every
+    status here so the sim-idle gate can see `claimed` tasks too."""
+    out = http_get(base, "/review-tasks.json")
     return out if isinstance(out, list) else []
 
 
@@ -99,10 +105,20 @@ def snapshot_path(reviews_root: str, session_id: str, snapshot_id: str) -> str |
     return candidate if os.path.exists(candidate) else None
 
 
+try:
+    from PIL import Image  # type: ignore
+    _HAVE_PIL = True
+except ImportError:  # stdlib-only fallback path
+    _HAVE_PIL = False
+
+
 def byte_diff_ratio(path_a: str, path_b: str) -> float:
-    """Cheap visual-change heuristic. Returns 0.0 (identical) to 1.0
-    (entirely different). Sufficient as a "did the screen move at all"
-    check — not sufficient for semantic verification."""
+    """Crude stdlib-only fallback. Returns 0.0 (identical bytes) to 1.0.
+
+    This is a poor visual signal for JPEGs — the codec scrambles many
+    bytes for a small on-screen change, and two visually-identical
+    re-encodes differ byte-for-byte. Used only when Pillow is absent;
+    `perceptual_diff_ratio` is the real comparison."""
     with open(path_a, "rb") as fa, open(path_b, "rb") as fb:
         a, b = fa.read(), fb.read()
     if a == b:
@@ -114,6 +130,31 @@ def byte_diff_ratio(path_a: str, path_b: str) -> float:
     differing = sum(1 for i in range(overlap) if a[i] != b[i])
     size_delta = abs(len(a) - len(b)) / max(len(a), len(b))
     return min(1.0, (differing / overlap) * 0.7 + size_delta * 0.3)
+
+
+def perceptual_diff_ratio(path_a: str, path_b: str, size: int = 32) -> float:
+    """Decode both JPEGs, normalise to a `size`×`size` grayscale grid,
+    and return the mean absolute pixel difference in [0.0, 1.0].
+
+    Robust to JPEG byte-noise and re-encode jitter: a re-render with no
+    visible change scores ~0, a screen that actually moved scores well
+    above the 0.05 pass threshold. Downscaling also makes it cheap and
+    resolution-independent (the before/after may differ by a few px)."""
+    with Image.open(path_a) as ia, Image.open(path_b) as ib:
+        ga = ia.convert("L").resize((size, size))
+        gb = ib.convert("L").resize((size, size))
+        pa, pb = ga.getdata(), gb.getdata()
+    total = sum(abs(x - y) for x, y in zip(pa, pb))
+    return min(1.0, total / (len(pa) * 255))
+
+
+def visual_change_ratio(path_a: str, path_b: str) -> tuple[float, str]:
+    """Best available visual-change signal in [0.0, 1.0] + which method
+    produced it. Prefers perceptual (Pillow) comparison, falls back to
+    the byte heuristic so the verifier still runs on a bare stdlib."""
+    if _HAVE_PIL:
+        return perceptual_diff_ratio(path_a, path_b), "perceptual"
+    return byte_diff_ratio(path_a, path_b), "byte"
 
 
 def verify_task(base: str, task: dict, reviews_root: str) -> tuple[str, str]:
@@ -137,12 +178,12 @@ def verify_task(base: str, task: dict, reviews_root: str) -> tuple[str, str]:
     if not before_path or not after_path:
         return "skip", "snapshot files not on disk"
 
-    ratio = byte_diff_ratio(before_path, after_path)
+    ratio, method = visual_change_ratio(before_path, after_path)
     if ratio < 0.01:
-        return "fail", f"no visual delta (byte-diff ratio {ratio:.3f})"
+        return "fail", f"no visual delta ({method} ratio {ratio:.3f})"
     if ratio > 0.05:
-        return "pass", f"visual delta confirmed (byte-diff ratio {ratio:.3f})"
-    return "skip", f"marginal delta (byte-diff ratio {ratio:.3f}) — operator to decide"
+        return "pass", f"visual delta confirmed ({method} ratio {ratio:.3f})"
+    return "skip", f"marginal delta ({method} ratio {ratio:.3f}) — operator to decide"
 
 
 def post_verify(base: str, task: dict, status: str, notes: str) -> None:
