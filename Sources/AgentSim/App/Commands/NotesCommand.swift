@@ -48,10 +48,17 @@ struct NotesCommand: ParsableCommand {
         @Option(name: .long, help: "Optional AX path the note anchors to")
         var axPath: String?
 
+        @Option(
+            name: .long,
+            help: "Optional source pointer 'file:line[:col]' — same `source` envelope the browser attaches via /triangulate. Useful when an agent has a file location from a stack trace / lint hit but no AX coordinates."
+        )
+        var source: String?
+
         func run() throws {
             let body = try readPossiblyStdin(text)
+            let parsed = try source.map { try NoteSource.parseFlag($0) }
             try printJSON(SQLiteNotes().add(
-                NoteCreateInput(udid: udid, text: body, axPath: axPath)
+                NoteCreateInput(udid: udid, text: body, axPath: axPath, source: parsed)
             ))
         }
     }

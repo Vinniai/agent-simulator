@@ -40,6 +40,9 @@ struct Server: Sendable {
     /// Session-less notes queue — messages left from the mobile sim
     /// view, promotable into a review task.
     let notes: any Notes
+    /// Local Metro probe used by `/triangulate` to map a screen point
+    /// to a project root. `HostMetro` defaults; tests inject a fake.
+    let metro: any Metro
     let host: String
     let port: Int
     /// Extra hostnames trusted in addition to the bind host — e.g. a
@@ -53,6 +56,7 @@ struct Server: Sendable {
         reviewStore: any ReviewStore = FileReviewStore(),
         reviewTaskStore: any ReviewTaskStore = SQLiteReviewTaskStore(),
         notes: any Notes = SQLiteNotes(),
+        metro: any Metro = HostMetro(),
         host: String = "127.0.0.1",
         port: Int = 8421,
         trustedHosts: Set<String> = []
@@ -62,6 +66,7 @@ struct Server: Sendable {
         self.reviewStore = reviewStore
         self.reviewTaskStore = reviewTaskStore
         self.notes = notes
+        self.metro = metro
         self.host = host
         self.port = port
         self.trustedHosts = trustedHosts
@@ -340,6 +345,24 @@ struct Server: Sendable {
         }
         router.post("/reviews/source-search") { r, _ in
             await Self.reviewSourceSearch(request: r)
+        }
+        // Map a screen point → AX node + workspace root + (Phase B/C)
+        // source candidates. Mobile / desktop inspectors call this when
+        // attaching a comment so the review task can pin the element
+        // back to a source file as the JSX scanner / fiber lookup land.
+        router.post("/triangulate") { [simulators, metro] r, _ in
+            if let rejected = rejectUntrustedBrowser(r) { return rejected }
+            do {
+                let input = try await decodeJSON(TriangulateInput.self, from: r)
+                guard let json = await Self.triangulateJSONString(
+                    input: input, simulators: simulators, metro: metro
+                ) else {
+                    return errorJSON("unknown udid: \(input.udid)", status: .notFound)
+                }
+                return jsonResponse(Data(json.utf8))
+            } catch {
+                return errorJSON(String(describing: error), status: .badRequest)
+            }
         }
         router.get("/review-tasks.json") { [reviewTaskStore] r, _ in
             Self.reviewTaskListJSON(
@@ -841,35 +864,24 @@ struct Server: Sendable {
         sim: Simulator,
         outbound: WebSocketOutboundWriter
     ) async -> Bool {
-        guard let data = line.data(using: .utf8),
-              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              (dict["type"] as? String) == "describe_ui" else {
-            return false
-        }
+        guard let request = DescribeUIWire.parse(line) else { return false }
         let ax = sim.accessibility()
         let result: AXNode?
+        let error: Error?
         do {
-            if let xv = (dict["x"] as? Double) ?? (dict["x"] as? Int).map(Double.init),
-               let yv = (dict["y"] as? Double) ?? (dict["y"] as? Int).map(Double.init) {
-                result = try ax.describeAt(point: Point(x: xv, y: yv))
+            if let point = request.point {
+                result = try ax.describeAt(point: point)
             } else {
                 result = try ax.describeAll()
             }
-        } catch {
-            try? await outbound.write(.text(
-                #"{"type":"describe_ui_result","ok":false,"error":"\#(jsonEscape(String(describing: error)))"}"#
-            ))
-            return true
+            error = nil
+        } catch let e {
+            result = nil
+            error = e
         }
-        if let tree = result {
-            try? await outbound.write(.text(
-                #"{"type":"describe_ui_result","ok":true,"tree":\#(tree.json)}"#
-            ))
-        } else {
-            try? await outbound.write(.text(
-                #"{"type":"describe_ui_result","ok":false,"error":"no accessibility data"}"#
-            ))
-        }
+        try? await outbound.write(.text(
+            DescribeUIWire.reply(request: request, result: result, error: error)
+        ))
         return true
     }
 
@@ -1574,6 +1586,37 @@ struct Server: Sendable {
             return nil
         }
         return String(decoding: data, as: UTF8.self)
+    }
+
+    // MARK: - Triangulate
+
+    /// Resolves `{udid, x, y}` to the AX node at the point plus the
+    /// workspace discovered via Metro. Returns nil when the udid is
+    /// unknown (→ 404). The AX error path is folded into the envelope
+    /// as a null node; an unreachable Metro yields a null workspace.
+    /// Phase A always emits `candidates: []`.
+    static func triangulateJSONString(
+        input: TriangulateInput,
+        simulators: any Simulators,
+        metro: any Metro,
+        listFiles: (URL) -> [URL] = JSXScanner.defaultListFiles,
+        readFile: (URL) -> String? = { try? String(contentsOf: $0) }
+    ) async -> String? {
+        guard let sim = simulators.find(udid: input.udid) else { return nil }
+        let result: TriangulationResult
+        do {
+            result = try await Triangulate.run(
+                point: Point(x: input.x, y: input.y),
+                accessibility: sim.accessibility(),
+                metro: metro,
+                listFiles: listFiles,
+                readFile: readFile
+            )
+        } catch {
+            let ws = await Workspace.discover(metro: metro, readFile: readFile)
+            result = TriangulationResult(node: nil, workspace: ws, candidates: [])
+        }
+        return result.json
     }
 
     private static func claimNextReviewTask(

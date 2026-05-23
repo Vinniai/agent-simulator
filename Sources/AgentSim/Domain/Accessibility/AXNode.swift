@@ -171,6 +171,70 @@ struct AXNode: Equatable, Sendable {
         )
     }
 
+    /// Labels surrounding the deepest node that contains `point`:
+    /// every sibling's label/value/identifier plus up to
+    /// `ancestorDepth` nearest *labeled* ancestors. The hit's own
+    /// strings are omitted — the bag is what's *around* the tap,
+    /// fed into the JSX scanner to disambiguate files where the
+    /// hit label alone appears in multiple places.
+    ///
+    /// Empty / blank strings are dropped. Order follows the walk
+    /// (siblings inner-to-outer, then ancestors), then is de-duped
+    /// preserving first occurrence.
+    func contextBag(at point: Point, ancestorDepth: Int = 2) -> [String] {
+        var path: [AXNode] = []
+        guard findPath(to: point, path: &path), let hit = path.last else { return [] }
+
+        var bag: [String] = []
+        let hitStrings = Set(hit.bagStrings)
+        if path.count >= 2 {
+            for sib in path[path.count - 2].children where sib != hit {
+                bag.append(contentsOf: sib.bagStrings)
+            }
+        }
+        var labeledAncestors = 0
+        var idx = path.count - 2
+        while idx >= 0 && labeledAncestors < ancestorDepth {
+            let strings = path[idx].bagStrings
+            if !strings.isEmpty {
+                bag.append(contentsOf: strings)
+                labeledAncestors += 1
+            }
+            idx -= 1
+        }
+
+        var seen: Set<String> = []
+        var out: [String] = []
+        for s in bag where !hitStrings.contains(s) && seen.insert(s).inserted {
+            out.append(s)
+        }
+        return out
+    }
+
+    /// Non-empty label / value / identifier strings carried by this
+    /// node. Trimmed; blanks dropped.
+    fileprivate var bagStrings: [String] {
+        [label, value, identifier]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    /// Walk root→leaf following the deepest child whose frame
+    /// contains `point`. Returns false (and clears `path`) when the
+    /// point misses this node entirely.
+    private func findPath(to point: Point, path: inout [AXNode]) -> Bool {
+        guard contains(point) else { return false }
+        path.append(self)
+        for child in children {
+            var sub = path
+            if child.findPath(to: point, path: &sub) {
+                path = sub
+                return true
+            }
+        }
+        return true
+    }
+
     fileprivate var dictionary: [String: Any] {
         [
             "role":       role,
