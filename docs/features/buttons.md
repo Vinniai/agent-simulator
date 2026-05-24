@@ -1,0 +1,198 @@
+# Hardware buttons
+
+Press-and-release of the physical side buttons on a simulated device:
+home, lock, power, volume up / down, and the iPhone 15 Pro's action
+button. Three entry points share the same dispatch:
+
+- `agent-sim press --udid <UDID> --button <name> [--duration <sec>]` — CLI.
+- Wire JSON `{ "type": "button", "button": "<name>", "duration": <sec> }`
+  on `agent-sim serve`'s WebSocket and on `agent-sim input`'s stdin.
+- Browser overlay — when `actionable` mode is on, each chrome button
+  in the rendered bezel is a real DOM button. Click → tap; click and
+  hold → real long-press.
+
+This doc explains the wire surface, the two SimulatorKit code paths
+the buttons travel through, and where the magic numbers come from. If
+you're routing keyboard input or pointer touches, that's a different
+pipeline — see `IndigoHIDInput.swift`'s commentary on the 9-arg mouse
+recipe.
+
+## Allowed buttons
+
+| Wire name      | iOS effect                              | Dispatch path |
+|----------------|-----------------------------------------|---------------|
+| `home`         | Home / app switcher                     | `IndigoHIDMessageForButton` |
+| `lock`         | Sleep / wake                            | `IndigoHIDMessageForButton` |
+| `power`        | Sleep / wake (modern devices)           | `IndigoHIDMessageForHIDArbitrary` |
+| `volume-up`    | Volume up                               | `IndigoHIDMessageForHIDArbitrary` |
+| `volume-down`  | Volume down                             | `IndigoHIDMessageForHIDArbitrary` |
+| `action`       | iPhone 15 Pro action button             | `IndigoHIDMessageForHIDArbitrary` |
+| `app-switcher` | Multitasking carousel (cards)           | `IndigoHIDMessageForButton` × 2 (double home press, ~150 ms apart) |
+
+`siri` is **explicitly rejected**: every Indigo path we tried crashes
+`backboardd` on iOS 26.4. Don't add it back without a working recipe.
+
+`app-switcher` is a *virtual* button — there's no physical equivalent
+on Face ID iPhones. The dispatch fires two consecutive `home`
+`IndigoHIDMessageForButton` messages ~150 ms apart. SpringBoard
+listens to that event source independently of whether the device has
+home-button hardware, so this recipe is rotation-agnostic and works
+across the iPhone X+ family. The slow swipe-and-hold variant is
+still available on the wire as `swipe-to-app-switcher` (gesture
+path; see [touches.md](touches.md)).
+
+## Wire JSON
+
+```json
+{ "type": "button", "button": "action", "duration": 1.2 }
+```
+
+- `button` — required. One of the names in the table above.
+- `duration` — optional, seconds. `0` (or absent) → ~100 ms tap.
+  Non-zero is the down→up hold time; clamped to a 20 ms floor so a
+  bogus `0.001` doesn't underrun the simulator's HID dispatch.
+
+The CLI mirrors the wire field: `--duration 1.2` produces the same
+effect. HID codes are NOT on the wire — `DeviceButton` is the
+rich-domain entity that knows its own standard `(page, usage)` pair
+via `standardHIDUsage`, and `IndigoHIDInput` reads it directly. If a
+future device ships non-standard codes, edit the switch on
+`DeviceButton.standardHIDUsage` rather than threading per-press
+overrides through the wire.
+
+## Why duration matters
+
+iOS distinguishes tap vs long-press for almost every side button:
+
+| Button         | Short tap                | Long hold (≥ ~0.8 s)        |
+|----------------|--------------------------|------------------------------|
+| `action`       | Fires the assigned shortcut | "Hold for Ring" / silent flip |
+| `power`        | Sleep / wake             | Siri (≥ ~1.5 s) / Emergency SOS slider (≥ ~5 s) |
+| `volume-up`    | Volume up                | Accessibility shortcut       |
+| `volume-down`  | Volume down              | Accessibility shortcut       |
+| `home`/`lock`  | n/a (already long-press unsafe at the legacy path) | n/a |
+
+The browser overlay measures `mousedown` → `mouseup` and forwards the
+elapsed time as `duration`, so holding the cap with the cursor "just
+works." Programmatic clients have to pass `duration` themselves —
+there's no implicit hold.
+
+## Dispatch — the two paths
+
+`Press.execute(on:)` calls `button.press(duration:on:)`, which
+forwards to `Input.button(_:duration:)`. `IndigoHIDInput.button`
+switches on the case:
+
+### `home` / `lock` → `IndigoHIDMessageForButton`
+
+Three-arg C function: `(buttonCode, operation, target)`. Codes are
+hard-coded to what works on iOS 26.4:
+
+```
+home → (0x0, op, 0x33)
+lock → (0x1, op, 0x33)
+```
+
+`op` is `1` for down, `2` for up — `0` crashes `backboardd`. The
+`0x33` is the digitizer routing target. This recipe has been stable
+through our test surface; don't generalize it without isolating each
+button on a fresh sim.
+
+### `power` / `volume-*` / `action` → `IndigoHIDMessageForHIDArbitrary`
+
+Four-arg C function. The signature is **not** what some open-source
+loaders advertise. After reverse-engineering kittyfarm's typedef and
+matching it against `nm` output of Xcode 26's `SimulatorKit`:
+
+```c
+IndigoHIDMessage* IndigoHIDMessageForHIDArbitrary(
+    uint32_t target,    // 0x32 — same digitizer target the mouse path uses
+    uint32_t page,      // HID usage page
+    uint32_t usage,     // HID usage code
+    uint32_t operation  // 1 down / 2 up
+);
+```
+
+There is **no timestamp argument**. The `KeyboardArbitrary` variant
+some loaders use is for HID page 7 (keyboard usages) only; the side
+buttons live on pages 11 (telephony) and 12 (consumer), so they need
+the generic `HIDArbitrary` symbol.
+
+The pipeline is symmetrical to the legacy path: build a `down`
+message, dispatch via `SimDeviceLegacyHIDClient.send`, sleep for the
+hold window, build + dispatch an `up` message.
+
+## Where the (page, usage) numbers come from
+
+DeviceKit's `chrome.json` for each device declares the HID
+`usagePage` / `usage` next to each button image. Example
+(iPhone 12, abridged):
+
+```json
+{
+  "name": "action",      "usagePage": 11, "usage": 45,
+  "name": "volume-up",   "usagePage": 12, "usage": 233,
+  "name": "volume-down", "usagePage": 12, "usage": 234,
+  "name": "power",       "usagePage": 12, "usage": 48
+}
+```
+
+`DeviceButton.standardHIDUsage` carries the same values, hardcoded.
+chrome.json is consulted for *visual* button placement only — its
+HID fields agree with the spec across every iPhone chrome bundle
+we've inspected, so we don't read them at dispatch time. If a
+future device ships non-standard codes, add a case to
+`standardHIDUsage` rather than threading per-press overrides
+through the wire.
+
+## Browser overlay
+
+The Baguette SDK's `_Button` part (`Resources/Web/baguette/parts/button.js`)
+is the DOM-side renderer. It positions each cap over the bare bezel
+using the pre-computed `box` percentages the Swift
+`SimulatorDefinition.compose(...)` factory ships on
+`/simulators/<UDID>/definition.json`, animates rollover / press states,
+and forwards `mouseup` through the SDK transport as a
+`{type:"button", button:<name>}` envelope with the real
+`mousedown→mouseup` hold time. No HID codes, no chrome lookups, no
+geometry math on the client — the rich domain (button identity, HID
+resolution, anchor-specific placement) lives entirely in Swift; the
+JS sees four CSS-percent numbers and a sprite URL per button.
+
+Buttons whose `name` doesn't map to a known wire button in
+`SimulatorDefinition.Button.wireButton(for:)` aren't emitted in the
+definition at all — keeps the visual layout honest without rendering
+inert caps.
+
+## Adding a new button
+
+1. Extend `DeviceButton` in `Domain/Common/CoordinateTypes.swift` with a
+   case whose `rawValue` matches the wire / chrome.json name. Add a
+   case to `standardHIDUsage` returning the right `HIDUsage` (or
+   `nil` if it routes through the legacy `*ForButton` symbol).
+2. Update `Press.allowed` so error messages list it.
+3. In `IndigoHIDInput.button(_:duration:)`, decide which arm of the
+   switch handles it — legacy (`pressLegacyButton`) or
+   arbitrary-HID (`pressArbitraryHID`). If legacy, add a
+   `buttonCodes(for:)` entry.
+4. Add tests in `Tests/AgentSimTests/Input/GestureTests.swift`
+   following the existing `parses <name> button` / DeviceButton
+   suite patterns.
+5. Map the chrome.json `name` to the wire value in
+   `SimulatorDefinition.Button.wireButton(for:)` so the SDK's
+   `definition.json` advertises the new button — the JS `_Button`
+   part picks it up automatically; no client-side edit needed.
+
+## Known limits
+
+- **`siri`** — every known Indigo path crashes `backboardd` on iOS
+  26.4. The button is parseable in chrome.json but unmapped in
+  `DeviceButton`; do not add a case until you have a tested recipe.
+- **Holds beyond ~5 s** — the dispatch sleep blocks the calling
+  thread. Streaming clients should split very long holds into separate
+  `down` / `up` events through `touch1` if you need concurrent input
+  during the hold.
+- **Per-device usage codes** — currently hard-coded to the iPhone
+  family's standard HID assignments. Devices with different chrome
+  bundles (e.g. CarPlay accessory profiles) would need explicit
+  parsing of `chrome.json`'s `usagePage` / `usage`.

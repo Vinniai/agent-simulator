@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Simulator — focus</title>
+<style>
+  /* Standalone preview tokens — at runtime sim-native.js extracts the
+     #simNativeView block + sibling <style>, so this :root only matters
+     when this file is opened directly via file://. */
+  :root {
+    --bg: #f8fafc;
+    --text: #334155;
+  }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+               font: 400 13px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, sans-serif; }
+</style>
+</head>
+<body>
+<!--
+  Focus mode template. sim-native.js extracts everything inside
+  #simNativeView (plus the <style> below) and injects it when the
+  page is loaded directly at /simulators/<udid>.
+
+  No fake window, no bottom HUD. The whole UI is one slim
+  translucent bar at the top carrying every control:
+
+    [← iPhone 17 Pro Max · iOS 26.4]    [60 fps  H.264|MJPEG  🏠 📷 🪟]
+
+  The device floats free on the dark page below — biggest possible
+  device, least possible chrome.
+-->
+<style>
+  /* Theme tokens — defaults are dark; the prefers-color-scheme:
+     light media query at the bottom flips them. Native form
+     controls also pick up `color-scheme` so scrollbars / focus
+     rings match the surrounding theme. */
+  #simNativeView {
+    color-scheme: light dark;
+    --nv-page-bg:        #1a1a1f;
+    --nv-bar-bg:         rgba(20, 20, 24, 0.78);
+    --nv-bar-border:     rgba(255, 255, 255, 0.08);
+    --nv-bar-shadow:     0 8px 24px rgba(0, 0, 0, 0.45);
+    --nv-bar-inset:      0 1px 0 rgba(255, 255, 255, 0.05) inset;
+    --nv-text:           #f5f5f7;
+    --nv-text-muted:     rgba(245, 245, 247, 0.55);
+    --nv-text-faint:     rgba(245, 245, 247, 0.5);
+    --nv-divider:        rgba(255, 255, 255, 0.12);
+    --nv-btn-hover:      rgba(255, 255, 255, 0.10);
+    --nv-btn-active:     rgba(255, 255, 255, 0.18);
+    --nv-fmt-track-bg:   rgba(255, 255, 255, 0.06);
+    --nv-fmt-track-border: rgba(255, 255, 255, 0.06);
+    --nv-fmt-btn-text:   rgba(245, 245, 247, 0.65);
+    --nv-accent:         #2563eb;
+    --nv-accent-text:    #fff;
+
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    /* Keep the toolbar pill / device clear of the notch + home indicator
+       when the host page is viewport-fit=cover. max() preserves the 12px
+       minimum on devices with no insets (desktop). */
+    padding: max(12px, env(safe-area-inset-top))
+             max(12px, env(safe-area-inset-right))
+             max(12px, env(safe-area-inset-bottom))
+             max(12px, env(safe-area-inset-left));
+    box-sizing: border-box;
+    background: var(--nv-page-bg);
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+  }
+  /* Light + dark token blocks. Defined as both a media query (for
+     "follow system" mode) and a `data-theme` attribute selector
+     (for the manual toggle). The attribute selector has higher
+     specificity than the media query, so a user-pinned theme
+     wins over the OS preference. */
+  @media (prefers-color-scheme: light) {
+    #simNativeView:not([data-theme="dark"]) {
+      --nv-page-bg:        #f1f3f6;
+      --nv-bar-bg:         rgba(255, 255, 255, 0.82);
+      --nv-bar-border:     rgba(15, 23, 42, 0.08);
+      --nv-bar-shadow:     0 6px 22px rgba(15, 23, 42, 0.12);
+      --nv-bar-inset:      0 1px 0 rgba(255, 255, 255, 0.7) inset;
+      --nv-text:           #1d1d1f;
+      --nv-text-muted:     rgba(29, 29, 31, 0.65);
+      --nv-text-faint:     rgba(29, 29, 31, 0.55);
+      --nv-divider:        rgba(15, 23, 42, 0.14);
+      --nv-btn-hover:      rgba(15, 23, 42, 0.06);
+      --nv-btn-active:     rgba(15, 23, 42, 0.12);
+      --nv-fmt-track-bg:   rgba(15, 23, 42, 0.06);
+      --nv-fmt-track-border: rgba(15, 23, 42, 0.06);
+      --nv-fmt-btn-text:   rgba(29, 29, 31, 0.65);
+    }
+  }
+  #simNativeView[data-theme="light"] {
+    --nv-page-bg:        #f1f3f6;
+    --nv-bar-bg:         rgba(255, 255, 255, 0.82);
+    --nv-bar-border:     rgba(15, 23, 42, 0.08);
+    --nv-bar-shadow:     0 6px 22px rgba(15, 23, 42, 0.12);
+    --nv-bar-inset:      0 1px 0 rgba(255, 255, 255, 0.7) inset;
+    --nv-text:           #1d1d1f;
+    --nv-text-muted:     rgba(29, 29, 31, 0.65);
+    --nv-text-faint:     rgba(29, 29, 31, 0.55);
+    --nv-divider:        rgba(15, 23, 42, 0.14);
+    --nv-btn-hover:      rgba(15, 23, 42, 0.06);
+    --nv-btn-active:     rgba(15, 23, 42, 0.12);
+    --nv-fmt-track-bg:   rgba(15, 23, 42, 0.06);
+    --nv-fmt-track-border: rgba(15, 23, 42, 0.06);
+    --nv-fmt-btn-text:   rgba(29, 29, 31, 0.65);
+  }
+
+  /* SwiftUI-style VStack: toolbar pill above the device, both
+     centered horizontally, stacked vertically with a small gap.
+     Each child keeps its own intrinsic width; nothing stretches
+     to match the other. */
+  #simNativeView .device-column {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    max-height: 100%;
+    min-width: 0;
+  }
+
+  /* Toolbar pill — its own content-based width (label + controls).
+     Sits directly above the device as the upper child of the
+     VStack. */
+  #simNativeView .top-bar {
+    display: inline-flex; align-items: center;
+    flex-shrink: 0;
+    gap: 12px;
+    height: 36px;
+    padding: 4px 6px 4px 4px;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 999px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    max-width: 100%;
+  }
+
+  /* `!important` overrides device-frame.js's inline `max-height: 70vh`
+     on both the wrapper <div> and the bezel <img> — those defaults
+     are tuned for the sidebar layout and would cap the device to
+     70% of the viewport here. The 68px subtracts the toolbar
+     (36px) + column gap (8px) + container padding (24px). */
+  #simNativeView #nativeDeviceFrame,
+  #simNativeView #nativeDeviceFrame > div {
+    max-height: calc(100dvh - 68px) !important;
+    max-width: 100% !important;
+  }
+  #simNativeView #nativeDeviceFrame img,
+  #simNativeView #nativeDeviceFrame canvas {
+    max-height: calc(100dvh - 68px) !important;
+    max-width: 100% !important;
+  }
+
+  /* Device-frame rotation. The wrapper inside #nativeDeviceFrame
+     mirrors the simulator's interface orientation as a CSS
+     transform; sim-native.js sets `data-orientation` on the
+     container after each rotate-button click. Rotation is purely
+     visual — pixel positions inside the screen area stay in the
+     device's portrait coord system, and JS wraps the input
+     transport + pinch overlay so coords still land where the
+     user's cursor is.
+
+     In landscape, the rotated visual width = portrait device
+     height; cap the unrotated max-height by viewport width too so
+     the rotated bbox fits horizontally on narrow viewports. */
+  #simNativeView #nativeDeviceFrame > div {
+    transform-origin: center center;
+    transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  /* Rotation is applied as an *inline* transform via JS so each
+     rotate-button click is a monotonically increasing 90° step
+     (0 → 90 → 180 → 270 → 360 → 450 → …). Per-orientation CSS
+     rules would interpolate the numeric difference between the
+     OLD value and the NEW value; jumping from
+     `portrait-upside-down (180)` to `landscape-right (-90)`
+     animates -270° backward instead of +90° forward, which is
+     visibly wrong. The CSS only sets `transform-origin` and the
+     transition curve; the actual rotation degree comes from
+     `rotation-deg` set inline by `applyOrientation` in
+     `sim-native.js`. */
+
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-right"] > div,
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-left"] > div,
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-right"] img,
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-right"] canvas,
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-left"] img,
+  #simNativeView #nativeDeviceFrame[data-orientation="landscape-left"] canvas {
+    max-height: min(calc(100dvh - 68px), calc(100vw - 32px)) !important;
+  }
+
+  /* Label group — clickable, returns to the simulator list. The
+     chevron + device name + OS subtitle read as one breadcrumb. */
+  #simNativeView .tb-label {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 4px 10px 4px 8px;
+    border-radius: 999px;
+    color: inherit; text-decoration: none;
+    transition: background 0.12s ease;
+    min-width: 0; /* enable ellipsis inside the flex item */
+  }
+  #simNativeView .tb-label:hover { background: var(--nv-btn-hover); }
+  #simNativeView .tb-label .tb-back {
+    color: var(--nv-text-muted);
+    flex-shrink: 0;
+  }
+  #simNativeView .tb-label .tb-name {
+    color: var(--nv-text);
+    font: 600 13px/1.1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.01em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-width: 22ch;
+  }
+  #simNativeView .tb-label .tb-os {
+    color: var(--nv-text-faint);
+    font: 500 11px/1.1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    white-space: nowrap;
+    padding-left: 2px;
+    border-left: 1px solid var(--nv-divider);
+  }
+
+  /* Right-side controls cluster: fps badge · format picker · actions. */
+  #simNativeView .tb-controls {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding-right: 4px;
+  }
+
+  /* fps — small monospace label. Hidden until the stream reports a
+     value so the bar isn't carrying dead text on startup. */
+  #simNativeView #nativeStatus {
+    color: var(--nv-text-muted);
+    font: 500 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+    white-space: nowrap;
+    padding: 0 2px;
+  }
+  #simNativeView #nativeStatus:empty { display: none; }
+
+  /* Format segmented control. Active is filled blue; the other is
+     a quiet ghost that lifts on hover. */
+  #simNativeView .fmt-picker {
+    display: inline-flex; align-items: stretch;
+    padding: 2px;
+    background: var(--nv-fmt-track-bg);
+    border: 1px solid var(--nv-fmt-track-border);
+    border-radius: 999px;
+  }
+  #simNativeView .fmt-btn {
+    appearance: none; -webkit-appearance: none;
+    border: 0; padding: 0 10px; height: 22px;
+    background: transparent; color: var(--nv-fmt-btn-text);
+    font: 700 10px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.04em;
+    border-radius: 999px; cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  #simNativeView .fmt-btn:hover { color: var(--nv-text); }
+  #simNativeView .fmt-btn.active {
+    background: var(--nv-accent); color: var(--nv-accent-text);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+  }
+
+  /* Action buttons — Home / Screenshot / App-switcher. */
+  #simNativeView .tb-actions {
+    display: inline-flex; align-items: center; gap: 2px;
+  }
+  #simNativeView .ico-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 28px; padding: 0;
+    background: transparent; border: 0; border-radius: 8px;
+    color: var(--nv-text); cursor: pointer;
+    transition: background 0.12s ease;
+  }
+  #simNativeView .ico-btn:hover { background: var(--nv-btn-hover); }
+  #simNativeView .ico-btn:active { background: var(--nv-btn-active); }
+  #simNativeView .ico-btn.active { background: var(--nv-accent); color: var(--nv-accent-text); }
+  #simNativeView .ico-btn svg { display: block; }
+
+  /* Sidebar-view toggle — floating glass pill on the bottom-left,
+     mirror of the theme toggle. Click navigates back to the inline
+     sidebar layout (`/simulators#stream=<udid>`) — the
+     classic startStream view with the right-hand sidebar of
+     buttons + capture gallery. Same tokens as the theme pill so
+     the two read as a matched pair. */
+  #simNativeView .sidebar-view-toggle {
+    position: fixed; left: 16px; bottom: 16px;
+    width: 36px; height: 36px;
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 0;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 999px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    cursor: pointer;
+    transition: background 0.12s ease, transform 0.12s ease;
+    z-index: 50;
+  }
+  #simNativeView .sidebar-view-toggle:hover  { background: var(--nv-btn-hover); }
+  #simNativeView .sidebar-view-toggle:active { transform: scale(0.96); }
+  #simNativeView .sidebar-view-toggle svg { display: block; }
+
+  /* Comment toggle — floating glass pill sitting just inboard of
+     the sidebar-view pill (bottom-left pair). Click opens the
+     in-screen comment + queue composer (the same select-mode /
+     Activity-sheet flow the toolbar's queue toggle drives), so
+     comments can be left without leaving focus mode. When the
+     composer is open the pill goes accent-filled — it mirrors the
+     toolbar `nativeQueueToggle` so the two stay visibly in sync. */
+  #simNativeView .comment-toggle {
+    position: fixed; left: 60px; bottom: 16px;
+    width: 36px; height: 36px;
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 0;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 999px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    cursor: pointer;
+    transition: background 0.12s ease, transform 0.12s ease, color 0.12s ease;
+    z-index: 50;
+  }
+  #simNativeView .comment-toggle:hover  { background: var(--nv-btn-hover); }
+  #simNativeView .comment-toggle:active { transform: scale(0.96); }
+  #simNativeView .comment-toggle.active {
+    background: var(--nv-accent); color: var(--nv-accent-text);
+    border-color: transparent;
+  }
+  #simNativeView .comment-toggle svg { display: block; }
+
+  /* Theme toggle — floating glass pill at the bottom-right
+     corner. Carries one icon (sun in light theme, moon in dark
+     theme); click flips the manual override. The same pill
+     tokens as the toolbar so it reads as a sibling control. */
+  #simNativeView .theme-toggle {
+    position: fixed; right: 16px; bottom: 16px;
+    width: 36px; height: 36px;
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 0;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 999px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    cursor: pointer;
+    transition: background 0.12s ease, transform 0.12s ease;
+    z-index: 50;
+  }
+  #simNativeView .theme-toggle:hover  { background: var(--nv-btn-hover); }
+  #simNativeView .theme-toggle:active { transform: scale(0.96); }
+  /* Show only the icon that matches the active theme. The other
+     is collapsed via display: none — both icons live in the DOM
+     so screen readers can announce either label. */
+  #simNativeView .theme-toggle .ic-sun  { display: none; }
+  #simNativeView .theme-toggle .ic-moon { display: block; }
+  @media (prefers-color-scheme: light) {
+    #simNativeView:not([data-theme="dark"]) .theme-toggle .ic-sun  { display: block; }
+    #simNativeView:not([data-theme="dark"]) .theme-toggle .ic-moon { display: none; }
+  }
+  #simNativeView[data-theme="light"] .theme-toggle .ic-sun  { display: block; }
+  #simNativeView[data-theme="light"] .theme-toggle .ic-moon { display: none; }
+  #simNativeView[data-theme="dark"]  .theme-toggle .ic-sun  { display: none; }
+  #simNativeView[data-theme="dark"]  .theme-toggle .ic-moon { display: block; }
+
+  /* Narrow viewports — drop the OS subtitle and the fps badge so
+     the bar collapses gracefully instead of wrapping. */
+  @media (max-width: 560px) {
+    #simNativeView .tb-label .tb-os { display: none; }
+    #simNativeView #nativeStatus { display: none; }
+    #simNativeView .top-bar { gap: 8px; }
+  }
+  @media (max-width: 420px) {
+    #simNativeView .fmt-picker { display: none; }
+    #simNativeView .tb-label .tb-name { max-width: 16ch; }
+  }
+
+  /* Live-log sheet — slides up from the bottom on toggle. Hidden
+     by default; the toolbar's `__nativeToggleLogs` flips
+     `[data-logs="open"]` on `#simNativeView`. The sheet uses the
+     same glass tokens as the toolbar so it reads as a sibling
+     control, and the inner panel adopts the Events-card monospace
+     styling so colour-coding pops the same way as the sidebar
+     view. */
+  #simNativeView .logs-sheet {
+    position: fixed;
+    left: 16px; right: 16px; bottom: 16px;
+    max-height: 50vh;
+    display: flex; flex-direction: column;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 14px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    transform: translateY(calc(100% + 24px));
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.22s cubic-bezier(0.32, 0.72, 0, 1),
+                opacity 0.18s ease;
+    z-index: 60;
+  }
+  #simNativeView[data-logs="open"] .logs-sheet {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+  #simNativeView .logs-sheet[aria-hidden="true"] { display: flex; }
+  #simNativeView .logs-sheet-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--nv-divider);
+    font: 600 12px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.02em;
+  }
+  #simNativeView .logs-sheet-close {
+    width: 26px; height: 24px;
+    color: var(--nv-text-muted);
+  }
+  #simNativeView .logs-sheet-body {
+    flex: 1; min-height: 0; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  /* The LogPanel renders into .logs-sheet-body. Its inner list
+     needs to flex inside this column so it scrolls properly. */
+  #simNativeView .logs-sheet-body > [data-role="list"],
+  #simNativeView .logs-sheet-body div[data-role="list"] {
+    flex: 1; min-height: 0; max-height: none !important;
+  }
+
+  /* Accessibility-inspector floating panel. Sits top-right of the
+     device column, glass-styled to match the toolbar. Hidden until
+     the user clicks an element while the inspector is enabled (the
+     toolbar's `nativeAxToggle` drives enable/disable; the panel only
+     surfaces a selection — never the toggle itself). */
+  #simNativeView .ax-host {
+    position: absolute;
+    top: 84px;
+    right: 24px;
+    z-index: 40;
+    width: 240px;
+    padding: 12px 14px;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 12px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    font: 500 11px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    display: none;
+  }
+  #simNativeView .ax-host[data-open="true"] { display: block; }
+  #simNativeView .ax-host .ax-host-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+    font: 600 11px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.02em;
+  }
+  #simNativeView .ax-host .ax-host-close {
+    width: 22px; height: 20px; line-height: 1;
+    color: var(--nv-text-muted);
+    background: transparent; border: 0; cursor: pointer;
+    border-radius: 5px; font: 700 14px ui-monospace, monospace;
+  }
+  #simNativeView .ax-host .ax-host-close:hover {
+    background: var(--nv-bar-border);
+  }
+  #simNativeView .ax-host .btn {
+    appearance: none; border: 1px solid var(--nv-bar-border);
+    background: transparent; color: inherit;
+    border-radius: 6px; padding: 4px 8px;
+    font: 500 11px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    cursor: pointer;
+  }
+  #simNativeView .ax-host .btn:hover { background: var(--nv-bar-border); }
+  #simNativeView .ax-host .btn:disabled { opacity: 0.5; cursor: default; }
+  #simNativeView .ax-host .btn-primary {
+    background: var(--nv-text); color: var(--nv-bar-bg);
+    border-color: transparent;
+  }
+
+  /* Preview ribbon — only when opened via file:// */
+  #simNativeView .preview-banner {
+    display: none; position: fixed; top: 10px; right: 10px; z-index: 999;
+    padding: 4px 10px; border-radius: 6px;
+    background: rgba(234,179,8,.18); border: 1px solid rgba(234,179,8,.5);
+    color: #facc15; font: 700 10px -apple-system, sans-serif; letter-spacing: .14em;
+  }
+  body.preview #simNativeView .preview-banner { display: block; }
+
+  /* ===============================================================
+     On-the-move mobile mode — `/m/<udid>`. sim-native.js sets
+     `data-mobile` on the root. The screen collapses to: the live
+     stream, the AX element picker (overlay, auto-enabled), and a
+     bottom dock = a collapsible Activity drawer (queued / picked
+     up) above the chat-to-queue composer. Everything else in the
+     toolbar is hidden so the device gets the rest of the viewport.
+     =============================================================== */
+  #simNativeView[data-mobile] .fmt-picker,
+  #simNativeView[data-mobile] #nativeActionableToggle,
+  #simNativeView[data-mobile] #nativeRotate,
+  #simNativeView[data-mobile] .tb-actions,
+  #simNativeView[data-mobile] .sidebar-view-toggle,
+  #simNativeView[data-mobile] .comment-toggle,
+  #simNativeView[data-mobile] .theme-toggle,
+  #simNativeView[data-mobile] .ax-host {
+    display: none !important;
+  }
+  /* Reserve the dock's *collapsed* footprint (composer ≈ 64 +
+     activity header ≈ 40) so the centered device floats above it.
+     When the drawer is expanded it grows upward over the lower
+     device area — expected for a drawer. */
+  #simNativeView[data-mobile],
+  #simNativeView[data-comment-dock="open"] {
+    padding-bottom: calc(env(safe-area-inset-bottom) + 116px);
+  }
+  #simNativeView[data-mobile] #nativeDeviceFrame,
+  #simNativeView[data-mobile] #nativeDeviceFrame > div,
+  #simNativeView[data-mobile] #nativeDeviceFrame img,
+  #simNativeView[data-mobile] #nativeDeviceFrame canvas,
+  #simNativeView[data-comment-dock="open"] #nativeDeviceFrame,
+  #simNativeView[data-comment-dock="open"] #nativeDeviceFrame > div,
+  #simNativeView[data-comment-dock="open"] #nativeDeviceFrame img,
+  #simNativeView[data-comment-dock="open"] #nativeDeviceFrame canvas {
+    max-height: calc(100dvh - 68px
+                     - env(safe-area-inset-bottom) - 116px) !important;
+  }
+  /* Keep the AX toggle as a comfortable tap target in the bar. */
+  #simNativeView[data-mobile] .ico-btn { width: 38px; height: 34px; }
+
+  /* Bottom dock — one fixed glass bar, notch-safe, holding the
+     activity drawer then the composer. */
+  #simNativeView #nativeBottomDock { display: none; }
+  #simNativeView[data-mobile] #nativeBottomDock,
+  #simNativeView[data-comment-dock="open"] #nativeBottomDock {
+    display: flex; flex-direction: column;
+    position: fixed; left: 0; right: 0; bottom: 0;
+    z-index: 70;
+    max-height: 80dvh;
+    padding-bottom: env(safe-area-inset-bottom);
+    background: var(--nv-bar-bg);
+    border-top: 1px solid var(--nv-bar-border);
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  }
+
+  /* Activity drawer. Header is the shrink/expand control; the list
+     only takes space when `data-open` is set. */
+  #simNativeView #nativeActivity {
+    display: flex; flex-direction: column;
+    min-height: 0;
+    border-bottom: 1px solid var(--nv-bar-border);
+  }
+  #simNativeView .naq-head-row {
+    display: flex; align-items: center;
+  }
+  #simNativeView .naq-head {
+    appearance: none; border: 0; background: transparent;
+    display: flex; align-items: center; gap: 8px;
+    flex: 1; min-width: 0; height: 40px; padding: 0 14px;
+    color: var(--nv-text); cursor: pointer;
+    font: 600 12px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  }
+  /* Close lives only in the desktop comment-dock state — on `/m`
+     the dock is the primary surface and must stay put, so the
+     close is hidden there even though the markup is shared. */
+  #simNativeView .naq-close {
+    appearance: none; border: 0; background: transparent;
+    display: none; align-items: center; justify-content: center;
+    width: 40px; height: 40px; flex-shrink: 0; padding: 0;
+    color: var(--nv-text-muted); cursor: pointer;
+  }
+  #simNativeView[data-comment-dock="open"]:not([data-mobile]) .naq-close {
+    display: inline-flex;
+  }
+  #simNativeView .naq-close:hover { color: var(--nv-text); }
+  #simNativeView .naq-close:active { transform: scale(0.92); }
+  #simNativeView .naq-chev {
+    color: var(--nv-text-muted); flex-shrink: 0;
+    transition: transform 0.18s ease;
+  }
+  #simNativeView #nativeActivity[data-open] .naq-chev {
+    transform: rotate(180deg);
+  }
+  #simNativeView .naq-title { flex-shrink: 0; }
+  #simNativeView .naq-counts {
+    margin-left: auto;
+    color: var(--nv-text-muted);
+    font: 600 11px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+  #simNativeView .naq-list { display: none; }
+  #simNativeView #nativeActivity[data-open] .naq-list {
+    display: block;
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    max-height: 42dvh;
+    padding: 4px 12px 10px;
+  }
+  #simNativeView .naq-empty {
+    padding: 16px 4px; text-align: center;
+    color: var(--nv-text-faint);
+    font: 500 12px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  }
+  #simNativeView .naq-item {
+    padding: 9px 0;
+    border-bottom: 1px solid var(--nv-divider);
+  }
+  #simNativeView .naq-item:last-child { border-bottom: 0; }
+  #simNativeView .naq-item.is-picked { opacity: 0.62; }
+  #simNativeView .naq-item-top {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
+  }
+  #simNativeView .naq-badge {
+    flex-shrink: 0;
+    padding: 2px 7px; border-radius: 999px;
+    font: 700 9.5px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  #simNativeView .naq-badge.queued {
+    background: rgba(37, 99, 235, 0.18); color: #60a5fa;
+  }
+  #simNativeView .naq-badge.picked {
+    background: rgba(52, 211, 153, 0.16); color: #34d399;
+  }
+  #simNativeView .naq-time {
+    margin-left: auto;
+    color: var(--nv-text-faint);
+    font: 500 10.5px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  #simNativeView .naq-text {
+    color: var(--nv-text);
+    font: 400 13px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    overflow-wrap: anywhere;
+  }
+  #simNativeView .naq-anchor {
+    display: inline-block; margin-top: 5px;
+    color: var(--nv-text-muted);
+    font: 600 10.5px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  /* Composer — lays out inside the dock; the dock provides the
+     glass + safe-area chrome. */
+  #simNativeView #nativeQueueComposer { display: none; }
+  #simNativeView[data-mobile] #nativeQueueComposer,
+  #simNativeView[data-comment-dock="open"] #nativeQueueComposer {
+    display: block;
+    flex-shrink: 0;
+    padding: 10px 12px;
+  }
+  #simNativeView .nqc-context {
+    display: flex; align-items: center; gap: 6px;
+    margin-bottom: 8px;
+    padding: 5px 6px 5px 10px;
+    background: var(--nv-fmt-track-bg);
+    border: 1px solid var(--nv-fmt-track-border);
+    border-radius: 999px;
+    font: 600 11px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    color: var(--nv-text);
+  }
+  #simNativeView .nqc-context[hidden] { display: none; }
+  #simNativeView .nqc-ctx-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--nv-accent); flex-shrink: 0;
+  }
+  #simNativeView .nqc-ctx-label {
+    flex: 1; min-width: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #simNativeView .nqc-ctx-clear {
+    appearance: none; border: 0; background: transparent;
+    color: var(--nv-text-muted); cursor: pointer;
+    width: 24px; height: 24px; flex-shrink: 0;
+    font: 700 16px/1 ui-monospace, monospace; border-radius: 50%;
+  }
+  #simNativeView .nqc-ctx-clear:active { background: var(--nv-btn-active); }
+  #simNativeView .nqc-row {
+    display: flex; align-items: center; gap: 8px;
+  }
+  #simNativeView .nqc-input {
+    flex: 1; min-width: 0;
+    height: 44px; padding: 0 14px;
+    background: var(--nv-fmt-track-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 12px;
+    color: var(--nv-text);
+    /* 16px keeps iOS Safari from zooming the page on focus. */
+    font: 400 16px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    -webkit-user-select: text; user-select: text;
+  }
+  #simNativeView .nqc-input::placeholder { color: var(--nv-text-faint); }
+  #simNativeView .nqc-input:focus {
+    outline: none; border-color: var(--nv-accent);
+  }
+  #simNativeView .nqc-send {
+    flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; padding: 0;
+    background: var(--nv-accent); color: var(--nv-accent-text);
+    border: 0; border-radius: 12px; cursor: pointer;
+    transition: opacity 0.12s ease;
+  }
+  #simNativeView .nqc-send:active { opacity: 0.7; }
+  #simNativeView .nqc-send:disabled { opacity: 0.5; cursor: default; }
+  #simNativeView .nqc-status {
+    min-height: 0; margin-top: 0;
+    font: 600 11px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    color: var(--nv-text-muted);
+  }
+  #simNativeView .nqc-status:not(:empty) { margin-top: 7px; }
+  #simNativeView .nqc-status[data-kind="ok"]  { color: #34d399; }
+  #simNativeView .nqc-status[data-kind="err"] { color: #f87171; }
+</style>
+
+<div id="simNativeView">
+  <span class="preview-banner">PREVIEW</span>
+
+  <div class="device-column">
+  <div class="top-bar" role="toolbar" aria-label="Simulator controls">
+    <a class="tb-label" id="nativeBackLink" href="/simulators" title="Back to simulators">
+      <svg class="tb-back" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+      <span class="tb-name" id="nativeDeviceName">iPhone</span>
+      <span class="tb-os"   id="nativeDeviceOS">iOS</span>
+    </a>
+
+    <div class="tb-controls">
+      <span id="nativeStatus"></span>
+
+      <div class="fmt-picker" id="nativeFormatPicker" role="group" aria-label="Stream format">
+        <button class="fmt-btn" data-v="avcc"  title="H.264 (hardware-decoded). Smaller, more compressed."
+                onclick="window.__nativeSetFormat && window.__nativeSetFormat('avcc')">H.264</button>
+        <button class="fmt-btn" data-v="mjpeg" title="MJPEG. Higher bandwidth, lower latency."
+                onclick="window.__nativeSetFormat && window.__nativeSetFormat('mjpeg')">MJPEG</button>
+      </div>
+
+      <!-- Actionable-bezel toggle. When active, hardware buttons on
+           the bezel become hover-animated, click-able overlays that
+           fire SimInput.button(name). Off by default — flat
+           composite is the safe baseline. -->
+      <button class="ico-btn" id="nativeActionableToggle"
+              title="Toggle actionable bezel buttons"
+              aria-label="Toggle actionable bezel buttons"
+              onclick="window.__nativeToggleActionable && window.__nativeToggleActionable()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+          <rect x="6"  y="3"  width="12" height="18" rx="3"/>
+          <line x1="3" y1="9"  x2="6"  y2="9"/>
+          <line x1="3" y1="13" x2="6"  y2="13"/>
+          <line x1="18" y1="9" x2="21" y2="9"/>
+        </svg>
+      </button>
+
+      <!-- Orientation cycle button — one click advances the device
+           90° clockwise (portrait → landscape-right →
+           portrait-upside-down → landscape-left → portrait). All
+           four orientations are reachable in 1–3 clicks; keeps the
+           toolbar to a single icon. POSTs to
+           `/simulators/<udid>/orientation?value=...`. -->
+      <button class="ico-btn" id="nativeRotate"
+              title="Rotate device 90° clockwise"
+              aria-label="Rotate device"
+              onclick="window.__nativeRotate && window.__nativeRotate()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+          <!-- circular arrow over a phone glyph: device + rotation hint -->
+          <rect x="9" y="3" width="6" height="10" rx="1.4"/>
+          <path d="M5 14a7 7 0 0 0 13 2.5"/>
+          <polyline points="18.5 12 18 16.5 13.6 16"/>
+        </svg>
+      </button>
+
+<!-- Accessibility-inspector toggle. When active, a translucent
+           overlay tracks the AX node under the cursor; clicking an
+           element opens the AX sheet (slides up from the bottom)
+           with selection details and Tap / Copy actions. -->
+      <button class="ico-btn" id="nativeAxToggle"
+              title="Toggle accessibility inspector"
+              aria-label="Toggle accessibility inspector"
+              onclick="window.__nativeToggleAx && window.__nativeToggleAx()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+          <!-- crosshair-on-target glyph: outer ring + inner dot + axes -->
+          <circle cx="12" cy="12" r="7.5"/>
+          <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/>
+          <line x1="12" y1="2.5" x2="12" y2="6"/>
+          <line x1="12" y1="18"  x2="12" y2="21.5"/>
+          <line x1="2.5" y1="12" x2="6"  y2="12"/>
+          <line x1="18"  y1="12" x2="21.5" y2="12"/>
+        </svg>
+      </button>
+
+      <div class="tb-actions">
+        <!-- Select-for-queue toggle. When ON, the AX overlay enters
+             multi-select mode (clicks select instead of tapping the
+             simulator) AND the Activity sheet slides in from the
+             right so the user can leave comments + queue review tasks
+             on the picked elements. -->
+        <button class="ico-btn" id="nativeQueueToggle"
+                title="Toggle element selection for queue"
+                aria-label="Toggle element selection for queue"
+                onclick="window.__nativeToggleQueue && window.__nativeToggleQueue()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+            <!-- Selection-rectangle glyph + small comment bubble -->
+            <rect x="3" y="3" width="11" height="11" rx="1.6" stroke-dasharray="2 2"/>
+            <path d="M11 14h10v6h-5l-3 3v-3h-2z"/>
+          </svg>
+        </button>
+        <button class="ico-btn" id="nativeLogsToggle" title="Toggle live log sheet"
+                aria-label="Toggle live log sheet"
+                onclick="window.__nativeToggleLogs && window.__nativeToggleLogs()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+            <!-- "console / lines" glyph: a panel with three text rows. -->
+            <rect x="3" y="4" width="18" height="16" rx="2.4"/>
+            <line x1="6.5" y1="9"  x2="14"  y2="9"/>
+            <line x1="6.5" y1="13" x2="17.5" y2="13"/>
+            <line x1="6.5" y1="17" x2="11"  y2="17"/>
+          </svg>
+        </button>
+        <button class="ico-btn" title="Home" onclick="window.__nativeHome && window.__nativeHome()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+            <path d="M3 11.2 12 4l9 7.2"/>
+            <path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/>
+          </svg>
+        </button>
+        <button class="ico-btn" title="Screenshot" onclick="window.__nativeScreenshot && window.__nativeScreenshot()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+            <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2L9 5h6l1.5 2h2A1.5 1.5 0 0 1 20 8.5V18a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18z"/>
+            <circle cx="12" cy="13" r="3.5"/>
+          </svg>
+        </button>
+        <button class="ico-btn" title="App switcher"
+                aria-label="Open app switcher"
+                onclick="window.__nativeAppSwitcher && window.__nativeAppSwitcher()">
+          <!-- "App-switcher" glyph mirroring the native Simulator
+               toolbar's third icon — two overlapping rounded squares.
+               The click fires the `app-switcher` virtual button,
+               which the Swift `IndigoHIDInput` decomposes into two
+               consecutive home `IndigoHIDMessageForButton` presses
+               ~150 ms apart — the recipe SpringBoard listens for
+               (works on Face ID iPhones with no physical home
+               button). The slower swipe-and-hold gesture is still
+               available on the wire as `swipe-to-app-switcher`. -->
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+            <rect x="3"  y="7"  width="13" height="13" rx="2.2"/>
+            <path d="M8 7V5.2A2.2 2.2 0 0 1 10.2 3H19a2 2 0 0 1 2 2v8.8A2.2 2.2 0 0 1 18.8 16H17"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+    <div id="nativeDeviceFrame"></div>
+  </div>
+
+  <!-- Accessibility-inspector host. sim-native.js mounts an
+       AXInspector into this element after the surface is ready;
+       the inspector renders its own toggle + selection info here. -->
+  <div id="nativeAxHost" class="ax-host"></div>
+
+  <button class="sidebar-view-toggle" id="nativeSidebarViewToggle"
+          title="Open sidebar view"
+          aria-label="Open sidebar view"
+          onclick="window.__nativeOpenSidebarView && window.__nativeOpenSidebarView()">
+    <!-- Layout-with-sidebar glyph: a panel split by a vertical
+         divider, signalling "device + sidebar" inline view. -->
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+      <rect x="3" y="4" width="18" height="16" rx="2.2"/>
+      <line x1="14" y1="4" x2="14" y2="20"/>
+    </svg>
+  </button>
+
+  <button class="comment-toggle" id="nativeCommentToggle"
+          title="Leave a comment / queue review"
+          aria-label="Open the comment and queue composer"
+          onclick="window.__nativeToggleQueue && window.__nativeToggleQueue()">
+    <!-- Speech-bubble glyph: opens the in-screen comment + queue
+         composer (mirrors the toolbar queue toggle). -->
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+      <path d="M4 5.5h16a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H9l-4 3.5V16.5H4A1.5 1.5 0 0 1 2.5 15V7A1.5 1.5 0 0 1 4 5.5z"/>
+      <line x1="7" y1="10" x2="17" y2="10"/>
+      <line x1="7" y1="13" x2="13" y2="13"/>
+    </svg>
+  </button>
+
+  <button class="theme-toggle" id="nativeThemeToggle" title="Toggle theme"
+          aria-label="Toggle light or dark theme"
+          onclick="window.__nativeToggleTheme && window.__nativeToggleTheme()">
+    <!-- Sun (visible in light theme). -->
+    <svg class="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+      <circle cx="12" cy="12" r="4"/>
+      <path d="M12 2v2"/><path d="M12 20v2"/>
+      <path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/>
+      <path d="M2 12h2"/><path d="M20 12h2"/>
+      <path d="M4.93 19.07l1.41-1.41"/><path d="M17.66 6.34l1.41-1.41"/>
+    </svg>
+    <!-- Moon (visible in dark theme). -->
+    <svg class="ic-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+      <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+    </svg>
+  </button>
+
+  <!-- Live-log sheet — slides up from the bottom, hosts a LogPanel
+       built by sim-logs.js. Hidden by default; toolbar's
+       `nativeLogsToggle` flips `[data-logs="open"]` on the root. -->
+  <aside id="nativeLogsSheet" class="logs-sheet" aria-hidden="true">
+    <header class="logs-sheet-header">
+      <strong>Live logs</strong>
+      <button class="ico-btn logs-sheet-close" title="Close logs"
+              aria-label="Close logs"
+              onclick="window.__nativeToggleLogs && window.__nativeToggleLogs()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+          <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
+        </svg>
+      </button>
+    </header>
+    <div id="nativeLogsHost" class="logs-sheet-body"></div>
+  </aside>
+</div>
+
+<script>
+  // Preview bootstrap — only when the file is opened directly. Lets
+  // designers iterate on the chrome without booting a simulator.
+  (function () {
+    if (location.protocol !== 'file:') return;
+    document.body.classList.add('preview');
+    document.body.style.cssText = 'margin:0;background:#1a1a1f';
+    document.getElementById('nativeDeviceName').textContent = 'iPhone 17 Pro Max';
+    document.getElementById('nativeDeviceOS').textContent = 'iOS 26.4';
+    var host = document.getElementById('nativeDeviceFrame');
+    var img = document.createElement('img');
+    img.src = '../frames/iPhone 17 Pro Max.png';
+    img.style.cssText = 'display:block;height:88vh;max-height:calc(100dvh - 72px);pointer-events:none';
+    host.appendChild(img);
+    document.querySelector('.fmt-btn[data-v="avcc"]').classList.add('active');
+    document.getElementById('nativeStatus').textContent = '60 fps';
+  })();
+</script>
+</body>
+</html>
