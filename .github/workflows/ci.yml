@@ -33,7 +33,15 @@ jobs:
       - name: Generate lcov report
         run: |
           BIN_PATH=$(swift build --show-bin-path)
-          XCTEST="$BIN_PATH/agent_simPackageTests.xctest/Contents/MacOS/agent_simPackageTests"
+          # The test bundle is named after the package ("agent-sim" →
+          # "agent-simPackageTests.xctest"); discover it instead of hardcoding
+          # the sanitized name, which differs across SwiftPM versions.
+          XCTEST_BUNDLE=$(find "$BIN_PATH" -maxdepth 1 -name "*.xctest" | head -1)
+          if [ -z "$XCTEST_BUNDLE" ]; then
+            echo "No .xctest bundle found under $BIN_PATH" >&2
+            exit 1
+          fi
+          XCTEST="$XCTEST_BUNDLE/Contents/MacOS/$(basename "$XCTEST_BUNDLE" .xctest)"
           PROFDATA="$BIN_PATH/codecov/default.profdata"
           # Excluded: IO / 3rd-party-SDK shims (CoreSimulator, SimulatorKit,
           # IOKit HID, Hummingbird, VideoToolbox, CoreImage, IOSurface,
@@ -50,6 +58,8 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          slug: josh-vincent/agent-sim
+          slug: Vinniai/agent-sim
           files: coverage.lcov
-          fail_ci_if_error: true
+          # Coverage upload is informational — a missing token or Codecov
+          # outage must not fail the build.
+          fail_ci_if_error: false
