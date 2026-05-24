@@ -24,7 +24,11 @@ value types and a pure engine:
   multiple matches is a reportable outcome, not an error.
 - **Acceptance Criterion** — a Selector + an expectation from a minimal-but-complete
   vocabulary: `exists | absent | enabled | disabled | text{equals|contains}` (text
-  matches `label` or `value`).
+  matches `label` or `value`). The Swift type is `ExpectedState` — the bare name
+  `Expectation` collides with `Testing.Expectation`, in scope in every test file,
+  the same way `Selector` collided with `ObjectiveC.Selector`. It encodes to a
+  `kind`-tagged object (`{"kind":"textEquals","text":"…"}`) so authored JSON stays
+  legible.
 - **Verdict** — pass / fail / ambiguous, with a reason.
 - **`CriteriaCheck.run(tree:criteria:) -> [Verdict]`** — pure; unit-tested with
   fixture `AXNode` trees, no simulator.

@@ -318,9 +318,15 @@ final class SQLiteReviewTaskStore: ReviewTaskStore, @unchecked Sendable {
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL,
               claimed_at TEXT,
-              completed_at TEXT
+              completed_at TEXT,
+              criteria_json TEXT,
+              verdicts_json TEXT
             )
             """)
+        // Tasks created before ADR-0002 predate these columns; add them
+        // in place so existing queues keep loading.
+        try addColumnIfMissing(table: "review_tasks", column: "criteria_json", type: "TEXT")
+        try addColumnIfMissing(table: "review_tasks", column: "verdicts_json", type: "TEXT")
         try exec("""
             CREATE TABLE IF NOT EXISTS review_task_elements (
               id TEXT PRIMARY KEY,
@@ -379,21 +385,33 @@ final class SQLiteReviewTaskStore: ReviewTaskStore, @unchecked Sendable {
         try exec("CREATE INDEX IF NOT EXISTS idx_code_changes_task ON review_task_code_changes(task_id, created_at)")
     }
 
+    /// Idempotent `ALTER TABLE … ADD COLUMN` — checks `PRAGMA table_info`
+    /// first so re-running `migrate()` on an already-upgraded DB is a no-op.
+    private func addColumnIfMissing(table: String, column: String, type: String) throws {
+        let existing = try query("PRAGMA table_info(\(table))", []) { stmt in
+            text(stmt, 1)   // column 1 of table_info is the column name
+        }
+        guard !existing.contains(column) else { return }
+        try exec("ALTER TABLE \(table) ADD COLUMN \(column) \(type)")
+    }
+
     private func insertTask(_ task: ReviewTask) throws {
         try run(
             """
             INSERT INTO review_tasks
             (id, session_id, bundle_id, title, instructions, status, priority, assignee,
              context_path, bundle_json_path, bundle_markdown_path, result_summary,
-             verification_snapshot_id, created_at, updated_at, claimed_at, completed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             verification_snapshot_id, created_at, updated_at, claimed_at, completed_at,
+             criteria_json, verdicts_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 task.id, task.sessionId, task.bundleId, task.title, task.instructions,
                 task.status, task.priority, task.assignee, task.contextPath,
                 task.bundleJSONPath, task.bundleMarkdownPath, task.resultSummary,
                 task.verificationSnapshotId, iso(task.createdAt), iso(task.updatedAt),
-                task.claimedAt.map(iso), task.completedAt.map(iso)
+                task.claimedAt.map(iso), task.completedAt.map(iso),
+                jsonString(task.criteria), jsonString(task.verdicts)
             ]
         )
     }
@@ -496,7 +514,9 @@ final class SQLiteReviewTaskStore: ReviewTaskStore, @unchecked Sendable {
             completedAt: row.completedAt.map(date),
             elements: elements,
             events: events,
-            codeChanges: codeChanges
+            codeChanges: codeChanges,
+            criteria: decodeJSON(row.criteriaJSON, as: [AcceptanceCriterion].self),
+            verdicts: decodeJSON(row.verdictsJSON, as: [Verdict].self)
         )
     }
 
@@ -571,7 +591,9 @@ final class SQLiteReviewTaskStore: ReviewTaskStore, @unchecked Sendable {
                 createdAt: text(stmt, 13) ?? "",
                 updatedAt: text(stmt, 14) ?? "",
                 claimedAt: text(stmt, 15),
-                completedAt: text(stmt, 16)
+                completedAt: text(stmt, 16),
+                criteriaJSON: text(stmt, 17),
+                verdictsJSON: text(stmt, 18)
             )
         }
     }
@@ -631,6 +653,21 @@ final class SQLiteReviewTaskStore: ReviewTaskStore, @unchecked Sendable {
         String(cString: sqlite3_errmsg(db))
     }
 
+    /// Encode a value-type array to a JSON column string; `[]` on failure
+    /// so a write never silently drops to NULL on an empty/encodable list.
+    private func jsonString<T: Encodable>(_ value: [T]) -> String {
+        guard let data = try? encoder.encode(value),
+              let string = String(data: data, encoding: .utf8) else { return "[]" }
+        return string
+    }
+
+    /// Decode a JSON column back to its array; nil/blank/garbage → `[]`.
+    private func decodeJSON<T: Decodable>(_ text: String?, as type: [T].Type) -> [T] {
+        guard let text, let data = text.data(using: .utf8),
+              let value = try? decoder.decode([T].self, from: data) else { return [] }
+        return value
+    }
+
     private func iso(_ date: Date) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -667,6 +704,8 @@ private struct TaskRow {
     let updatedAt: String
     let claimedAt: String?
     let completedAt: String?
+    let criteriaJSON: String?
+    let verdictsJSON: String?
 }
 
 private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)

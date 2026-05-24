@@ -21,6 +21,11 @@ struct ReviewTask: Codable, Equatable, Sendable {
     var elements: [ReviewTaskElement]
     var events: [ReviewTaskEvent]
     var codeChanges: [ReviewTaskCodeChange]
+    /// Machine-verifiable acceptance criteria authored at task creation
+    /// (ADR-0002), checked by the verify use-case to produce `verdicts`.
+    var criteria: [AcceptanceCriterion]
+    /// The latest verdict per criterion; empty until the task is verified.
+    var verdicts: [Verdict]
 
     init(
         id: String,
@@ -42,7 +47,9 @@ struct ReviewTask: Codable, Equatable, Sendable {
         completedAt: Date?,
         elements: [ReviewTaskElement],
         events: [ReviewTaskEvent],
-        codeChanges: [ReviewTaskCodeChange] = []
+        codeChanges: [ReviewTaskCodeChange] = [],
+        criteria: [AcceptanceCriterion] = [],
+        verdicts: [Verdict] = []
     ) {
         self.id = id
         self.sessionId = sessionId
@@ -64,6 +71,8 @@ struct ReviewTask: Codable, Equatable, Sendable {
         self.elements = elements
         self.events = events
         self.codeChanges = codeChanges
+        self.criteria = criteria
+        self.verdicts = verdicts
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -72,6 +81,7 @@ struct ReviewTask: Codable, Equatable, Sendable {
         case resultSummary, verificationSnapshotId
         case createdAt, updatedAt, claimedAt, completedAt
         case elements, events, codeChanges
+        case criteria, verdicts
     }
 
     init(from decoder: Decoder) throws {
@@ -96,6 +106,8 @@ struct ReviewTask: Codable, Equatable, Sendable {
         self.elements = try c.decode([ReviewTaskElement].self, forKey: .elements)
         self.events = try c.decode([ReviewTaskEvent].self, forKey: .events)
         self.codeChanges = try c.decodeIfPresent([ReviewTaskCodeChange].self, forKey: .codeChanges) ?? []
+        self.criteria = try c.decodeIfPresent([AcceptanceCriterion].self, forKey: .criteria) ?? []
+        self.verdicts = try c.decodeIfPresent([Verdict].self, forKey: .verdicts) ?? []
     }
 }
 
@@ -145,6 +157,8 @@ struct ReviewTaskCreateInput: Codable, Equatable, Sendable {
     var snapshotIds: [String]
     var elements: [ReviewTaskElementInput]?
     var contextMarkdown: String?
+    /// Acceptance criteria the resulting task must satisfy (ADR-0002).
+    var criteria: [AcceptanceCriterion]?
 }
 
 struct ReviewTaskClaimInput: Codable, Equatable, Sendable {

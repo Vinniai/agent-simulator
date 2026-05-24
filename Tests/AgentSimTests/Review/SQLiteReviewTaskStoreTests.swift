@@ -167,6 +167,40 @@ struct SQLiteReviewTaskStoreTests {
         ])
     }
 
+    @Test("createTask persists acceptance criteria and hydrates them on load")
+    func criteriaRoundtrip() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("agent-sim-task-tests-\(UUID().uuidString)")
+        let store = SQLiteReviewTaskStore(url: dir.appendingPathComponent("tasks.sqlite"))
+        let now = Date()
+        let criteria = [
+            AcceptanceCriterion(
+                description: "Save button present",
+                selector: ElementSelector(identifier: "save-btn"),
+                expect: .exists),
+            AcceptanceCriterion(
+                description: "task name field contains text",
+                selector: ElementSelector(role: "AXTextField", label: "Task name"),
+                expect: .textContains("milk")),
+        ]
+        let task = ReviewTask(
+            id: "task-ac", sessionId: "review-ac", bundleId: nil,
+            title: "Save a task", instructions: "Tap Save",
+            status: "open", priority: "normal", assignee: nil,
+            contextPath: nil, bundleJSONPath: nil, bundleMarkdownPath: nil,
+            resultSummary: nil, verificationSnapshotId: nil,
+            createdAt: now, updatedAt: now, claimedAt: nil, completedAt: nil,
+            elements: [], events: [], codeChanges: [],
+            criteria: criteria, verdicts: [])
+
+        let created = try store.createTask(task)
+        #expect(created.criteria == criteria)
+
+        let reloaded = try store.loadTask(id: "task-ac")
+        #expect(reloaded.criteria == criteria)
+        #expect(reloaded.verdicts.isEmpty)
+    }
+
     @Test("bulkCreateTasks creates every supplied task with shared defaults")
     func bulkCreateAllSucceed() throws {
         let dir = FileManager.default.temporaryDirectory
