@@ -478,6 +478,15 @@ struct CommandParsingTests {
         #expect(cmd.actor == "agent-a")
         #expect(cmd.summary == "Implemented change")
         #expect(cmd.verificationSnapshotId == "snap-2")
+        #expect(cmd.autoVerify == false)        // opt-in; off unless asked
+    }
+
+    @Test func `review-tasks result --auto-verify opts into grading`() throws {
+        let cmd = try ReviewTasksCommand.Result.parse([
+            "task-1", "--summary", "ready",
+            "--verification-snapshot-id", "snap-2", "--auto-verify",
+        ])
+        #expect(cmd.autoVerify == true)
     }
 
     @Test func `review-tasks watch parses poll filters`() throws {

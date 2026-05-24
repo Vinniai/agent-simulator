@@ -53,8 +53,13 @@ same way `elements` are) and `verdicts: [Verdict]` (stored like `events` /
   structured, identifier-first selector.
 - **Verdict effect:** advisory (verdicts stored but status manual) was rejected — it
   leaves termination to agent discipline, defeating the purpose.
-- **Auto-run on `readyForVerify`:** deferred. It's an operational layer over the
-  authoritative verify action, and a wrong-screen snapshot would auto-fail a task.
+- **Auto-run on `readyForVerify`:** offered as **opt-in only**, never default. The
+  worry was a wrong-screen snapshot auto-failing an otherwise-good task, so grading
+  stays off until the caller explicitly asks: `review-tasks result --auto-verify`,
+  or `?verify=1` on the task-update/result route. When opted in it records the
+  result then grades the criteria against the just-attached snapshot in one call
+  (`LoopRoutes.submitResult`); a fail only sends the task back to `open`
+  (recoverable). Default-on auto-grading remains rejected for the same reason.
 
 ## Consequences
 

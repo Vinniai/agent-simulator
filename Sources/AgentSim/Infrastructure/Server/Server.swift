@@ -411,11 +411,12 @@ struct Server: Sendable {
                 taskStore: reviewTaskStore
             )
         }
-        router.post("/review-tasks/:id/status") { [reviewTaskStore] r, _ in
+        router.post("/review-tasks/:id/status") { [reviewTaskStore, reviewStore] r, _ in
             await Self.updateReviewTask(
                 id: Self.taskIdParam(r),
                 request: r,
-                taskStore: reviewTaskStore
+                taskStore: reviewTaskStore,
+                reviewStore: reviewStore
             )
         }
         router.post("/review-tasks/:id/events") { [reviewTaskStore] r, _ in
@@ -435,11 +436,12 @@ struct Server: Sendable {
         router.post("/agent/tasks/next") { [reviewTaskStore] r, _ in
             await Self.claimNextReviewTask(request: r, taskStore: reviewTaskStore)
         }
-        router.post("/agent/tasks/:id/result") { [reviewTaskStore] r, _ in
+        router.post("/agent/tasks/:id/result") { [reviewTaskStore, reviewStore] r, _ in
             await Self.updateReviewTask(
                 id: Self.agentTaskIdParam(r),
                 request: r,
-                taskStore: reviewTaskStore
+                taskStore: reviewTaskStore,
+                reviewStore: reviewStore
             )
         }
         router.post("/agent/tasks/:id/events") { [reviewTaskStore] r, _ in
@@ -1632,12 +1634,19 @@ struct Server: Sendable {
     private static func updateReviewTask(
         id: String,
         request: Request,
-        taskStore: any ReviewTaskStore
+        taskStore: any ReviewTaskStore,
+        reviewStore: any ReviewStore
     ) async -> Response {
         do {
             let input = try await decodeJSON(ReviewTaskUpdateInput.self, from: request)
+            // `?verify=1` opts into auto-grading the criteria against the
+            // just-attached snapshot (ADR-0002). Off by default → plain update.
+            let autoVerify = ["1", "true"].contains(
+                String(request.uri.queryParameters.get("verify") ?? ""))
             return jsonResponse(try jsonEncoder.encode(
-                try taskStore.updateTask(id: id, input: input)
+                try LoopRoutes.submitResult(
+                    autoVerify: autoVerify, taskId: id, input: input,
+                    taskStore: taskStore, reviewStore: reviewStore)
             ))
         } catch ReviewTaskStoreError.notFound {
             return errorJSON("unknown task: \(id)", status: .notFound)

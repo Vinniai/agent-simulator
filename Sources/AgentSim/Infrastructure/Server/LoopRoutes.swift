@@ -47,6 +47,27 @@ enum LoopRoutes {
         return try VerifyTask.run(store: taskStore, taskId: taskId, tree: tree)
     }
 
+    /// Submit a task result, optionally auto-grading it in the same call
+    /// (ADR-0002, opt-in). Records the update (status / attached
+    /// verification snapshot / summary), then — only when `autoVerify` —
+    /// runs ``verifyFromSnapshot`` so the returned status is the verdict
+    /// rather than the bare `readyForVerify`. Off by default because a
+    /// snapshot of the wrong screen would auto-fail an otherwise-good task;
+    /// the caller opts in once it trusts the captured screen. A grade that
+    /// fails just sends the task back to `open` (recoverable, not lost).
+    static func submitResult(
+        autoVerify: Bool,
+        taskId: String,
+        input: ReviewTaskUpdateInput,
+        taskStore: any ReviewTaskStore,
+        reviewStore: any ReviewStore
+    ) throws -> ReviewTask {
+        let updated = try taskStore.updateTask(id: taskId, input: input)
+        guard autoVerify else { return updated }
+        return try verifyFromSnapshot(
+            taskId: taskId, taskStore: taskStore, reviewStore: reviewStore)
+    }
+
     /// Live criteria verification: run ``VerifyTask`` against a freshly
     /// captured `describe-ui` tree. Integration-only (needs a booted sim);
     /// the verdict logic itself is the same engine as the snapshot path.

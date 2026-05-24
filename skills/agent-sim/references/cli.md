@@ -348,6 +348,8 @@ agent-sim review-tasks add-code-change <task-id> --path /abs/File.swift \
 agent-sim review-tasks add-code-change <task-id> --changes-file changes.json   # batch form
 agent-sim review-tasks result <task-id> --status readyForVerify --summary "…" \
         --verification-snapshot-id snap_… --actor <id>     # '-' = stdin on --summary
+agent-sim review-tasks result <task-id> --verification-snapshot-id snap_… \
+        --summary "ready" --auto-verify                    # record + grade in one call (opt-in)
 agent-sim review-tasks verify <task-id> --status pass --after-snapshot-id snap_… [--notes -]
 agent-sim review-tasks verify-criteria <task-id>                    # grade criteria vs the task's snapshot
 agent-sim review-tasks verify-criteria <task-id> --live --udid <id> # grade vs a fresh describe-ui capture
@@ -376,6 +378,10 @@ agent-sim review-tasks bulk-create --session-id <id> --file -        # envelope 
   convention) and prints an `exists` criterion keyed on the element's
   `identifier` (else `label`) — paste it into a task's `criteria[]` instead of
   hand-writing the selector.
+- `result --auto-verify` (or `?verify=1` on the `/review-tasks/:id/status` /
+  `/agent/tasks/:id/result` routes) records the result **and** grades the
+  criteria against the attached snapshot in one call — opt-in, because a
+  wrong-screen snapshot would auto-fail a task. A fail just returns it to `open`.
 
 ### Session + gate — `agent`
 

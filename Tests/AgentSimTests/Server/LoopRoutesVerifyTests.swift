@@ -37,6 +37,7 @@ struct LoopRoutesVerifyTests {
         criteria: [AcceptanceCriterion],
         artifact: Data? = nil,
         snapshotId: String? = "snap-1",
+        attachToTask: Bool = true,
         reviews: FileReviewStore,
         tasks: SQLiteReviewTaskStore
     ) throws -> String {
@@ -58,7 +59,7 @@ struct LoopRoutesVerifyTests {
             instructions: "I", status: "readyForVerify", priority: "normal",
             assignee: nil, contextPath: nil, bundleJSONPath: nil,
             bundleMarkdownPath: nil, resultSummary: nil,
-            verificationSnapshotId: snapshotId, createdAt: now, updatedAt: now,
+            verificationSnapshotId: attachToTask ? snapshotId : nil, createdAt: now, updatedAt: now,
             claimedAt: nil, completedAt: nil, elements: [], events: [],
             codeChanges: [], criteria: criteria, verdicts: []))
         return "task-1"
@@ -108,6 +109,51 @@ struct LoopRoutesVerifyTests {
             _ = try LoopRoutes.verifyFromSnapshot(
                 taskId: id, taskStore: tasks, reviewStore: reviews)
         }
+    }
+
+    /// Opt-in auto-verify (ADR-0002): submitting a result with `autoVerify`
+    /// attaches the snapshot via the update, then immediately grades the
+    /// task's criteria against it so the returned status is the verdict — the
+    /// readyForVerify step and the grade collapse into one call.
+    @Test("submitResult with auto-verify attaches the snapshot then grades it")
+    func autoVerifyGrades() throws {
+        let reviews = reviewStore(); let tasks = taskStore()
+        let id = try setup(criteria: [
+            AcceptanceCriterion(description: "Save present",
+                                selector: ElementSelector(identifier: "save-btn"),
+                                expect: .exists),
+        ], attachToTask: false, reviews: reviews, tasks: tasks)
+
+        let result = try LoopRoutes.submitResult(
+            autoVerify: true, taskId: id,
+            input: ReviewTaskUpdateInput(
+                status: "readyForVerify", assignee: nil, resultSummary: "ready",
+                verificationSnapshotId: "snap-1", notes: nil, actor: "agent-a"),
+            taskStore: tasks, reviewStore: reviews)
+
+        #expect(result.status == "verified")
+        #expect(result.verdicts.count == 1)
+        #expect(try tasks.loadTask(id: id).status == "verified")
+    }
+
+    @Test("submitResult without auto-verify records the result but does not grade")
+    func noAutoVerifyJustRecords() throws {
+        let reviews = reviewStore(); let tasks = taskStore()
+        let id = try setup(criteria: [
+            AcceptanceCriterion(description: "Save present",
+                                selector: ElementSelector(identifier: "save-btn"),
+                                expect: .exists),
+        ], attachToTask: false, reviews: reviews, tasks: tasks)
+
+        let result = try LoopRoutes.submitResult(
+            autoVerify: false, taskId: id,
+            input: ReviewTaskUpdateInput(
+                status: "readyForVerify", assignee: nil, resultSummary: "ready",
+                verificationSnapshotId: "snap-1", notes: nil, actor: "agent-a"),
+            taskStore: tasks, reviewStore: reviews)
+
+        #expect(result.status == "readyForVerify")
+        #expect(result.verdicts.isEmpty)
     }
 
     @Test("a corrupt AX artifact is rejected rather than read as an empty tree")

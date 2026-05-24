@@ -86,6 +86,8 @@ TASK=$(curl -fsS -XPOST "$BASE/reviews/$REVIEW/tasks" -H 'content-type: applicat
     and `status` set to `verified` (all pass) or `open` (any fail/ambiguous).
   - Or grade a *live* capture instead of the snapshot:
     `agent-sim review-tasks verify-criteria $TASK --live --udid $UDID`.
+  - One-call shortcut once you trust the captured screen — record the result and
+    grade in a single step: `agent-sim review-tasks result $TASK --verification-snapshot-id $SNAP --summary "ready" --auto-verify`.
 - Queue (your defect ledger):
   - Claim next: `agent-sim review-tasks next --actor <agent-id>` → one task or nothing.
   - Record a fix: `agent-sim review-tasks add-code-change $TASK --path <file> --start-line N ...`.

@@ -130,17 +130,24 @@ struct ReviewTasksCommand: ParsableCommand {
         @Option(name: .long, help: "Optional notes")
         var notes: String?
 
+        @Flag(name: .long, help: "After recording the result, grade the task's acceptance criteria against the attached snapshot (ADR-0002 opt-in)")
+        var autoVerify = false
+
         func run() throws {
-            try printJSON(SQLiteReviewTaskStore().updateTask(
-                id: id,
-                input: ReviewTaskUpdateInput(
-                    status: status,
-                    assignee: nil,
-                    resultSummary: readPossiblyStdin(summary),
-                    verificationSnapshotId: verificationSnapshotId,
-                    notes: notes,
-                    actor: actor
-                )
+            let input = ReviewTaskUpdateInput(
+                status: status,
+                assignee: nil,
+                resultSummary: try readPossiblyStdin(summary),
+                verificationSnapshotId: verificationSnapshotId,
+                notes: notes,
+                actor: actor
+            )
+            try printJSON(LoopRoutes.submitResult(
+                autoVerify: autoVerify,
+                taskId: id,
+                input: input,
+                taskStore: SQLiteReviewTaskStore(),
+                reviewStore: FileReviewStore()
             ))
         }
     }
