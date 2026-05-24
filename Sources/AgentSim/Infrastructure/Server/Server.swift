@@ -1463,41 +1463,14 @@ struct Server: Sendable {
                 relativePath: contextPath,
                 data: Data(contextMarkdown.utf8)
             )
-            let now = Date()
-            let title = input.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let instructions = input.instructions?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let task = ReviewTask(
-                id: taskId,
+            let task = reviewTaskFromCreateInput(
+                taskId: taskId,
                 sessionId: session.id,
-                bundleId: bundle?.id,
-                title: title?.isEmpty == false ? title! : "Review selected AX elements",
-                instructions: instructions?.isEmpty == false
-                    ? instructions!
-                    : "Use the attached review context, screenshot, AX tree, comments, and source references to make the requested UI change and verify it against a fresh capture.",
-                status: "open",
-                priority: input.priority ?? "normal",
-                assignee: input.assignee,
+                input: input,
+                bundle: bundle,
                 contextPath: contextPath,
-                bundleJSONPath: bundle?.jsonPath,
-                bundleMarkdownPath: bundle?.markdownPath,
-                resultSummary: nil,
-                verificationSnapshotId: nil,
-                createdAt: now,
-                updatedAt: now,
-                claimedAt: nil,
-                completedAt: nil,
                 elements: elements,
-                events: [
-                    ReviewTaskEvent(
-                        id: FileReviewStore.makeID(prefix: "event"),
-                        taskId: taskId,
-                        type: "created",
-                        actor: input.assignee,
-                        message: "Created from review selection",
-                        metadataJSON: nil,
-                        createdAt: now
-                    )
-                ]
+                now: Date()
             )
             return jsonResponse(try jsonEncoder.encode(try taskStore.createTask(task)))
         } catch ReviewStoreError.notFound {
@@ -1974,6 +1947,59 @@ struct Server: Sendable {
             ).utf8)
         )
         return bundle
+    }
+
+    /// Pure field-mapping from a decoded create-input to the persisted
+    /// `ReviewTask`, split out of `createReviewTask` so it is unit-testable
+    /// without a `Request` or a store. Notably threads `input.criteria`
+    /// (ADR-0002) onto the task — verification has nothing to check
+    /// otherwise — and applies the default title/instructions used when the
+    /// operator leaves them blank.
+    static func reviewTaskFromCreateInput(
+        taskId: String,
+        sessionId: String,
+        input: ReviewTaskCreateInput,
+        bundle: ReviewBundle?,
+        contextPath: String,
+        elements: [ReviewTaskElement],
+        now: Date
+    ) -> ReviewTask {
+        let title = input.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let instructions = input.instructions?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ReviewTask(
+            id: taskId,
+            sessionId: sessionId,
+            bundleId: bundle?.id,
+            title: title?.isEmpty == false ? title! : "Review selected AX elements",
+            instructions: instructions?.isEmpty == false
+                ? instructions!
+                : "Use the attached review context, screenshot, AX tree, comments, and source references to make the requested UI change and verify it against a fresh capture.",
+            status: "open",
+            priority: input.priority ?? "normal",
+            assignee: input.assignee,
+            contextPath: contextPath,
+            bundleJSONPath: bundle?.jsonPath,
+            bundleMarkdownPath: bundle?.markdownPath,
+            resultSummary: nil,
+            verificationSnapshotId: nil,
+            createdAt: now,
+            updatedAt: now,
+            claimedAt: nil,
+            completedAt: nil,
+            elements: elements,
+            events: [
+                ReviewTaskEvent(
+                    id: FileReviewStore.makeID(prefix: "event"),
+                    taskId: taskId,
+                    type: "created",
+                    actor: input.assignee,
+                    message: "Created from review selection",
+                    metadataJSON: nil,
+                    createdAt: now
+                )
+            ],
+            criteria: input.criteria ?? []
+        )
     }
 
     private static func ensureBundle(
