@@ -16,6 +16,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Fork-only boundary (ADR-0001)
+        run: ./scripts/check-fork-boundary.sh
+
       - name: Setup Swift
         uses: SwiftyLab/setup-swift@latest
         with:

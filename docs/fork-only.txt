@@ -1,0 +1,137 @@
+# Fork-only vs tracks-upstream boundary manifest (ADR-0001)
+#
+# agent-sim is a selective clone of tddworks/baguette. Code that maps cleanly to
+# upstream ("tracks-upstream") must stay upstream-shaped so commits cherry-pick
+# with only a path remap; code that exists only to serve the Agentic Feedback
+# Loop ("fork-only") may evolve freely because it costs nothing at absorb time.
+#
+# This file is the single source of truth for `scripts/check-fork-boundary.sh`,
+# which enforces two rules:
+#   1. completeness — every context directory under Domain/ and Infrastructure/,
+#      and every file under App/Commands/ and App/*.swift, must be classified in
+#      exactly one [classify:*] section below. A new, unclassified top-level
+#      source file fails the build (forces a conscious zone decision).
+#   2. leakage — no file inside a tracks-upstream context may reference a
+#      fork-only type named in [markers]. That coupling would drag loop value
+#      into the upstream-shared zone and break the next cherry-pick.
+#
+# Categories:
+#   tracks-upstream — keep close to upstream; cherry-picks must stay cheap.
+#   fork-only       — loop value; evolve freely.
+#   diverged        — accepted manual-port divergence (re-architected vs upstream).
+#   shared          — wiring both zones legitimately touch (exempt as a leak source).
+#
+# Format: `[classify:<layer>] <category>` header, then one bare name per line
+# (a directory name for Domain/Infrastructure layers, a filename for app layers).
+
+[classify:domain] tracks-upstream
+Chrome
+Input
+Logs
+Orientation
+Screen
+Simulator
+Stream
+
+[classify:domain] fork-only
+Diagnostics
+Notes
+Review
+Verification
+Workspace
+
+[classify:domain] diverged
+Accessibility
+
+[classify:domain] shared
+Common
+
+[classify:infrastructure] tracks-upstream
+Chrome
+Input
+Logs
+Orientation
+Screen
+Simulator
+Stream
+
+[classify:infrastructure] fork-only
+Notes
+Review
+Workspace
+
+[classify:infrastructure] diverged
+Accessibility
+
+[classify:infrastructure] shared
+Server
+
+[classify:app] tracks-upstream
+BootCommand.swift
+ChromeCommand.swift
+GestureCommands.swift
+InputCommand.swift
+ListCommand.swift
+LogsCommand.swift
+OrientationCommand.swift
+ScreenshotCommand.swift
+ShutdownCommand.swift
+StreamCommand.swift
+
+[classify:app] fork-only
+AgentCommand.swift
+DiagDigitizerTrackpadCommand.swift
+DoctorCommand.swift
+NotesCommand.swift
+ReviewTasksCommand.swift
+
+[classify:app] diverged
+DescribeUICommand.swift
+
+[classify:app] shared
+FlowReplayService.swift
+GestureDispatcher.swift
+Logger.swift
+ReconfigParser.swift
+RootCommand.swift
+ServeCommand.swift
+SharedOptions.swift
+Version.swift
+
+# Distinctive fork-only type names. A tracks-upstream file referencing any of
+# these is a leak. Keep this list to high-signal, unambiguous identifiers — bare
+# generic names (Note, Kind, Outcome, Envelope, CodingKeys) are intentionally
+# omitted because they recur as nested types across both zones.
+[markers]
+ReviewTask
+ReviewSession
+ReviewStore
+ReviewBundle
+ReviewCapture
+ReviewSnapshot
+ReviewFlow
+ReviewElement
+ReviewMarker
+ReviewEdge
+ReviewRecording
+ReviewDevice
+ReviewFingerprint
+NoteSource
+NoteFilter
+NoteCreateInput
+NotesStreamFrame
+NotesError
+AcceptanceCriterion
+CriteriaCheck
+Verdict
+VerifyTask
+ElementSelector
+ExpectedState
+Workspace
+Triangulate
+TriangulationResult
+Metro
+JSXScanner
+SourceCandidate
+CandidateRef
+DoctorReport
