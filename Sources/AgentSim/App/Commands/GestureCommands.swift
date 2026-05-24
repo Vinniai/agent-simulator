@@ -38,6 +38,68 @@ struct TapCommand: ParsableCommand {
     }
 }
 
+// MARK: - double-tap
+
+/// One-shot CLI for a native iOS double-tap at a single coordinate.
+///
+/// The browser / `agent-sim input` paths already cover this by sending
+/// four `touch1-down` / `touch1-up` lines on one long-lived connection —
+/// see `docs/features/double-tap.md`. What this command adds is the
+/// same recipe inside a **single process**, because two back-to-back
+/// `agent-sim tap` invocations spend so long in process startup that
+/// `UITapGestureRecognizer` times out between them.
+///
+/// Defaults (`duration` = 0.08 s, `interval` = 0.05 s) match the
+/// known-working cadence captured in the WebSocket trace on issue #11.
+struct DoubleTapCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "double-tap",
+        abstract: "Two taps at one point — fires UITapGestureRecognizer / TapGesture(count: 2)"
+    )
+
+    @OptionGroup var options: DeviceOption
+    @Option var x: Double
+    @Option var y: Double
+    @Option var width: Double
+    @Option var height: Double
+    @Option(help: "Gap between tap-1-up and tap-2-down, seconds")
+    var interval: Double = 0.05
+    @Option(help: "Hold duration per tap, seconds")
+    var duration: Double = 0.08
+
+    /// Sequence the four phased `Touch1` events that the iOS recognizer
+    /// needs to aggregate into one double-tap. Lifted out of `run()` so
+    /// tests can drive it with a `MockInput` and a no-op sleep — the
+    /// command body is otherwise unreachable in unit tests because it
+    /// resolves a real `CoreSimulators` device.
+    static func dispatch(
+        at point: Point, size: Size, interval: Double, duration: Double,
+        on input: any Input,
+        sleep: (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }
+    ) -> Bool {
+        let down = Touch1(phase: .down, at: point, size: size, edge: nil)
+        let up   = Touch1(phase: .up,   at: point, size: size, edge: nil)
+        guard down.execute(on: input) else { return false }
+        sleep(duration)
+        guard up.execute(on: input) else { return false }
+        sleep(interval)
+        guard down.execute(on: input) else { return false }
+        sleep(duration)
+        return up.execute(on: input)
+    }
+
+    func run() {
+        let sim = resolve(udid: options.udid, deviceSet: options.deviceSet)
+        let ok = Self.dispatch(
+            at: Point(x: x, y: y),
+            size: Size(width: width, height: height),
+            interval: interval, duration: duration,
+            on: sim.input()
+        )
+        runOrExit(ok, action: "double-tap")
+    }
+}
+
 // MARK: - swipe
 
 struct SwipeCommand: ParsableCommand {

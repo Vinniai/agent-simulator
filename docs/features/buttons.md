@@ -147,18 +147,22 @@ through the wire.
 
 ## Browser overlay
 
-`bezel-buttons.js` is the DOM-side renderer. It positions each
-button image over the bare bezel using the offsets baked into
-chrome.json, animates rollover / press states, and fires
-`onPress(name, durationSeconds)` on `mouseup`. The wrapper in
-`device-frame.js` forwards that to `simInput.button(name, duration)`,
-which encodes the wire envelope. The frontend stays a dumb sender —
-no HID codes, no chrome lookups; the rich domain (button identity +
-HID resolution) lives entirely in Swift.
+The Baguette SDK's `_Button` part (`Resources/Web/baguette/parts/button.js`)
+is the DOM-side renderer. It positions each cap over the bare bezel
+using the pre-computed `box` percentages the Swift
+`SimulatorDefinition.compose(...)` factory ships on
+`/simulators/<UDID>/definition.json`, animates rollover / press states,
+and forwards `mouseup` through the SDK transport as a
+`{type:"button", button:<name>}` envelope with the real
+`mousedown→mouseup` hold time. No HID codes, no chrome lookups, no
+geometry math on the client — the rich domain (button identity, HID
+resolution, anchor-specific placement) lives entirely in Swift; the
+JS sees four CSS-percent numbers and a sprite URL per button.
 
-Buttons that aren't in the `WIRE_BUTTON` table render but stay
-inert with a tooltip explaining why — keeps the visual layout
-honest without firing a no-op event.
+Buttons whose `name` doesn't map to a known wire button in
+`SimulatorDefinition.Button.wireButton(for:)` aren't emitted in the
+definition at all — keeps the visual layout honest without rendering
+inert caps.
 
 ## Adding a new button
 
@@ -175,8 +179,9 @@ honest without firing a no-op event.
    following the existing `parses <name> button` / DeviceButton
    suite patterns.
 5. Map the chrome.json `name` to the wire value in
-   `Resources/Web/bezel-buttons.js`'s `WIRE_BUTTON` table so the
-   overlay fires it.
+   `SimulatorDefinition.Button.wireButton(for:)` so the SDK's
+   `definition.json` advertises the new button — the JS `_Button`
+   part picks it up automatically; no client-side edit needed.
 
 ## Known limits
 

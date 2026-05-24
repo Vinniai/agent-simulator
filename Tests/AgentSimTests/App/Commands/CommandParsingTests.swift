@@ -18,7 +18,7 @@ struct CommandParsingTests {
         #expect(Set(names) == [
             "agent",
             "list", "boot", "shutdown", "input", "stream",
-            "tap", "swipe", "pinch", "pan", "press",
+            "tap", "double-tap", "swipe", "pinch", "pan", "press",
             "key", "type",
             "chrome", "screenshot", "describe-ui", "logs", "serve",
             "orientation", "diag-digitizer-trackpad", "review-tasks",
@@ -223,6 +223,31 @@ struct CommandParsingTests {
             "--width", "390", "--height", "844",
         ])
         #expect(cmd.duration == 0.05)
+    }
+
+    @Test func `double-tap parses point + size + interval + duration`() throws {
+        let cmd = try DoubleTapCommand.parse([
+            "--udid", "ABC",
+            "--x", "220", "--y", "480",
+            "--width", "402", "--height", "874",
+            "--interval", "0.12",
+            "--duration", "0.05",
+        ])
+        #expect(cmd.x == 220 && cmd.y == 480)
+        #expect(cmd.width == 402 && cmd.height == 874)
+        #expect(cmd.interval == 0.12)
+        #expect(cmd.duration == 0.05)
+        #expect(DoubleTapCommand.configuration.commandName == "double-tap")
+    }
+
+    @Test func `double-tap interval and duration default to observed-working cadence`() throws {
+        let cmd = try DoubleTapCommand.parse([
+            "--udid", "ABC",
+            "--x", "1", "--y", "2",
+            "--width", "390", "--height", "844",
+        ])
+        #expect(cmd.interval == 0.05)
+        #expect(cmd.duration == 0.08)
     }
 
     @Test func `swipe parses start + end + size`() throws {

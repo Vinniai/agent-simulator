@@ -35,11 +35,12 @@ final class SQLiteNotes: Notes, @unchecked Sendable {
             )
             try run(
                 """
-                INSERT INTO notes (id, udid, text, ax_path, promoted, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO notes (id, udid, text, ax_path, source_json, promoted, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     note.id, note.udid, note.text, note.axPath,
+                    encodeSource(note.source),
                     note.promoted ? "1" : "0", iso(note.createdAt)
                 ]
             )
@@ -50,7 +51,7 @@ final class SQLiteNotes: Notes, @unchecked Sendable {
     func list() throws -> [Note] {
         try locked {
             try query(
-                "SELECT id, udid, text, ax_path, promoted, created_at FROM notes ORDER BY rowid DESC",
+                "SELECT id, udid, text, ax_path, source_json, promoted, created_at FROM notes ORDER BY rowid DESC",
                 []
             ) { try self.hydrate($0) }
         }
@@ -63,7 +64,7 @@ final class SQLiteNotes: Notes, @unchecked Sendable {
                 throw NotesError.notFound(id)
             }
             let rows = try query(
-                "SELECT id, udid, text, ax_path, promoted, created_at FROM notes WHERE id = ?",
+                "SELECT id, udid, text, ax_path, source_json, promoted, created_at FROM notes WHERE id = ?",
                 [id]
             ) { try self.hydrate($0) }
             guard let note = rows.first else { throw NotesError.notFound(id) }
@@ -79,8 +80,9 @@ final class SQLiteNotes: Notes, @unchecked Sendable {
             udid: text(stmt, 1) ?? "",
             text: text(stmt, 2) ?? "",
             axPath: text(stmt, 3),
-            promoted: (text(stmt, 4) ?? "0") == "1",
-            createdAt: date(text(stmt, 5) ?? "")
+            source: decodeSource(text(stmt, 4)),
+            promoted: (text(stmt, 5) ?? "0") == "1",
+            createdAt: date(text(stmt, 6) ?? "")
         )
     }
 
@@ -97,6 +99,34 @@ final class SQLiteNotes: Notes, @unchecked Sendable {
             )
             """
         )
+        // Schema v2: `source_json` carries the triangulation envelope
+        // (workspace + ranked candidates) the browser already fetched
+        // when the note was posted. Added as a nullable column so old
+        // rows keep working untouched.
+        try addColumnIfMissing(table: "notes", column: "source_json", definition: "TEXT")
+    }
+
+    private func addColumnIfMissing(
+        table: String, column: String, definition: String
+    ) throws {
+        let cols = try query("PRAGMA table_info(\(table))", []) { stmt -> String in
+            self.text(stmt, 1) ?? ""
+        }
+        if cols.contains(column) { return }
+        try exec("ALTER TABLE \(table) ADD COLUMN \(column) \(definition)")
+    }
+
+    private func encodeSource(_ source: NoteSource?) -> String? {
+        guard let source else { return nil }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard let data = try? encoder.encode(source) else { return nil }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    private func decodeSource(_ json: String?) -> NoteSource? {
+        guard let json, let data = json.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(NoteSource.self, from: data)
     }
 
     private func locked<T>(_ body: () throws -> T) throws -> T {

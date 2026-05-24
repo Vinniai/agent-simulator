@@ -49,10 +49,13 @@
   let logPanel = null;
   let axInspector = null;
   let lastAxNode = null;    // last element picked while in mobile select-mode
+  let lastAxSource = null;  // `/triangulate` envelope for lastAxNode (or null)
   let activityTimer = null;     // fallback poll handle (only while WS down)
   let activityStream = null;    // `WS /notes/stream` socket (primary)
   let activityReconnect = null; // backoff timer for socket reconnect
   let activityClosed = false;   // page unloading — stop reconnecting
+  let activityPollingStarted = false; // guard double WS subscribe
+  let commentDockEnabledAx = false;   // desktop dock turned the picker on
   let lastPaintedSize = { w: 0, h: 0 };
   let layout = null;
   let deviceName = '';
@@ -417,6 +420,7 @@
       getDeviceSize: () => frame.screenSize(),
       onSelect: (node) => {
         lastAxNode = node;
+        lastAxSource = null;   // discard stale triangulation; new fetch will repopulate
         renderAxPanel(panel, node);
         updateComposerContext();
       },
@@ -650,15 +654,19 @@
       if (axInspector.isEnabled()) axInspector.disable();
       else axInspector.enable();
     };
-    // Queue-mode toggle: enable overlay in select-mode AND open the
-    // Activity sheet + selection composer. Wired by review-client.js's
-    // toggleQueueMode hook which manages dock visibility.
+    // Queue-mode toggle. Desktop focus mode now opens the *same*
+    // bottom dock the `/m/<udid>` view uses — a collapsible Activity
+    // drawer + composer pinned to the bottom, with its own close —
+    // instead of the old right-slide review-client sheet (which had
+    // no close and felt cramped). The toolbar button and the floating
+    // comment pill are two faces of one state; both reflect it.
     window.__nativeToggleQueue = () => {
-      if (!window.AgentSimReviewClient || !window.AgentSimReviewClient.toggleQueueMode) return;
       const btn = document.getElementById('nativeQueueToggle');
       const willEnable = !(btn && btn.classList.contains('active'));
-      window.AgentSimReviewClient.toggleQueueMode(willEnable);
+      setCommentDock(willEnable);
       if (btn) btn.classList.toggle('active', willEnable);
+      const pill = document.getElementById('nativeCommentToggle');
+      if (pill) pill.classList.toggle('active', willEnable);
     };
     // Sidebar-view jump — bounce out of focus mode and into the
     // inline `startStream` layout on `/simulators`. The hash is
@@ -718,6 +726,15 @@
         {
           send: (payload) => session && session.send(payload),
           getDeviceSize: () => frame.screenSize(),
+          getUdid: () => udid,
+          // Cache the triangulation envelope so submitNote can ride it
+          // along — keeps the agent fetching the queue on the same
+          // source-file pointer the user just saw in the panel.
+          onSourceResolved: (res) => {
+            lastAxSource = (res && (res.workspace || (res.candidates || []).length))
+              ? { workspace: res.workspace || null, candidates: res.candidates || [] }
+              : null;
+          },
         }
     );
   }
@@ -741,6 +758,42 @@
     injectQueueComposer(dock);
   }
 
+  // Desktop comment dock. Opens the bottom dock (Activity drawer +
+  // composer) in focus mode without leaving it — mounting it lazily
+  // the first time, and putting the AX picker into select-mode so a
+  // comment can be anchored to a tapped element. Closing restores
+  // drive-mode so taps go back to driving the simulator. On `/m`
+  // the dock is permanent, so this is a focus-mode-only concern.
+  function setCommentDock(open) {
+    if (isMobile) return;
+    const root = document.getElementById('simNativeView');
+    if (!root) return;
+    injectBottomDock();
+    startActivityPolling();
+    if (open) {
+      root.setAttribute('data-comment-dock', 'open');
+      if (axInspector) {
+        try {
+          if (!axInspector.isEnabled()) { axInspector.enable(); commentDockEnabledAx = true; }
+          axInspector.setSelectionMode('select');
+        } catch (_) { /* ignore */ }
+      }
+    } else {
+      root.removeAttribute('data-comment-dock');
+      if (axInspector) {
+        try {
+          axInspector.setSelectionMode('inspect');
+          if (commentDockEnabledAx) axInspector.disable();
+        } catch (_) { /* ignore */ }
+      }
+      commentDockEnabledAx = false;
+      lastAxNode = null;
+      lastAxSource = null;
+      renderAxPanel(document.getElementById('nativeAxHost'), null);
+      updateComposerContext();
+    }
+  }
+
   // Collapsible Activity drawer. Header is a button (counts +
   // chevron) that shrinks/expands the list so the user can keep an
   // eye on what's in progress without giving up the device view.
@@ -751,16 +804,25 @@
     const sec = document.createElement('section');
     sec.id = 'nativeActivity';
     sec.innerHTML =
-        '<button type="button" id="naqToggle" class="naq-head" ' +
-          'aria-label="Toggle activity">' +
-          '<svg class="naq-chev" viewBox="0 0 24 24" fill="none" ' +
-            'stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
-            'stroke-linejoin="round" width="14" height="14">' +
-            '<polyline points="6 9 12 15 18 9"/>' +
-          '</svg>' +
-          '<span class="naq-title">Activity</span>' +
-          '<span class="naq-counts" data-role="naq-counts">—</span>' +
-        '</button>' +
+        '<div class="naq-head-row">' +
+          '<button type="button" id="naqToggle" class="naq-head" ' +
+            'aria-label="Toggle activity">' +
+            '<svg class="naq-chev" viewBox="0 0 24 24" fill="none" ' +
+              'stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
+              'stroke-linejoin="round" width="14" height="14">' +
+              '<polyline points="6 9 12 15 18 9"/>' +
+            '</svg>' +
+            '<span class="naq-title">Activity</span>' +
+            '<span class="naq-counts" data-role="naq-counts">—</span>' +
+          '</button>' +
+          '<button type="button" id="naqClose" class="naq-close" ' +
+            'aria-label="Close comments">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+              'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ' +
+              'width="14" height="14"><path d="M6 6 18 18"/><path d="M18 6 6 18"/>' +
+            '</svg>' +
+          '</button>' +
+        '</div>' +
         '<div class="naq-list" data-role="naq-list"></div>';
     dock.appendChild(sec);
     const open = localStorage.getItem(ACTIVITY_OPEN_KEY) === '1';
@@ -768,6 +830,16 @@
     document.getElementById('naqToggle').addEventListener('click', () => {
       const isOpen = sec.getAttribute('data-open') === 'true';
       setActivityOpen(!isOpen);
+    });
+    // The close button dismisses the whole dock back to drive-mode,
+    // keeping the toolbar/pill state in sync (focus mode only — on
+    // `/m` the dock is the primary surface and stays put).
+    document.getElementById('naqClose').addEventListener('click', () => {
+      setCommentDock(false);
+      const qbtn = document.getElementById('nativeQueueToggle');
+      if (qbtn) qbtn.classList.remove('active');
+      const pill = document.getElementById('nativeCommentToggle');
+      if (pill) pill.classList.remove('active');
     });
   }
 
@@ -795,6 +867,8 @@
   // down — one immediate fetch for first paint, then a slow 8 s
   // backstop that the socket clears the moment it delivers.
   function startActivityPolling() {
+    if (activityPollingStarted) return;
+    activityPollingStarted = true;
     refreshActivity();
     connectActivityStream();
   }
@@ -877,12 +951,21 @@
           ? '<span class="naq-anchor" title="' + esc(n.axPath) + '">⌖ '
               + esc(shortPath(n.axPath)) + '</span>'
           : '';
+      // Surface the top JSX-scanner candidate (if any) so the user sees
+      // exactly where an agent would land when it picks the note up.
+      // Full path stays in the tooltip; the chip shows file:line.
+      const top = n.source && Array.isArray(n.source.candidates) && n.source.candidates[0];
+      const source = top
+          ? '<span class="naq-source" title="' + esc(top.file) + ':' + top.line + '">' +
+              '◎ ' + esc(shortPath(top.file)) + ':' + top.line +
+            '</span>'
+          : '';
       return '<div class="naq-item' + (picked ? ' is-picked' : '') + '">' +
                '<div class="naq-item-top">' + badge +
                  '<span class="naq-time">' + esc(relativeTime(n.createdAt))
                  + '</span></div>' +
                '<div class="naq-text">' + esc(n.text || '') + '</div>' +
-               anchor +
+               anchor + source +
              '</div>';
     }).join('');
   }
@@ -942,6 +1025,7 @@
     form.querySelector('[data-role="nqc-ctx-clear"]')
         .addEventListener('click', () => {
           lastAxNode = null;
+          lastAxSource = null;
           if (axInspector) try { axInspector.clearSelections(); } catch (_) {}
           renderAxPanel(document.getElementById('nativeAxHost'), null);
           updateComposerContext();
@@ -988,6 +1072,10 @@
     try {
       const body = { udid, text };
       if (lastAxNode && lastAxNode._path) body.axPath = lastAxNode._path;
+      // Carry the JSX-scanner result along so an agent picking the
+      // queue lands directly on file:line — same `{workspace, candidates}`
+      // shape the SOURCE row already shows in the panel.
+      if (lastAxSource) body.source = lastAxSource;
       const r = await fetch('/notes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -996,6 +1084,7 @@
       if (!r.ok) throw new Error('HTTP ' + r.status);
       input.value = '';
       lastAxNode = null;
+      lastAxSource = null;
       if (axInspector) try { axInspector.clearSelections(); } catch (_) {}
       renderAxPanel(document.getElementById('nativeAxHost'), null);
       updateComposerContext();

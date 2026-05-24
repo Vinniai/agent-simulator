@@ -112,7 +112,10 @@
       '<button class="btn btn-sm btn-primary" data-act="tap"' +
         ' style="width:100%;margin-top:6px;white-space:nowrap">' +
         'Tap (' + cx.toFixed(0) + ', ' + cy.toFixed(0) + ')' +
-      '</button>';
+      '</button>' +
+      '<div data-role="ax-source" style="margin-top:8px;font-size:11px;' +
+        'line-height:1.45;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">' +
+      '</div>';
 
     const copyId = host.querySelector('[data-act="copy-id"]');
     if (copyId && node.identifier) {
@@ -134,6 +137,89 @@
           x: cx, y: cy, width: sz.w, height: sz.h,
         });
       });
+
+    // Source triangulation — POST /triangulate with the node's tap
+    // center, render any candidates the JSX scanner returned. The
+    // fetch is fire-and-forget; UI stays usable while it resolves.
+    // Requires `ctx.getUdid`; legacy callers without it skip silently.
+    const sourceHost = host.querySelector('[data-role="ax-source"]');
+    if (sourceHost && ctx.getUdid) {
+      const udid = ctx.getUdid();
+      if (udid) hydrateSourceCandidates(
+        sourceHost, udid, cx, cy, ctx.onSourceResolved
+      );
+    }
+  }
+
+  // `onResolved` lets the host page stash the triangulation envelope
+  // (workspace + candidates) so it can ride along when the user submits
+  // a note from the composer — no second `/triangulate` round-trip.
+  // Always fires once per fetch: with the response on success, with
+  // `null` on a network / non-2xx error so the caller can clear stale
+  // cache state.
+  function hydrateSourceCandidates(host, udid, x, y, onResolved) {
+    fetch('/triangulate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ udid, x, y }),
+    })
+      .then((r) => r.ok ? r.json() : null)
+      .then((res) => {
+        renderSourceCandidates(host, res);
+        if (onResolved) onResolved(res);
+      })
+      .catch(() => {
+        if (onResolved) onResolved(null);
+      });
+  }
+
+  function renderSourceCandidates(host, res) {
+    if (!host || !res) return;
+    const ws = res.workspace;
+    const cands = Array.isArray(res.candidates) ? res.candidates : [];
+    if (!ws && cands.length === 0) return;
+
+    const root = (ws && ws.root) || '';
+    const rel = (p) => root && p.indexOf(root) === 0
+      ? p.slice(root.length).replace(/^\/+/, '')
+      : p;
+
+    let html =
+      '<div style="color:var(--text-muted);margin-bottom:4px">SOURCE</div>';
+    if (ws) {
+      html +=
+        '<div style="color:var(--text-muted);margin-bottom:4px">' +
+          escapeHTML(ws.root.split('/').slice(-2).join('/')) +
+          ' <span style="opacity:0.7">(' + escapeHTML(ws.framework) + ')</span>' +
+        '</div>';
+    }
+    if (cands.length === 0) {
+      html += '<div style="color:var(--text-muted)">no candidates</div>';
+    } else {
+      cands.forEach((c, i) => {
+        const loc = rel(c.file) + ':' + c.line + ':' + c.column;
+        const comp = c.component ? ' &lt;' + escapeHTML(c.component) + '&gt;' : '';
+        const conf = (c.confidence != null) ? c.confidence.toFixed(1) : '?';
+        html +=
+          '<div style="display:flex;gap:6px;align-items:center;margin-top:2px">' +
+            '<span style="opacity:0.6;width:24px;flex:0 0 24px">' + conf + '</span>' +
+            '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis"' +
+              ' title="' + escapeHTML(c.file) + '">' +
+              escapeHTML(loc) + comp +
+            '</span>' +
+            '<button class="btn btn-sm" data-cand="' + i + '"' +
+              ' style="white-space:nowrap;padding:1px 6px;font-size:10px"' +
+              ' title="Copy file:line">copy</button>' +
+          '</div>';
+      });
+    }
+    host.innerHTML = html;
+    host.querySelectorAll('[data-cand]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const c = cands[parseInt(btn.dataset.cand, 10)];
+        if (c) navigator.clipboard?.writeText(c.file + ':' + c.line);
+      });
+    });
   }
 
   // --- AXInspector --------------------------------------------------
@@ -189,6 +275,7 @@
       this.screenArea     = opts.screenArea;         // overlay parent (already position:absolute)
       this.send           = opts.send;               // (payload) => void  — JSON over stream WS
       this.getDeviceSize  = opts.getDeviceSize;      // () => { w, h }     — device-point dims
+      this.getUdid        = opts.getUdid || null;    // () => string|null  — for `/triangulate`
       this.onSelect            = opts.onSelect            || null; // (node | null) => void
       this.onSelectionChange   = opts.onSelectionChange   || null; // (Array<{path,node}>) => void
       this.onStatus            = opts.onStatus            || null; // (text)         => void
@@ -267,6 +354,18 @@
     /// hook can short-circuit the decoder).
     handleEnvelope(env) {
       if (!env || env.type !== 'describe_ui_result') return false;
+      // Point hit-test responses carry the echoed x/y from the
+      // request (per DescribeUIWire). They land as single nodes,
+      // NOT full trees, so they must not replace this.tree.
+      if (typeof env.x === 'number' && typeof env.y === 'number') {
+        const key = `${env.x},${env.y}`;
+        const cb = this._pendingPointHits && this._pendingPointHits.get(key);
+        if (cb) {
+          this._pendingPointHits.delete(key);
+          cb(env.ok ? env.tree : null);
+        }
+        return true;
+      }
       if (env.ok && env.tree) {
         this.tree = env.tree;
         stampPaths(this.tree);
@@ -289,6 +388,36 @@
       }
       this._draw();
       return true;
+    }
+
+    /// Server-side hit-test fallback. The cached AX tree can miss
+    /// elements (group containers with childless enumeration —
+    /// SwiftUI tab bars, nav bars, toolbars). When that happens for
+    /// a markup tool's click, send a point `describe_ui` so the
+    /// AXP server-side `objectAtPoint` returns the underlying
+    /// button. Resolves with the AXNode for the hit, or null.
+    _hitTestServerSide(x, y) {
+      return new Promise((resolve) => {
+        if (!this._pendingPointHits) this._pendingPointHits = new Map();
+        const key = `${x},${y}`;
+        const existing = this._pendingPointHits.get(key);
+        if (existing) { resolve(null); return; }
+        const timer = setTimeout(() => {
+          this._pendingPointHits.delete(key);
+          resolve(null);
+        }, 2000);
+        this._pendingPointHits.set(key, (node) => {
+          clearTimeout(timer);
+          if (node) stampPaths(node);
+          resolve(node);
+        });
+        try { this.send({ type: 'describe_ui', x, y }); }
+        catch {
+          this._pendingPointHits.delete(key);
+          clearTimeout(timer);
+          resolve(null);
+        }
+      });
     }
 
     _findByPath(path) {
@@ -651,19 +780,33 @@
 
     _handleClick(e) {
       if (this.selectionMode === 'select') {
-        if (!this.hover || !this.hover._path) return;
-        const path = this.hover._path;
         const additive = !!(e && (e.shiftKey || e.metaKey || e.ctrlKey));
-        if (additive) {
-          if (this.selections.has(path)) this.selections.delete(path);
-          else this.selections.set(path, this.hover);
-        } else {
-          this.selections.clear();
-          this.selections.set(path, this.hover);
+        if (this.hover && this.hover._path) {
+          const path = this.hover._path;
+          if (additive) {
+            if (this.selections.has(path)) this.selections.delete(path);
+            else this.selections.set(path, this.hover);
+          } else {
+            this.selections.clear();
+            this.selections.set(path, this.hover);
+          }
+          this._draw();
+          this._refresh();
+          this._fireSelectionChange();
+          return;
         }
-        this._draw();
-        this._refresh();
-        this._fireSelectionChange();
+        // Cache miss — fall back to server-side hit-test for
+        // SwiftUI tab-bar / nav-bar elements the tree walk misses.
+        const dev = this._toDevicePoint(e);
+        this._setStatus('hit-testing…');
+        this._hitTestServerSide(dev.x, dev.y).then((node) => {
+          this._setStatus('');
+          if (!node || !node._path) return;
+          if (!additive) this.selections.clear();
+          this.selections.set(node._path, node);
+          this._draw();
+          this._fireSelectionChange();
+        });
         return;
       }
       // inspect-mode (legacy single-pick)
@@ -679,6 +822,7 @@
         renderSelectionInto(this.infoEl, this.selected, {
           send: this.send,
           getDeviceSize: this.getDeviceSize,
+          getUdid: this.getUdid,
         });
       }
     }

@@ -66,20 +66,57 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
     }
 
     func describeAt(point: Point) throws -> AXNode? {
-        // No native hit-test that survives the dispatcher pattern
-        // reliably — AXP's `objectAtPoint:` returns a translation
-        // whose `bridgeDelegateToken` we'd have to seed before the
-        // call (chicken / egg). Instead, fetch the tree once and
-        // hit-test locally with our `AXNode.hitTest`. Cheap
-        // post-fetch, and reuses the value-type semantics we
-        // already TDD'd.
+        // Prefer the server-side hit-test. `AXPTranslator` exposes
+        // `objectAtPoint:displayId:bridgeDelegateToken:` — the
+        // 3-arg form, distinct from the chicken/egg-prone `objectAtPoint:`
+        // — which accepts the token as a parameter and therefore
+        // plays nicely with the dispatcher pattern. The big win
+        // is that it returns elements the static tree walk
+        // *misses*: SwiftUI tab bars / nav bars / toolbars
+        // routinely enumerate as childless via `describeAll`, but
+        // `objectAtPoint` hits the underlying buttons just fine.
+        // Discovered while reading Meta's idb
+        // (`FBSimulatorAccessibilityCommands.m`:885), where the same
+        // selector backs idb's describe-point CLI.
+        //
+        // Fall back to the original client-side path when the
+        // selector isn't available (very old AXPTranslator, hypothetical)
+        // or the host-side resolution fails before we get a translator.
+        if Self.supportsServerSideHitTest,
+           let hit = try hitTestServerSide(point: point) {
+            return hit
+        }
         guard let tree = try fetchTree(hitTest: point) else { return nil }
         return tree.hitTest(point) ?? tree
     }
 
     // MARK: - tree fetch
 
-    private func fetchTree(hitTest: Point?) throws -> AXNode? {
+    /// The pieces every AXP entry point needs: a working translator,
+    /// a registered token, the frontmost app's root element (which
+    /// carries the host-window frame), an `AXFrameTransform` for
+    /// projecting/unprojecting coordinates, and the per-call deadline.
+    /// Held together inside the closure passed to
+    /// `withAXPContext(_:)`, which owns the dispatcher register +
+    /// unregister around it.
+    private struct AXPContext {
+        let translator: NSObject
+        let token: String
+        let frontmostRoot: NSObject
+        let transform: AXFrameTransform
+        let deadline: Date
+    }
+
+    /// Run `body` inside a fully-prepared AXP context. Handles the
+    /// dispatcher token lifecycle (register on entry, unregister on
+    /// exit), translator + frontmost-app resolution, and the
+    /// host-coord ↔ device-point `AXFrameTransform` setup. Returns
+    /// `nil` if any setup step fails (framework not loaded, device
+    /// missing, frontmost app not resolvable, etc.) — same nil
+    /// semantics each entry point had pre-refactor.
+    private func withAXPContext<T>(
+        _ body: (AXPContext) throws -> T?
+    ) throws -> T? {
         guard Self.isAvailable else {
             logErr("[ax] framework / dispatcher not available")
             return nil
@@ -104,23 +141,81 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
         }
         Self.stamp(token: token, on: translation)
 
-        guard let rootElement = Self.macPlatformElement(
+        guard let frontmostRoot = Self.macPlatformElement(
             translator: translator, translation: translation
         ) else {
             log("[ax] no mac platform element from translation")
             return nil
         }
-        Self.stampElementTranslation(token: token, on: rootElement)
-        Self.stampSubtree(rootElement, token: token, depthCap: Self.maxDepth)
-
         let pointSize = Self.devicePointSize(for: device)
-        let rootFrame = AXElementReader.frame(of: rootElement)
-        return AXNode.walk(
-            from: rootElement,
-            transform: AXFrameTransform(rootFrame: rootFrame, pointSize: pointSize),
-            depthCap: Self.maxDepth,
+        let rootFrame = AXElementReader.frame(of: frontmostRoot)
+        let transform = AXFrameTransform(rootFrame: rootFrame, pointSize: pointSize)
+
+        return try body(AXPContext(
+            translator: translator,
+            token: token,
+            frontmostRoot: frontmostRoot,
+            transform: transform,
             deadline: deadline
-        )
+        ))
+    }
+
+    private func fetchTree(hitTest: Point?) throws -> AXNode? {
+        try withAXPContext { ctx in
+            Self.stampElementTranslation(token: ctx.token, on: ctx.frontmostRoot)
+            Self.stampSubtree(ctx.frontmostRoot, token: ctx.token, depthCap: Self.maxDepth)
+            return AXNode.walk(
+                from: ctx.frontmostRoot,
+                transform: ctx.transform,
+                depthCap: Self.maxDepth,
+                deadline: ctx.deadline
+            )
+        }
+    }
+
+    /// Server-side hit-test path. Walks the same handshake as
+    /// `fetchTree` — register a token, resolve the frontmost app
+    /// to get a root frame for the device→host coordinate
+    /// transform — then calls
+    /// `objectAtPoint:displayId:bridgeDelegateToken:` on AXP
+    /// directly. The translator returns the deepest accessibility
+    /// element under the point, including elements that the
+    /// recursive children walk in `fetchTree` would have missed
+    /// (the canonical case: SwiftUI tab-bar items inside an empty
+    /// `AXGroup`). The returned translation is walked into an
+    /// `AXNode` subtree using the same `AXNode.walk` factory
+    /// `fetchTree` uses, so callers get identical value-type
+    /// semantics either way.
+    private func hitTestServerSide(point: Point) throws -> AXNode? {
+        try withAXPContext { ctx in
+            let hostPoint = ctx.transform.unmap(CGPoint(x: point.x, y: point.y))
+
+            guard let hitTranslation = Self.objectAtPoint(
+                translator: ctx.translator,
+                point: hostPoint,
+                displayId: 0,
+                token: ctx.token
+            ) else {
+                // No element under that point. Distinct from "selector
+                // missing" — that case is gated by
+                // `supportsServerSideHitTest` upstream.
+                return nil
+            }
+            Self.stamp(token: ctx.token, on: hitTranslation)
+
+            guard let hitElement = Self.macPlatformElement(
+                translator: ctx.translator, translation: hitTranslation
+            ) else { return nil }
+            Self.stampElementTranslation(token: ctx.token, on: hitElement)
+            Self.stampSubtree(hitElement, token: ctx.token, depthCap: Self.maxDepth)
+
+            return AXNode.walk(
+                from: hitElement,
+                transform: ctx.transform,
+                depthCap: Self.maxDepth,
+                deadline: ctx.deadline
+            )
+        }
     }
 
     /// Stamp every reachable child translation with `token` so
@@ -211,6 +306,45 @@ final class AXPTranslatorAccessibility: Accessibility, @unchecked Sendable {
         }
         typealias Fn = @convention(c) (AnyObject, Selector, AnyObject) -> AnyObject?
         return unsafeBitCast(imp, to: Fn.self)(translator, sel, translation) as? NSObject
+    }
+
+    /// 3-arg `objectAtPoint:displayId:bridgeDelegateToken:`. The
+    /// older 0-arg `objectAtPoint:` variant needs the bridge token
+    /// stamped on the returned translation *before* the call —
+    /// chicken/egg. This 3-arg form takes the token as a parameter,
+    /// so the dispatcher entry registered in `hitTestServerSide`
+    /// resolves correctly on the very first XPC sub-request. Used
+    /// by Meta's idb internally
+    /// (`FBSimulatorAccessibilityCommands.m`, `FBAXTranslationRequest_Point`),
+    /// where it's the foundation for the describe-point CLI.
+    private static func objectAtPoint(
+        translator: NSObject, point: CGPoint, displayId: UInt32, token: String
+    ) -> NSObject? {
+        let sel = NSSelectorFromString("objectAtPoint:displayId:bridgeDelegateToken:")
+        guard translator.responds(to: sel),
+              let imp = class_getMethodImplementation(type(of: translator), sel) else {
+            logErr("[ax] -objectAtPoint:displayId:bridgeDelegateToken: not found")
+            return nil
+        }
+        typealias Fn = @convention(c) (AnyObject, Selector, CGPoint, UInt32, AnyObject) -> AnyObject?
+        return unsafeBitCast(imp, to: Fn.self)(
+            translator, sel, point, displayId, token as NSString
+        ) as? NSObject
+    }
+
+    /// Capability check: `true` when the loaded AXPTranslator
+    /// responds to the 3-arg `objectAtPoint` selector. Lets
+    /// `describeAt(point:)` choose between the new server-side
+    /// path and the legacy client-side walk without a try-and-fall-back
+    /// dance — the two paths cost the same on a hit but cost
+    /// double on a miss, so a single capability check up front is
+    /// cleaner. The selector has been present on every AXP we've
+    /// seen on Xcode 26+; this guard is defensive only.
+    static var supportsServerSideHitTest: Bool {
+        guard let translator = sharedTranslator else { return false }
+        return translator.responds(
+            to: NSSelectorFromString("objectAtPoint:displayId:bridgeDelegateToken:")
+        )
     }
 
     // MARK: - element accessors

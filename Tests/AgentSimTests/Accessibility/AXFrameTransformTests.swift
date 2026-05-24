@@ -93,4 +93,61 @@ struct AXFrameTransformTests {
         let input = CGRect(x: 5, y: 6, width: 7, height: 8)
         #expect(t.map(input) == input)
     }
+
+    // MARK: - unmap: device-point → mac-host coordinate, the inverse
+    // path used by the AXP server-side hit-test.
+
+    @Test func `unmap is the inverse of map for the identity transform`() {
+        let t = AXFrameTransform(
+            rootFrame: CGRect(x: 0, y: 0, width: 393, height: 852),
+            pointSize: CGSize(width: 393, height: 852)
+        )
+        #expect(t.unmap(CGPoint(x: 100, y: 200)) == CGPoint(x: 100, y: 200))
+    }
+
+    @Test func `unmap reverses a 2:1 down-scale into an up-scale`() {
+        let t = AXFrameTransform(
+            rootFrame: CGRect(x: 0, y: 0, width: 786, height: 1704),
+            pointSize: CGSize(width: 393, height: 852)
+        )
+        // device (100, 200) corresponds to host (200, 400) — exactly
+        // reversing the `2:1 root → halves coordinates uniformly` map.
+        #expect(t.unmap(CGPoint(x: 100, y: 200)) == CGPoint(x: 200, y: 400))
+    }
+
+    @Test func `unmap reverses a non-zero root origin shift`() {
+        let t = AXFrameTransform(
+            rootFrame: CGRect(x: 50, y: 80, width: 393, height: 852),
+            pointSize: CGSize(width: 393, height: 852)
+        )
+        // device (10, 10) → host (60, 90), inverse of the existing
+        // map-side origin-shift test.
+        #expect(t.unmap(CGPoint(x: 10, y: 10)) == CGPoint(x: 60, y: 90))
+    }
+
+    @Test func `unmap reverses the letterbox y-offset`() {
+        // Same letterbox setup as the map test: pointSize 100x200,
+        // rootFrame 100x100 → +50 y centering offset.
+        let t = AXFrameTransform(
+            rootFrame: CGRect(x: 0, y: 0, width: 100, height: 100),
+            pointSize: CGSize(width: 100, height: 200)
+        )
+        // device (10, 70) → host (10, 20), inverse of the map test
+        // mapping (10, 20) → (10, 70).
+        #expect(t.unmap(CGPoint(x: 10, y: 70)) == CGPoint(x: 10, y: 20))
+    }
+
+    @Test func `unmap falls back to identity on degenerate inputs`() {
+        let zeroRoot = AXFrameTransform(
+            rootFrame: CGRect(x: 0, y: 0, width: 0, height: 100),
+            pointSize: CGSize(width: 100, height: 100)
+        )
+        #expect(zeroRoot.unmap(CGPoint(x: 5, y: 6)) == CGPoint(x: 5, y: 6))
+
+        let zeroPoint = AXFrameTransform(
+            rootFrame: CGRect(x: 0, y: 0, width: 100, height: 100),
+            pointSize: CGSize(width: 100, height: 0)
+        )
+        #expect(zeroPoint.unmap(CGPoint(x: 5, y: 6)) == CGPoint(x: 5, y: 6))
+    }
 }

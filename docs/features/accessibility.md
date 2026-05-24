@@ -188,7 +188,12 @@ column (e.g. `accessibilityTraits`):
   AXP's behaviour on `role=group`; the
   [idb#767](https://github.com/facebook/idb/issues/767) workaround
   is to prefer the `--x --y` hit-test path for elements that don't
-  surface in the full tree.
+  surface in the full tree. The hit-test path goes through
+  AXP's 3-arg `objectAtPoint:displayId:bridgeDelegateToken:` (the
+  same selector idb uses) so it resolves on the first XPC
+  sub-request — SwiftUI tab-bar items, nav bars, and toolbars
+  that enumerate as childless under `describe_ui` without
+  coordinates are reachable with them.
 - **Slider / progress values stringify NSNumber.** Anything that
   AXP returns as `NSNumber` for `accessibilityValue` (sliders, page
   pickers) lands in JSON as a stringified number. JSON consumers

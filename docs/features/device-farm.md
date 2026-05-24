@@ -123,18 +123,25 @@ codec edge cases, and easy to reason about.
 
 ### Bezel mode
 
-A "Show bezels" toggle in the rail wraps each tile's canvas in
-`DeviceFrame` (the same module sim-stream uses). On enable, FarmApp
-fetches every booted device's `chrome.json` in parallel and caches
-the layouts in a `Map<udid, layout>`.
+A "Show bezels" toggle in the rail wraps each tile's canvas in a
+Baguette SDK `Simulator` instance (the same composition `Baguette.use`
+returns on the single-device page). On enable, FarmApp fetches every
+booted device's `definition.json` in parallel and caches it in a
+`Map<udid, SimulatorDefinition>`. Each tile mounts its sim via
+`new _Simulator(def, transport).mount(host)` and grafts its own
+live canvas in place of the bezel's freshly-minted one, so bezel +
+per-button overlays + screen + keyboard all wire up in one call.
+Grid tiles detach screen input post-mount (`sim.screen.detach()`)
+so clicks on the screen surface select the tile rather than tapping
+the device; the focus mirror keeps full input.
 
 `FarmTile._mountIn` carries a fit-inside computation: the wrapper
-gets explicit pixel `width`/`height` matching the chrome composite's
-aspect ratio while staying inside the host's bounding box. That
-keeps every device's bezel correctly proportioned regardless of
-container size — including the squarish ones (Apple Watch) where
-the original `max-width: 100%` strategy distorted screen-area
-percentages.
+gets explicit pixel `width`/`height` matching the bare composite's
+aspect ratio (`def.screen.viewport.width / .height`) while staying
+inside the host's bounding box. That keeps every device's bezel
+correctly proportioned regardless of container size — including the
+squarish ones (Apple Watch) where the original `max-width: 100%`
+strategy distorted screen-area percentages.
 
 ### Gesture input
 
@@ -252,10 +259,10 @@ the server reports them.
 | selection effect     | n/a                    | mirror swap + input wire only |
 | bezel toggle         | always on              | rail toggle                   |
 
-Both pages share `sim-input.js`, `sim-input-bridge.js`,
-`stream-session.js`, `frame-decoder.js`, `device-frame.js`. The
-farm page adds five files in `Resources/Web/farm/` and two server
-routes — that's the entire delta.
+Both pages share `stream-session.js`, `frame-decoder.js`, and the
+Baguette SDK (`Resources/Web/baguette/`) for bezel + buttons +
+screen + keyboard. The farm page adds five files in
+`Resources/Web/farm/` and two server routes — that's the entire delta.
 
 ## Extension points
 

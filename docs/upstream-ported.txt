@@ -2,3 +2,13 @@
 # Format: <short-sha>  <ported:|skip:> <one-line note>
 # Cherry-picked commits do NOT need an entry (the git -x trailer covers them).
 # See docs/UPSTREAM.md.
+
+4eee760  ported: docs(baguette-sdk) SDK design+usage guide -> local 5e10338
+40288b6  ported: docs(camera) feature spec + design -> local 07ba3a4
+9bbafd2  ported: build(script) VirtualCamera resource build steps -> local c27bd39
+98ee30c  ported: feat(virtualcamera) iOS Simulator dylib -> local 511be6d
+0151e83  ported: feat(recorder) reuse SDK bezel + screen geometry -> local 2a8b20f
+7b02295  ported: docs(features) device-farm bezel mode details -> local 165b929
+18f69cf  ported: docs(buttons) button rendering + mapping details -> local d7591cc
+38e51a7  ported: feat double-tap CLI (#11) -> GestureCommands.DoubleTapCommand + RootCommand + tests + docs/features/double-tap.md + CHANGELOG; skill cli.md/wire-protocol.md deferred (staged WIP)
+bea756d  skip: mislabeled "edge-band detection" commit — actual change is a 3-line doc-comment edit to IOHIDDigitizerDispatch.swift that drops the sentence subject + the 7-arg/other-bridge rationale, degrading our comment. No behaviour. Real edge-band logic is c64a2ff (JS pointer-interpreter, SDK manual-port track).
