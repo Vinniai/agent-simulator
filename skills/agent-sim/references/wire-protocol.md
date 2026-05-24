@@ -290,6 +290,107 @@ appear on the simulator sockets. An agent driving the full loop opens
 *both*: `/review-tasks/stream` for work, `/simulators/<udid>/stream`
 for the device.
 
+## Source triangulation — `POST /triangulate`
+
+Maps a device-point `(x, y)` on a running app to the source file +
+line that produced the screen element. Combines an AX hit-test
+(same backend as `describe-ui`) with a workspace discovery
+(walk-up from Metro's cwd) and a static JSX scan over the
+project's source tree.
+
+```sh
+curl -sS http://localhost:8421/triangulate \
+  -H 'Content-Type: application/json' \
+  -d '{ "udid": "<UDID>", "x": 220, "y": 469 }'
+```
+
+Response:
+
+```json
+{
+  "ok": true,
+  "node": { "role": "AXStaticText", "label": "Schedule's clear", "frame": {…}, "children": [] },
+  "workspace": { "root": "/Users/me/projects/mobile", "framework": "expoRouter" },
+  "candidates": [
+    { "file": "/Users/.../features/home/agenda-view.tsx",
+      "line": 480, "column": 17,
+      "confidence": 0.8, "component": "Text" }
+  ]
+}
+```
+
+- `node` is `null` when no AX element sits under `(x, y)`.
+- `workspace` is `null` when no Metro is running for the
+  simulator's frontmost app, or the project type can't be
+  identified. Today only `expoRouter` produces candidates;
+  other frameworks return `[]`.
+- `candidates` are ranked by `confidence` in `[0, 1]`. Base tier comes
+  from how the label was matched:
+  - `0.9` — `accessibilityLabel="…"` matches the node label exactly
+  - `0.8` — inline JSX text `>label<` or a label sitting alone on its
+     own line between `>` and `<`
+- Base confidence is **boosted by surrounding-context matches**: the
+  server pulls the full AX tree, builds a bag of labels/values/ids
+  from the hit's siblings + up to two nearest labeled ancestors, then
+  for each candidate counts how many of those strings appear within
+  ±20 lines. Each unique match adds `+0.05`, capped at `+0.20`, and
+  clamped to `1.0`. A `<Text>Name</Text>` next to "Notifications"
+  inside a "Settings" group beats the same `Name` in isolation.
+- `component` is the nearest preceding capitalized JSX tag (best
+  effort; can be `null`).
+
+This is the same envelope the AX inspector panel shows in the
+SOURCE row and that rides along on notes (see below) so agents
+picking the queue up land on file:line directly.
+
+## Session-less notes queue — `/notes`
+
+A note is a one-off message left from the mobile-on-the-move
+view (`/m/<UDID>`) or the `notes` CLI, optionally anchored to an
+AX element. Promoting a note files it as a review task in the
+shared `notes` backlog.
+
+### POST `/notes`
+
+```json
+{
+  "udid": "<UDID>",
+  "text": "fix copy on agenda empty state",
+  "axPath": "/window/0/text[Schedule's clear]",
+  "source": {
+    "workspace": { "root": "/Users/.../mobile", "framework": "expoRouter" },
+    "candidates": [
+      { "file": ".../agenda-view.tsx", "line": 480, "column": 17,
+        "confidence": 0.8, "component": "Text" }
+    ]
+  }
+}
+```
+
+`axPath` and `source` are both optional. The browser fills `source`
+from `/triangulate` automatically; CLI clients can hand-roll it (see
+`notes add --source file:line[:col]` in `references/cli.md`).
+
+### GET `/notes.json`
+
+Returns the inbox newest-first as a JSON array of `Note` objects
+with the same shape — id / udid / text / axPath / source / promoted /
+createdAt. Agents picking work up read the top candidate file:line
+straight off `source.candidates[0]`.
+
+### WS `/notes/stream`
+
+A persistent socket that emits a `notes_snapshot` envelope on every
+inbox change. Snapshot shape:
+
+```json
+{ "type": "notes_snapshot", "notes": [ <Note>, … ] }
+```
+
+Lifecycle frames (`notes_stream_started`, `notes_stream_stopped`,
+`notes_stream_error`) interleave but are skipped by the
+`NotesStreamFrame` decoder.
+
 ## Debugging a "tap missed"
 
 If a tap visibly happens on the wrong spot:

@@ -49,6 +49,7 @@
   let logPanel = null;
   let axInspector = null;
   let lastAxNode = null;    // last element picked while in mobile select-mode
+  let lastAxSource = null;  // `/triangulate` envelope for lastAxNode (or null)
   let activityTimer = null;     // fallback poll handle (only while WS down)
   let activityStream = null;    // `WS /notes/stream` socket (primary)
   let activityReconnect = null; // backoff timer for socket reconnect
@@ -419,6 +420,7 @@
       getDeviceSize: () => frame.screenSize(),
       onSelect: (node) => {
         lastAxNode = node;
+        lastAxSource = null;   // discard stale triangulation; new fetch will repopulate
         renderAxPanel(panel, node);
         updateComposerContext();
       },
@@ -724,6 +726,15 @@
         {
           send: (payload) => session && session.send(payload),
           getDeviceSize: () => frame.screenSize(),
+          getUdid: () => udid,
+          // Cache the triangulation envelope so submitNote can ride it
+          // along — keeps the agent fetching the queue on the same
+          // source-file pointer the user just saw in the panel.
+          onSourceResolved: (res) => {
+            lastAxSource = (res && (res.workspace || (res.candidates || []).length))
+              ? { workspace: res.workspace || null, candidates: res.candidates || [] }
+              : null;
+          },
         }
     );
   }
@@ -777,6 +788,7 @@
       }
       commentDockEnabledAx = false;
       lastAxNode = null;
+      lastAxSource = null;
       renderAxPanel(document.getElementById('nativeAxHost'), null);
       updateComposerContext();
     }
@@ -939,12 +951,21 @@
           ? '<span class="naq-anchor" title="' + esc(n.axPath) + '">⌖ '
               + esc(shortPath(n.axPath)) + '</span>'
           : '';
+      // Surface the top JSX-scanner candidate (if any) so the user sees
+      // exactly where an agent would land when it picks the note up.
+      // Full path stays in the tooltip; the chip shows file:line.
+      const top = n.source && Array.isArray(n.source.candidates) && n.source.candidates[0];
+      const source = top
+          ? '<span class="naq-source" title="' + esc(top.file) + ':' + top.line + '">' +
+              '◎ ' + esc(shortPath(top.file)) + ':' + top.line +
+            '</span>'
+          : '';
       return '<div class="naq-item' + (picked ? ' is-picked' : '') + '">' +
                '<div class="naq-item-top">' + badge +
                  '<span class="naq-time">' + esc(relativeTime(n.createdAt))
                  + '</span></div>' +
                '<div class="naq-text">' + esc(n.text || '') + '</div>' +
-               anchor +
+               anchor + source +
              '</div>';
     }).join('');
   }
@@ -1004,6 +1025,7 @@
     form.querySelector('[data-role="nqc-ctx-clear"]')
         .addEventListener('click', () => {
           lastAxNode = null;
+          lastAxSource = null;
           if (axInspector) try { axInspector.clearSelections(); } catch (_) {}
           renderAxPanel(document.getElementById('nativeAxHost'), null);
           updateComposerContext();
@@ -1050,6 +1072,10 @@
     try {
       const body = { udid, text };
       if (lastAxNode && lastAxNode._path) body.axPath = lastAxNode._path;
+      // Carry the JSX-scanner result along so an agent picking the
+      // queue lands directly on file:line — same `{workspace, candidates}`
+      // shape the SOURCE row already shows in the panel.
+      if (lastAxSource) body.source = lastAxSource;
       const r = await fetch('/notes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1058,6 +1084,7 @@
       if (!r.ok) throw new Error('HTTP ' + r.status);
       input.value = '';
       lastAxNode = null;
+      lastAxSource = null;
       if (axInspector) try { axInspector.clearSelections(); } catch (_) {}
       renderAxPanel(document.getElementById('nativeAxHost'), null);
       updateComposerContext();

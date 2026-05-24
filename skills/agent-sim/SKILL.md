@@ -301,6 +301,22 @@ Full protocol (HTTP routes, idempotency rules, reference Python agents):
 > exist in *consumer* repos (e.g. a Convex-HTTP poller). It is **not**
 > this CLI. Resolve this binary on `PATH` / via `brew` for the queue loop.
 
+## Source triangulation + notes queue
+
+A tap or note anchor carries an AX path; `POST /triangulate
+{udid, x, y}` maps that point to ranked source-file candidates
+(`{workspace: {root, framework}, candidates: [{file, line, column,
+confidence, component}]}`). The browser picker fetches it once per
+selection and submits the resolved envelope back with the note, so the
+session-less queue (`GET /notes.json`, `WS /notes/stream`, or
+`agent-sim notes watch`) hands agents the file:line directly — no
+re-derivation. From the CLI, attach a pointer without a running picker
+via `agent-sim notes add --udid <UDID> --text … --source
+<file>:<line>[:<col>]` (e.g. from a stack trace or lint hit).
+Promoted notes flow into the review-task backlog under the shared
+`sessionId=notes`. See `references/wire-protocol.md` (`/triangulate`,
+`/notes`) and `references/cli.md` (`notes`) for full shapes.
+
 ## Reference files
 
 - `references/wire-protocol.md` — every gesture type with copy-pasteable

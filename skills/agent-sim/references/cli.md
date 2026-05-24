@@ -378,6 +378,37 @@ agent-sim agent quality-gate <task-id> --score 8 \
 `bootstrap` prints the review URL `http://127.0.0.1:8421/reviews/<id>`
 and the created task ids; pair with `serve` to drive the loop.
 
+## Session-less notes queue — `notes`
+
+The "drop a message from the phone" queue. A note is a one-off
+message (optionally anchored to an AX element + a source file:line)
+stored in `~/Library/Application Support/agent-sim/notes.sqlite`.
+Same store the `serve` mobile screen writes to — a note left on a
+phone is visible here within one poll, and vice versa.
+
+```bash
+agent-sim notes list  [--status queued|promoted|all]
+agent-sim notes add   --udid <UDID> --text "…" [--ax-path <p>] [--source <file:line[:col]>]
+agent-sim notes promote <note-id>           # flip to picked-up + file as a review task
+agent-sim notes watch [--status …] [--interval 1] [--once] [--webhook URL]
+agent-sim notes watch --stream ws://127.0.0.1:8421/notes/stream
+```
+
+- `--text -` reads the message from stdin.
+- `--source` parses `file:line[:col]` into a one-candidate source
+  envelope (`confidence: 1.0`). Same shape as the browser attaches
+  via `/triangulate`, so an agent that already has a file pointer
+  (stack trace, lint hit, blame line) doesn't need AX coordinates
+  to anchor a note: `notes add --udid X --text "fix copy" --source app/index.tsx:42:9`.
+- Every returned JSON object carries the full `source` field — see
+  `wire-protocol.md` → "Session-less notes queue" for the shape.
+- `watch --stream` consumes `WS /notes/stream` live; the in-process
+  `NotesStreamFrame` decoder filters out lifecycle frames so output
+  matches poll mode exactly. `--webhook` POSTs each changed snapshot.
+- `promote` flips the note and, in the same shot, files a one-task
+  bulk-create into the shared `notes` review backlog (see
+  `review-tasks` below).
+
 ## Exit codes
 
 `0` on success. `1` on any error; the JSON error body explains. Errors

@@ -221,6 +221,7 @@
         screenArea: surface.screenArea,
         send: (payload) => session && session.send(payload),
         getDeviceSize: () => frame.screenSize(),
+        getUdid: () => activeUdid,
       });
     }
 
