@@ -36,7 +36,11 @@ jobs:
       - name: Generate lcov report
         run: |
           BIN_PATH=$(swift build --show-bin-path)
-          XCTEST="$BIN_PATH/agent_simPackageTests.xctest/Contents/MacOS/agent_simPackageTests"
+          # The test bundle is named after the package ("agent-sim"); newer
+          # toolchains keep the hyphen (agent-simPackageTests) where older ones
+          # sanitised it to an underscore. Glob for it rather than hardcoding.
+          BUNDLE=$(ls -d "$BIN_PATH"/*PackageTests.xctest | head -1)
+          XCTEST="$BUNDLE/Contents/MacOS/$(basename "$BUNDLE" .xctest)"
           PROFDATA="$BIN_PATH/codecov/default.profdata"
           # Excluded: IO / 3rd-party-SDK shims (CoreSimulator, SimulatorKit,
           # IOKit HID, Hummingbird, VideoToolbox, CoreImage, IOSurface,
