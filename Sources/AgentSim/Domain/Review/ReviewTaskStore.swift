@@ -10,6 +10,9 @@ protocol ReviewTaskStore: Sendable {
     func updateTask(id: String, input: ReviewTaskUpdateInput) throws -> ReviewTask
     func addVerification(taskId: String, verification: ReviewTaskVerification) throws -> ReviewTask
     func appendCodeChanges(taskId: String, input: ReviewTaskCodeChangesInput) throws -> ReviewTask
+    /// Persist the verdicts from a verification pass and set the resulting
+    /// status atomically (ADR-0002). Replaces any prior verdicts.
+    func recordVerdicts(taskId: String, verdicts: [Verdict], status: String) throws -> ReviewTask
     func bulkCreateTasks(input: ReviewTaskBulkCreateInput) throws -> ReviewTaskBulkCreateResult
 }
 

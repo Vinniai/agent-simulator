@@ -257,6 +257,37 @@ final class SQLiteReviewTaskStore: ReviewTaskStore, @unchecked Sendable {
         }
     }
 
+    func recordVerdicts(taskId: String, verdicts: [Verdict], status: String) throws -> ReviewTask {
+        try locked {
+            var task = try loadTaskUnlocked(id: taskId)
+            task.verdicts = verdicts
+            task.status = status
+            if ["verified", "failed", "cancelled"].contains(status) {
+                task.completedAt = Date()
+            }
+            task.updatedAt = Date()
+            try run(
+                """
+                UPDATE review_tasks SET verdicts_json = ?, status = ?,
+                  updated_at = ?, completed_at = ? WHERE id = ?
+                """,
+                [jsonString(verdicts), status, iso(task.updatedAt),
+                 task.completedAt.map(iso), taskId]
+            )
+            let passes = verdicts.filter { $0.outcome == .pass }.count
+            try insertEvent(ReviewTaskEvent(
+                id: FileReviewStore.makeID(prefix: "event"),
+                taskId: taskId,
+                type: "verdicts:\(status)",
+                actor: nil,
+                message: "Recorded \(verdicts.count) verdict\(verdicts.count == 1 ? "" : "s") (\(passes) pass)",
+                metadataJSON: nil,
+                createdAt: Date()
+            ))
+            return try loadTaskUnlocked(id: taskId)
+        }
+    }
+
     private static let maxDiffBytes = 256 * 1024
     private func truncateDiff(_ text: String?) -> String? {
         guard let text else { return nil }
