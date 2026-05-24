@@ -401,7 +401,26 @@ struct CommandParsingTests {
 
     @Test func `review-tasks exposes agent queue subcommands`() {
         let names = ReviewTasksCommand.configuration.subcommands.map { $0.configuration.commandName }
-        #expect(Set(names) == ["list", "next", "show", "claim", "event", "result", "verify", "add-code-change", "bulk-create", "watch"])
+        #expect(Set(names) == ["list", "next", "show", "claim", "event", "result", "verify", "verify-criteria", "add-code-change", "bulk-create", "watch"])
+    }
+
+    @Test func `review-tasks verify-criteria defaults to the captured snapshot`() throws {
+        let cmd = try ReviewTasksCommand.VerifyCriteria.parse(["task-1"])
+        #expect(cmd.id == "task-1")
+        #expect(cmd.live == false)
+        #expect(cmd.udid == nil)
+        #expect(cmd.deviceSet == nil)
+        #expect(ReviewTasksCommand.VerifyCriteria.configuration.commandName == "verify-criteria")
+    }
+
+    @Test func `review-tasks verify-criteria --live carries a udid`() throws {
+        let cmd = try ReviewTasksCommand.VerifyCriteria.parse([
+            "task-1", "--live", "--udid", "ABC", "--device-set", "/tmp/set",
+        ])
+        #expect(cmd.id == "task-1")
+        #expect(cmd.live == true)
+        #expect(cmd.udid == "ABC")
+        #expect(cmd.deviceSet == "/tmp/set")
     }
 
     @Test func `review-tasks next parses agent id`() throws {

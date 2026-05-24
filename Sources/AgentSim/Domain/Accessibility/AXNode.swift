@@ -235,6 +235,44 @@ struct AXNode: Equatable, Sendable {
         return true
     }
 
+    /// Inverse of ``json`` / ``dictionary``: parse a captured AX snapshot
+    /// artifact back into a value. Used by the verify use-case to check
+    /// acceptance criteria against a snapshot without a simulator. Returns
+    /// `nil` when the bytes aren't a node object (missing `role`/`frame`)
+    /// so a corrupt artifact surfaces as "no tree", not a crash.
+    static func from(json data: Data) -> AXNode? {
+        guard let obj = try? JSONSerialization.jsonObject(with: data),
+              let dict = obj as? [String: Any] else { return nil }
+        return from(dictionary: dict)
+    }
+
+    private static func from(dictionary dict: [String: Any]) -> AXNode? {
+        guard let role = dict["role"] as? String,
+              let frameDict = dict["frame"] as? [String: Any],
+              let x = number(frameDict["x"]), let y = number(frameDict["y"]),
+              let w = number(frameDict["width"]), let h = number(frameDict["height"])
+        else { return nil }
+        let kids = (dict["children"] as? [[String: Any]] ?? []).compactMap(from(dictionary:))
+        return AXNode(
+            role: role,
+            subrole: dict["subrole"] as? String,
+            label: dict["label"] as? String,
+            value: dict["value"] as? String,
+            identifier: dict["identifier"] as? String,
+            title: dict["title"] as? String,
+            help: dict["help"] as? String,
+            frame: Rect(origin: Point(x: x, y: y), size: Size(width: w, height: h)),
+            enabled: dict["enabled"] as? Bool ?? true,
+            focused: dict["focused"] as? Bool ?? false,
+            hidden: dict["hidden"] as? Bool ?? false,
+            children: kids
+        )
+    }
+
+    private static func number(_ value: Any?) -> Double? {
+        (value as? Double) ?? (value as? Int).map(Double.init) ?? (value as? NSNumber)?.doubleValue
+    }
+
     fileprivate var dictionary: [String: Any] {
         [
             "role":       role,

@@ -94,6 +94,11 @@ struct Server: Sendable {
     // MARK: - routes
 
     private func registerRoutes(on router: Router<BasicWebSocketRequestContext>) {
+        // Fork-only loop surface (ADR-0001) lives in LoopRoutes, off the
+        // upstream-tracking route table, so absorbing upstream stays clean.
+        LoopRoutes.register(
+            on: router, taskStore: reviewTaskStore,
+            reviewStore: reviewStore, simulators: simulators)
         let bindHost = self.host
         let bindPort = self.port
         let trusted = self.trustedHosts

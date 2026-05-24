@@ -13,6 +13,7 @@ struct ReviewTasksCommand: ParsableCommand {
             Event.self,
             Result.self,
             Verify.self,
+            VerifyCriteria.self,
             AddCodeChange.self,
             BulkCreate.self,
             Watch.self,
@@ -175,6 +176,54 @@ struct ReviewTasksCommand: ParsableCommand {
                     createdAt: Date()
                 )
             ))
+        }
+    }
+
+    /// Criteria-based verification (ADR-0002), distinct from the older
+    /// manual before/after `verify`. Runs the task's acceptance criteria
+    /// through ``CriteriaCheck`` and records the verdicts, driving status
+    /// to `verified` (all pass) or back to `open` (any fail). Defaults to
+    /// the task's captured verification snapshot — fully reproducible, no
+    /// simulator — and switches to a fresh `describe-ui` capture under
+    /// `--live --udid`. The verdict engine is identical either way.
+    struct VerifyCriteria: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "verify-criteria",
+            abstract: "Check a task's acceptance criteria against its snapshot (or --live)"
+        )
+
+        @Argument(help: "Task id")
+        var id: String
+
+        @Flag(name: .long, help: "Capture a fresh describe-ui tree instead of the snapshot")
+        var live = false
+
+        @Option(name: .long, help: "Simulator UDID (required with --live)")
+        var udid: String?
+
+        @Option(name: .long, help: "Custom device set path (defaults to Xcode's default set)")
+        var deviceSet: String?
+
+        func run() async throws {
+            let taskStore = SQLiteReviewTaskStore()
+            let result: ReviewTask
+            if live {
+                guard let udid else {
+                    throw ValidationError("--udid is required with --live")
+                }
+                let simulators = CoreSimulators(deviceSetPath: deviceSet)
+                guard let simulator = simulators.find(udid: udid) else {
+                    throw ValidationError("Device \(udid) not found")
+                }
+                guard let tree = try simulator.accessibility().describeAll() else {
+                    throw ValidationError("no accessibility data on \(udid) (sim not booted, or no frontmost app)")
+                }
+                result = try LoopRoutes.verifyLive(taskId: id, tree: tree, taskStore: taskStore)
+            } else {
+                result = try LoopRoutes.verifyFromSnapshot(
+                    taskId: id, taskStore: taskStore, reviewStore: FileReviewStore())
+            }
+            try printJSON(result)
         }
     }
 
