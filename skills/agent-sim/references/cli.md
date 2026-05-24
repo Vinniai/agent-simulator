@@ -349,6 +349,9 @@ agent-sim review-tasks add-code-change <task-id> --changes-file changes.json   #
 agent-sim review-tasks result <task-id> --status readyForVerify --summary "…" \
         --verification-snapshot-id snap_… --actor <id>     # '-' = stdin on --summary
 agent-sim review-tasks verify <task-id> --status pass --after-snapshot-id snap_… [--notes -]
+agent-sim review-tasks verify-criteria <task-id>                    # grade criteria vs the task's snapshot
+agent-sim review-tasks verify-criteria <task-id> --live --udid <id> # grade vs a fresh describe-ui capture
+agent-sim review-tasks criterion --udid <id> --x 120 --y 640        # author a criterion from the live element there
 agent-sim review-tasks bulk-create --session-id <id> --file tasks.json \
         [--assignee <id>] [--priority high] [--title …] [--instructions …]
 agent-sim review-tasks bulk-create --session-id <id> --file -        # envelope on stdin
@@ -363,6 +366,16 @@ agent-sim review-tasks bulk-create --session-id <id> --file -        # envelope 
   or a bare item array; CLI `--assignee/--priority/--title/--instructions`
   override file-level `defaults` (re-tag a batch without rewriting JSON).
   Returns a partial-success envelope: `created.count + errors.count == tasks.count`.
+- `verify-criteria` is the **authoritative grader** (ADR-0002): it runs a task's
+  acceptance criteria through the verdict engine and drives `status` to
+  `verified` (all pass) or back to `open` (any fail/ambiguous), persisting the
+  `verdicts[]`. Default reads the task's verification snapshot (reproducible, no
+  simulator); `--live --udid` grades a fresh `describe-ui`. Author criteria at
+  task-creation time (`criteria[]` on `POST /reviews/:id/tasks`).
+- `criterion` hit-tests the live tree at a device-point coordinate (tap-target
+  convention) and prints an `exists` criterion keyed on the element's
+  `identifier` (else `label`) — paste it into a task's `criteria[]` instead of
+  hand-writing the selector.
 
 ### Session + gate — `agent`
 

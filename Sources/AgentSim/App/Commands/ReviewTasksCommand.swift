@@ -14,6 +14,7 @@ struct ReviewTasksCommand: ParsableCommand {
             Result.self,
             Verify.self,
             VerifyCriteria.self,
+            Criterion.self,
             AddCodeChange.self,
             BulkCreate.self,
             Watch.self,
@@ -224,6 +225,49 @@ struct ReviewTasksCommand: ParsableCommand {
                     taskId: id, taskStore: taskStore, reviewStore: FileReviewStore())
             }
             try printJSON(result)
+        }
+    }
+
+    /// Author an acceptance criterion straight from a live on-screen element
+    /// (ADR-0002), so the loop can turn "this element should be here" into
+    /// checkable JSON without hand-writing a selector. Hit-tests the live
+    /// `describe-ui` tree at a device-point coordinate (same convention as a
+    /// tap), then runs ``AcceptanceCriterion/from(element:)`` — keyed on the
+    /// element's `identifier`, else its `label`. Prints the criterion JSON to
+    /// drop into a task's `criteria[]`; errors when nothing nameable is there.
+    struct Criterion: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "criterion",
+            abstract: "Emit an acceptance criterion for the live element at a point"
+        )
+
+        @Option(name: .long, help: "Simulator UDID")
+        var udid: String
+
+        @Option(name: .long, help: "X coordinate in device points (tap-target convention)")
+        var x: Double
+
+        @Option(name: .long, help: "Y coordinate in device points")
+        var y: Double
+
+        @Option(name: .long, help: "Custom device set path (defaults to Xcode's default set)")
+        var deviceSet: String?
+
+        func run() async throws {
+            let simulators = CoreSimulators(deviceSetPath: deviceSet)
+            guard let simulator = simulators.find(udid: udid) else {
+                throw ValidationError("Device \(udid) not found")
+            }
+            guard let tree = try simulator.accessibility().describeAll() else {
+                throw ValidationError("no accessibility data on \(udid) (sim not booted, or no frontmost app)")
+            }
+            guard let hit = tree.hitTest(Point(x: x, y: y)) else {
+                throw ValidationError("no element at (\(x), \(y)) on \(udid)")
+            }
+            guard let criterion = AcceptanceCriterion.from(element: hit) else {
+                throw ValidationError("element at (\(x), \(y)) has no identifier or label to anchor a criterion")
+            }
+            try printJSON(criterion)
         }
     }
 

@@ -116,6 +116,32 @@ struct AcceptanceCriterion: Equatable, Sendable, Codable {
         self.selector = selector
         self.expect = expect
     }
+
+    /// Author an existence criterion straight from a captured element, so the
+    /// loop can turn "this element should be here" into a checkable criterion
+    /// without hand-writing selector JSON. Keys on the most stable handle the
+    /// element offers — `identifier` (a testID) first, then the visible
+    /// `label` — and asserts `exists`. Returns `nil` for an element carrying
+    /// neither (blank strings count as absent): an unnameable element can't
+    /// anchor an assertion.
+    static func from(element: AXNode) -> AcceptanceCriterion? {
+        func clean(_ s: String?) -> String? {
+            guard let t = s?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty else { return nil }
+            return t
+        }
+        let selector: ElementSelector
+        if let id = clean(element.identifier) {
+            selector = ElementSelector(identifier: id)
+        } else if let label = clean(element.label) {
+            selector = ElementSelector(label: label)
+        } else {
+            return nil
+        }
+        return AcceptanceCriterion(
+            description: "\(selector.describe) exists",
+            selector: selector,
+            expect: .exists)
+    }
 }
 
 /// The outcome of checking one ``AcceptanceCriterion`` against a tree.

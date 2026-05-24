@@ -401,7 +401,18 @@ struct CommandParsingTests {
 
     @Test func `review-tasks exposes agent queue subcommands`() {
         let names = ReviewTasksCommand.configuration.subcommands.map { $0.configuration.commandName }
-        #expect(Set(names) == ["list", "next", "show", "claim", "event", "result", "verify", "verify-criteria", "add-code-change", "bulk-create", "watch"])
+        #expect(Set(names) == ["list", "next", "show", "claim", "event", "result", "verify", "verify-criteria", "criterion", "add-code-change", "bulk-create", "watch"])
+    }
+
+    @Test func `review-tasks criterion parses a live element point`() throws {
+        let cmd = try ReviewTasksCommand.Criterion.parse([
+            "--udid", "ABC", "--x", "120", "--y", "640", "--device-set", "/tmp/set",
+        ])
+        #expect(cmd.udid == "ABC")
+        #expect(cmd.x == 120)
+        #expect(cmd.y == 640)
+        #expect(cmd.deviceSet == "/tmp/set")
+        #expect(ReviewTasksCommand.Criterion.configuration.commandName == "criterion")
     }
 
     @Test func `review-tasks verify-criteria defaults to the captured snapshot`() throws {
