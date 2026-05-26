@@ -37,6 +37,7 @@ Stream
 Diagnostics
 Notes
 Review
+Server
 Verification
 Workspace
 
@@ -69,6 +70,7 @@ Server
 [classify:app] tracks-upstream
 BootCommand.swift
 ChromeCommand.swift
+DeleteCommand.swift
 GestureCommands.swift
 InputCommand.swift
 ListCommand.swift
@@ -80,6 +82,7 @@ StreamCommand.swift
 
 [classify:app] fork-only
 AgentCommand.swift
+ConnectCommand.swift
 DiagDigitizerTrackpadCommand.swift
 DoctorCommand.swift
 NotesCommand.swift
