@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.2.0] - 2026-05-26
+
 ### Added
 - **`agent-sim double-tap` — one-shot native iOS double-tap from the CLI ([#11](https://github.com/tddworks/baguette/issues/11)).** New `agent-sim double-tap --udid <UDID> --x <X> --y <Y> --width <W> --height <H> [--interval <sec>] [--duration <sec>]` subcommand sequences a `touch1-down → touch1-up → touch1-down → touch1-up` recipe inside one process, separated by `duration` (per-tap hold, default 0.08 s) and `interval` (tap-1-up → tap-2-down gap, default 0.05 s). UIKit's `UITapGestureRecognizer(numberOfTapsRequired: 2)` and SwiftUI's `TapGesture(count: 2)` both fire on the result. The wire path (`agent-sim serve` WS / `agent-sim input` stdin) already covered this via four `touch1-*` lines on one long-lived connection; what was missing was a CLI shape that didn't pay the ~150–300 ms process-startup cost twice. No new wire envelope. See [`docs/features/double-tap.md`](docs/features/double-tap.md).
 - **Code-change tracking on review tasks.** Agents now report what files they modified for a task via `POST /agent/tasks/:id/code-changes` (mirror operator route at `POST /review-tasks/:id/code-changes`, CLI mirror `agent-sim review-tasks add-code-change <task-id>`). Each `ReviewTaskCodeChange` carries `path`, `summary`, `startLine` / `endLine`, `commitSha`, `branch`, `language`, and a bounded `diffText` (capped at 256 KB; longer payloads truncate with a marker). The review browser surfaces them under each task card with a clickable `vscode://file/<path>:<startLine>` link and an expandable inline diff, so a reviewer sees the original operator instructions, the before / after snapshots, AND the diff that produced the after-state in one place. Persisted in a new `review_task_code_changes` SQLite table (idempotent migration) and broadcast as a `code_changes` event on `WS /review-tasks/stream` so the existing task-stream consumers light up without new wiring. See [`docs/features/review-code-changes.md`](docs/features/review-code-changes.md).
@@ -179,7 +183,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/Vinniai/agent-sim/compare/v0.1.70...HEAD
+[Unreleased]: https://github.com/Vinniai/agent-sim/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Vinniai/agent-sim/compare/v0.1.70...v0.2.0
 [0.1.70]: https://github.com/Vinniai/agent-sim/compare/v0.1.69...v0.1.70
 [0.1.69]: https://github.com/Vinniai/agent-sim/compare/v0.1.68...v0.1.69
 [0.1.68]: https://github.com/Vinniai/agent-sim/compare/v0.1.67...v0.1.68
