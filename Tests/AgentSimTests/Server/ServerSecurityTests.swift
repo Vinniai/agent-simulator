@@ -48,6 +48,42 @@ struct ServerSecurityTests {
         ))
     }
 
+    @Test func `accepts a first-party WebSocket client Origin on a loopback bind`() {
+        // `agent-sim connect` (swift-websocket) sends a port-less
+        // `ws://` Origin — never a shape a browser produces — so the
+        // port must default to the request port, not ws's default 80.
+        let request = Self.request(
+            host: "127.0.0.1:8421",
+            origin: "ws://127.0.0.1"
+        )
+
+        #expect(Server.isTrustedBrowserRequest(
+            request, bindHost: "127.0.0.1", bindPort: 8421
+        ))
+    }
+
+    @Test func `accepts a first-party WebSocket client Origin on a LAN bind`() {
+        let request = Self.request(
+            host: "192.168.1.9:8421",
+            origin: "ws://192.168.1.9"
+        )
+
+        #expect(Server.isTrustedBrowserRequest(
+            request, bindHost: "192.168.1.9", bindPort: 8421
+        ))
+    }
+
+    @Test func `rejects a WebSocket Origin whose host differs on loopback`() {
+        let request = Self.request(
+            host: "127.0.0.1:8421",
+            origin: "ws://attacker.test"
+        )
+
+        #expect(!Server.isTrustedBrowserRequest(
+            request, bindHost: "127.0.0.1", bindPort: 8421
+        ))
+    }
+
     @Test func `rejects Fetch Metadata cross-site requests`() {
         let request = Self.request(
             host: "127.0.0.1:8421",

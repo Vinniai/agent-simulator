@@ -74,6 +74,54 @@ struct TrustedHostTests {
         ))
     }
 
+    // MARK: - dynamic (tunnel-discovered) hosts
+
+    /// A quick tunnel's public hostname isn't known until the child
+    /// prints it, so it can't be a `--trusted-host` at bind time. The
+    /// running `HostTunnel` feeds it in dynamically; the guard consults
+    /// the union of the operator's allowlist and the discovered hosts.
+    @Test func `effective allowlist merges operator config with tunnel-discovered hosts`() {
+        #expect(
+            Server.effectiveTrustedHosts(
+                static: ["mac.tailnet.ts.net"],
+                dynamic: ["flat-mode-coral.trycloudflare.com"]
+            ) == ["mac.tailnet.ts.net", "flat-mode-coral.trycloudflare.com"]
+        )
+    }
+
+    /// A TLS-terminating tunnel serves the public name on 443 and
+    /// forwards a port-less `Host`, mapping 443 → the bind port. The
+    /// same-origin check must accept that on a host match rather than
+    /// demanding the (absent) Host port equal the bind port.
+    @Test func `a tunnel-discovered host is trusted for a same-origin request`() {
+        let request = Self.request(
+            host: "flat-mode-coral.trycloudflare.com",
+            origin: "https://flat-mode-coral.trycloudflare.com"
+        )
+
+        #expect(Server.isTrustedBrowserRequest(
+            request, bindHost: "127.0.0.1", bindPort: 8421,
+            trustedHosts: Server.effectiveTrustedHosts(
+                static: [], dynamic: ["flat-mode-coral.trycloudflare.com"]
+            )
+        ))
+    }
+
+    /// Relaxing the port match for port-less proxied hosts must not
+    /// open a cross-origin hole: a page served from another site is
+    /// still rejected on the host mismatch.
+    @Test func `a cross-site origin is rejected even when the proxied Host omits a port`() {
+        let request = Self.request(
+            host: "flat-mode-coral.trycloudflare.com",
+            origin: "https://evil.example.com"
+        )
+
+        #expect(!Server.isTrustedBrowserRequest(
+            request, bindHost: "127.0.0.1", bindPort: 8421,
+            trustedHosts: ["flat-mode-coral.trycloudflare.com"]
+        ))
+    }
+
     // MARK: -
 
     private static func request(

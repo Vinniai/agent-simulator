@@ -17,10 +17,10 @@ struct CommandParsingTests {
         let names = cfg.subcommands.map { $0.configuration.commandName }
         #expect(Set(names) == [
             "agent",
-            "list", "boot", "shutdown", "input", "stream",
+            "list", "boot", "shutdown", "delete", "input", "stream",
             "tap", "double-tap", "swipe", "pinch", "pan", "press",
             "key", "type",
-            "chrome", "screenshot", "describe-ui", "logs", "serve",
+            "chrome", "screenshot", "describe-ui", "logs", "serve", "connect",
             "orientation", "diag-digitizer-trackpad", "review-tasks",
             "notes",
             "doctor",
@@ -84,6 +84,21 @@ struct CommandParsingTests {
         #expect(cmd.options.udid == "XYZ")
         #expect(cmd.options.deviceSet == "/var/sims")
         #expect(ShutdownCommand.configuration.commandName == "shutdown")
+    }
+
+    @Test func `delete carries udid + device-set`() throws {
+        let cmd = try DeleteCommand.parse([
+            "--udid", "DEL", "--device-set", "/var/sims",
+        ])
+        #expect(cmd.options.udid == "DEL")
+        #expect(cmd.options.deviceSet == "/var/sims")
+        #expect(DeleteCommand.configuration.commandName == "delete")
+    }
+
+    @Test func `delete rejects argv without --udid`() {
+        #expect(throws: (any Error).self) {
+            try DeleteCommand.parse([])
+        }
     }
 
     // MARK: - input
@@ -395,6 +410,56 @@ struct CommandParsingTests {
             "--trusted-host", "100.101.102.103",
         ])
         #expect(cmd.trustedHost == ["mac.tailnet.ts.net", "100.101.102.103"])
+    }
+
+    @Test func `serve defaults to no tunnel`() throws {
+        let cmd = try ServeCommand.parse([])
+        #expect(cmd.tunnel == nil)
+        #expect(try cmd.resolvedTunnelProvider() == nil)
+    }
+
+    @Test func `serve --tunnel resolves a known provider`() throws {
+        #expect(try ServeCommand.parse(["--tunnel", "cloudflare"]).resolvedTunnelProvider() == .cloudflare)
+        #expect(try ServeCommand.parse(["--tunnel", "ngrok"]).resolvedTunnelProvider() == .ngrok)
+    }
+
+    @Test func `serve --tunnel rejects an unknown provider`() throws {
+        let cmd = try ServeCommand.parse(["--tunnel", "wireguard"])
+        #expect(throws: (any Error).self) { _ = try cmd.resolvedTunnelProvider() }
+    }
+
+    @Test func `serve auto-boots a simulator by default`() throws {
+        #expect(try ServeCommand.parse([]).autoBoot == true)
+    }
+
+    @Test func `serve --no-auto-boot disables provisioning`() throws {
+        #expect(try ServeCommand.parse(["--no-auto-boot"]).autoBoot == false)
+    }
+
+    // MARK: - connect
+
+    @Test func `connect parses url + udid + tap`() throws {
+        let cmd = try ConnectCommand.parse([
+            "http://mini.local:8421", "--udid", "ABC", "--tap", "120,340",
+        ])
+        #expect(cmd.url == "http://mini.local:8421")
+        #expect(cmd.udid == "ABC")
+        #expect(cmd.tap == "120,340")
+        #expect(ConnectCommand.configuration.commandName == "connect")
+    }
+
+    @Test func `connect defaults the sampling window and size`() throws {
+        let cmd = try ConnectCommand.parse(["http://h:8421", "--udid", "ABC"])
+        #expect(cmd.tap == nil)
+        #expect(cmd.seconds == 3)
+        #expect(cmd.size == "393x852")
+        #expect(cmd.format == "avcc")
+    }
+
+    @Test func `connect requires a url`() {
+        #expect(throws: (any Error).self) {
+            try ConnectCommand.parse(["--udid", "ABC"])
+        }
     }
 
     // MARK: - review-tasks

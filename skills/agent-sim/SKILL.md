@@ -332,7 +332,7 @@ read `wire-protocol.md`; debugging which subcommand to use → read
 ## Install (only when missing)
 
 ```bash
-brew install tddworks/tap/agent-sim
+npm install -g agent-sim
 agent-sim --version
 ```
 

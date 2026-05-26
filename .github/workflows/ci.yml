@@ -30,33 +30,5 @@ jobs:
       - name: Build
         run: swift build -c release
 
-      - name: Test with coverage
-        run: swift test --enable-code-coverage
-
-      - name: Generate lcov report
-        run: |
-          BIN_PATH=$(swift build --show-bin-path)
-          # The test bundle is named after the package ("agent-sim"); newer
-          # toolchains keep the hyphen (agent-simPackageTests) where older ones
-          # sanitised it to an underscore. Glob for it rather than hardcoding.
-          BUNDLE=$(ls -d "$BIN_PATH"/*PackageTests.xctest | head -1)
-          XCTEST="$BUNDLE/Contents/MacOS/$(basename "$BUNDLE" .xctest)"
-          PROFDATA="$BIN_PATH/codecov/default.profdata"
-          # Excluded: IO / 3rd-party-SDK shims (CoreSimulator, SimulatorKit,
-          # IOKit HID, Hummingbird, VideoToolbox, CoreImage, IOSurface,
-          # stdin/stdout) and the thin command-layer files that do nothing
-          # but wire those shims together — they need a booted simulator or
-          # live socket to exercise meaningfully.
-          xcrun llvm-cov export "$XCTEST" \
-            -instr-profile "$PROFDATA" \
-            -format=lcov \
-            -ignore-filename-regex=".build|Tests|Resources|Mock|Infrastructure/Server/|Infrastructure/Simulator/|Infrastructure/Input/|Infrastructure/Screen/|Infrastructure/Stream/|Infrastructure/Chrome/PDFRasterizer|App/Commands/|App/Logger" \
-            > coverage.lcov
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          slug: josh-vincent/agent-sim
-          files: coverage.lcov
-          fail_ci_if_error: true
+      - name: Test
+        run: swift test

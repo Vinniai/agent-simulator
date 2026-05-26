@@ -1,6 +1,6 @@
 # Tracking upstream `tddworks/baguette`
 
-`josh-vincent/agent-sim` is a **clone** (not a GitHub fork) of
+`Vinniai/agent-sim` is a **clone** (not a GitHub fork) of
 [`tddworks/baguette`](https://github.com/tddworks/baguette). We absorb upstream
 work selectively. We do **not** do whole-tree merges — the fork has diverged too
 far for that to be anything but a perpetual conflict.

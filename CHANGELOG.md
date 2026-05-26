@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 For releases prior to this changelog, see the
-[GitHub Releases](https://github.com/josh-vincent/agent-sim/releases) page.
+[GitHub Releases](https://github.com/Vinniai/agent-sim/releases) page.
 
 ## [Unreleased]
 
@@ -14,6 +14,16 @@ For releases prior to this changelog, see the
 - **`agent-sim double-tap` — one-shot native iOS double-tap from the CLI ([#11](https://github.com/tddworks/baguette/issues/11)).** New `agent-sim double-tap --udid <UDID> --x <X> --y <Y> --width <W> --height <H> [--interval <sec>] [--duration <sec>]` subcommand sequences a `touch1-down → touch1-up → touch1-down → touch1-up` recipe inside one process, separated by `duration` (per-tap hold, default 0.08 s) and `interval` (tap-1-up → tap-2-down gap, default 0.05 s). UIKit's `UITapGestureRecognizer(numberOfTapsRequired: 2)` and SwiftUI's `TapGesture(count: 2)` both fire on the result. The wire path (`agent-sim serve` WS / `agent-sim input` stdin) already covered this via four `touch1-*` lines on one long-lived connection; what was missing was a CLI shape that didn't pay the ~150–300 ms process-startup cost twice. No new wire envelope. See [`docs/features/double-tap.md`](docs/features/double-tap.md).
 - **Code-change tracking on review tasks.** Agents now report what files they modified for a task via `POST /agent/tasks/:id/code-changes` (mirror operator route at `POST /review-tasks/:id/code-changes`, CLI mirror `agent-sim review-tasks add-code-change <task-id>`). Each `ReviewTaskCodeChange` carries `path`, `summary`, `startLine` / `endLine`, `commitSha`, `branch`, `language`, and a bounded `diffText` (capped at 256 KB; longer payloads truncate with a marker). The review browser surfaces them under each task card with a clickable `vscode://file/<path>:<startLine>` link and an expandable inline diff, so a reviewer sees the original operator instructions, the before / after snapshots, AND the diff that produced the after-state in one place. Persisted in a new `review_task_code_changes` SQLite table (idempotent migration) and broadcast as a `code_changes` event on `WS /review-tasks/stream` so the existing task-stream consumers light up without new wiring. See [`docs/features/review-code-changes.md`](docs/features/review-code-changes.md).
 - **Reference verifier loop.** `examples/agent/agentsim_verifier.py` complements the existing worker: polls `readyForVerify` submissions from a given `--agent-prefix`, snapshot-diffs the before / after JPEGs, and posts `pass` / `fail` / leaves ambiguous tasks for the operator. Snapshot-only — never drives the simulator — so it runs safely alongside an active worker without contending for the device. Pure stdlib (~150 LOC). Documented in [`docs/AGENT-API.md`](docs/AGENT-API.md#reference-agents).
+- **npm distribution — `npm install -g agent-sim`.** New thin npm package under `npm/` that ships only a launcher shim + `postinstall` (~3 kB published, no binary committed). The package is gated to `darwin`/`arm64` via the `os` / `cpu` fields; `postinstall` downloads the matching `agent-sim_v<version>_macOS_arm64.tar.gz` from the GitHub release, verifies it against the published `checksums.txt`, extracts the binary + SPM resource bundle side-by-side into `vendor/`, and the `bin` shim execs it. Cross-platform installs are skipped with a warning instead of failing. CI: a reusable `publish-npm.yml` workflow runs after the release job, syncs the package version to the tag, and publishes with `NPM_TOKEN`. npm is now the sole install channel.
+- **`agent-sim connect` — dial a remote `serve` and smoke-test its stream.** New `agent-sim connect <url> --udid <UDID> [--tap X,Y] [--size WxH] [--format avcc|mjpeg] [--seconds N]` subcommand: the other half of the "Mac mini at home, Claude on the web" flow. It opens the same WebSocket the browser would (deriving the `ws(s)://…/stream` route from the base URL), counts the binary frames arriving downstream over a window, and — with `--tap` — fires one gesture up the same socket to prove the upstream channel. `frames > 0` → exit 0; zero → exit 1. The client raises its WS frame ceiling to 16 MiB so a full AVCC seed / H.264 keyframe isn't rejected. The verdict (`ConnectReport`), URL derivation (`RemoteEndpoint`), and tap envelope (`RemoteTap`) are pure, unit-tested value types. See [`docs/REMOTE.md`](docs/REMOTE.md).
+- **`agent-sim serve` startup connect hint.** On startup `serve` now prints a copy-pasteable `agent-sim connect …` line for the address a *remote* device should dial — resolving an undialable bind to something reachable: a `127.0.0.1` or `0.0.0.0` (wildcard) bind is substituted with this Mac's LAN IP, and with `--tunnel` the line reprints with the public URL once the tunnel is up.
+- **`agent-sim serve --tunnel cloudflare|ngrok` — expose the loopback bind over a public quick tunnel.** Launches the provider's CLI pointed at the local port, auto-allowlists the discovered `https://…` hostname through the DNS-rebind guard (same-origin still holds), and prints both the public URL and the matching `connect` hint. Unknown providers are a usage error listing the supported set.
+- **`agent-sim serve --auto-boot` / `--no-auto-boot`.** On an idle host `serve` provisions an `agent-sim` simulator on the latest runtime so the picker isn't empty (default on); `--no-auto-boot` skips provisioning and targets whatever is already booted. The boot/runtime selection is a pure `SimulatorStartupPlan` over `RuntimeVersion` / `NewSimulatorSpec`, unit-tested.
+- **`agent-sim delete --udid <UDID> [--device-set <path>]` — destroy a simulator device.** Erases the device's data and removes it from the set (irreversible). Complements `boot` / `shutdown`.
+
+### Removed
+- **Homebrew tap automation.** Dropped the `update-homebrew-tap.yml` workflow, the `.github/homebrew/agent-sim.rb.template` formula, and the `update-tap` release job. Distribution is npm-only.
+- **Codecov integration.** Dropped the coverage-export + Codecov-upload steps from CI and the `codecov.yml` config; CI now just builds and runs `swift test`. (TDD discipline and the ~100% Domain coverage target are unchanged — they're enforced by the test suite, not the CI upload.)
 
 ### Changed
 - **`agent-sim review-tasks next` and `claim` accept `--actor` as an alias for `--agent-id`.** Same identity flag now works across every `review-tasks` subcommand (`event` / `result` / `add-code-change` already used `--actor`). Either spelling parses identically; existing scripts that pass `--agent-id` keep working. Eliminates the per-subcommand flag-name lookup that was a recurring foot-gun for agent integrators.
@@ -48,7 +58,7 @@ For releases prior to this changelog, see the
 - **Pull-down from the top edge opens the Lock Screen / Notification Center.** The browser canvas now detects a top-edge mousedown (`y / r.height ≤ 0.07`) the same way it detects a bottom-edge drag, and switches to live `touch1-*` streaming with `edge: "top"`. iOS's status-bar recognizer routes the swipe based on the start-x coordinate exactly like Simulator.app does — top-LEFT origin pulls the lock-screen cover sheet down, top-RIGHT origin opens Notification Center. Same UX as the bottom-edge home / app-switcher streaming: no client-side discriminator, iOS animates the cover sheet live as the cursor drags. Two new `Press`-compatible wire names back the canned shapes for CLI / scripting: `pull-down-to-lock-screen` (slow drag from `(0.25, 0.002)` to `(0.25, 0.55)` with `edge=top`) and `pull-down-to-notification-center` (slow drag from `(0.75, 0.002)` to `(0.75, 0.55)` with `edge=top`). Both ride `IOHIDDigitizerDispatch`.
 
 ### Fixed
-- **App-switcher button no longer locks the screen ([#5](https://github.com/josh-vincent/agent-sim/issues/5)).** The third icon in the focus-mode toolbar carries the two-overlapping-squares glyph that mirrors `Simulator.app`'s app-switcher button, but it was wired to `simInput.button('lock')` — every click locked the device instead. The click now fires `simInput.button('app-switcher')` against the new virtual button described above. Lock remains reachable via `agent-sim press --udid … --button lock`; the focus-mode toolbar now matches `Simulator.app`'s Home / Screenshot / App Switcher trio.
+- **App-switcher button no longer locks the screen ([#5](https://github.com/Vinniai/agent-sim/issues/5)).** The third icon in the focus-mode toolbar carries the two-overlapping-squares glyph that mirrors `Simulator.app`'s app-switcher button, but it was wired to `simInput.button('lock')` — every click locked the device instead. The click now fires `simInput.button('app-switcher')` against the new virtual button described above. Lock remains reachable via `agent-sim press --udid … --button lock`; the focus-mode toolbar now matches `Simulator.app`'s Home / Screenshot / App Switcher trio.
 
 ### Changed
 - **`app-switcher` button now rides the home-press recipe; the slow swipe-and-hold variant moves to `swipe-to-app-switcher`.** Originally `app-switcher` synthesized a slow edge-flagged drag from the home indicator with a 900 ms dwell at `y=0.58` and let iOS's home-indicator recognizer fire the multitasking carousel. That works but depends on the gesture path's velocity / dwell heuristics and rides the same digitizer dispatch as the home / lock-screen streams. `app-switcher` now decomposes into two consecutive `IndigoHIDMessageForButton` home presses ~150 ms apart — SpringBoard's own multitasking trigger, which fires on the home-button event source regardless of whether the device has physical home-button hardware. Cleaner, rotation-agnostic, and matches idb's `FBSimulatorPurpleHID` app-switcher path. The swipe-and-hold synthesis is preserved on the wire as a fifth virtual button, `swipe-to-app-switcher`, for callers that explicitly want the gesture path. Browser focus-mode toolbar's app-switcher icon now lands the home-press variant.
@@ -76,7 +86,7 @@ For releases prior to this changelog, see the
 - **Accessibility tree extraction (`describe-ui`).** New `agent-sim describe-ui --udid <UDID> [--x <px> --y <px>]` CLI subcommand and `{"type":"describe_ui"}` WebSocket message dump the booted simulator's on-screen UI tree as JSON: per-node `role`, `label`, `value`, `identifier`, `frame` (in **device points**, ready to feed back into a `tap` envelope), plus `enabled` / `focused` / `hidden` traits and recursive `children`. Hit-test path returns the topmost AX element under a coordinate. Powered by the private `AccessibilityPlatformTranslation` framework's `AXPTranslator` — out of Simulator.app the tricky bit is wiring a `bridgeTokenDelegate` ourselves so the translator can route XPC requests to the right `SimDevice.sendAccessibilityRequestAsync:`; without that delegate every `frontmostApplication…` call returns `nil`. Cribbed the dispatcher pattern from `cameroncooke/AXe` and `Silbercue/SilbercueSwift`'s `AXPBridge.swift`. See [`docs/features/accessibility.md`](docs/features/accessibility.md).
 
 ### Fixed
-- **Cloned simulators now resolve their bezel** ([#2](https://github.com/josh-vincent/agent-sim/issues/2)). `xcrun simctl clone` rewrites the device's display `name` (e.g. `iPhone 17 Pro Max` → `iPhone 17 pro max clone 1`), but `Simulator.chrome(in:)` was keying chrome lookup off that name — so `FileSystemChromeStore` searched for a non-existent `iPhone 17 pro max clone 1.simdevicetype` bundle and `/simulators/<udid>/chrome.json` + `/bezel.png` returned 404. `Simulator` now carries `deviceTypeName` (read from the live `SimDevice.deviceType.name`, which is stable across clones / renames) and chrome lookup keys off that. Falls back to the display `name` when the host doesn't supply one, so non-clones and existing tests behave identically.
+- **Cloned simulators now resolve their bezel** ([#2](https://github.com/Vinniai/agent-sim/issues/2)). `xcrun simctl clone` rewrites the device's display `name` (e.g. `iPhone 17 Pro Max` → `iPhone 17 pro max clone 1`), but `Simulator.chrome(in:)` was keying chrome lookup off that name — so `FileSystemChromeStore` searched for a non-existent `iPhone 17 pro max clone 1.simdevicetype` bundle and `/simulators/<udid>/chrome.json` + `/bezel.png` returned 404. `Simulator` now carries `deviceTypeName` (read from the live `SimDevice.deviceType.name`, which is stable across clones / renames) and chrome lookup keys off that. Falls back to the display `name` when the host doesn't supply one, so non-clones and existing tests behave identically.
 
 ---
 
@@ -127,7 +137,7 @@ For releases prior to this changelog, see the
 ## [0.1.61] - 2026-05-03
 
 ### Fixed
-- **`agent-sim serve` no longer fails to launch when Xcode lives outside `/Applications/Xcode.app`** ([#1](https://github.com/josh-vincent/agent-sim/issues/1)). Two layers:
+- **`agent-sim serve` no longer fails to launch when Xcode lives outside `/Applications/Xcode.app`** ([#1](https://github.com/Vinniai/agent-sim/issues/1)). Two layers:
   - **Link-time:** `Package.swift` was declaring `SimulatorKit` and `CoreSimulator` as `linkedFramework`s, which baked LC_LOAD_DYLIB entries that dyld had to resolve before `main()` ran — and the rpaths it baked alongside them only matched `/Applications/Xcode.app`. Users with Xcode at e.g. `/Applications/Xcode_26.app` got `Library not loaded: @rpath/SimulatorKit.framework` and an immediate abort. Nothing in `Sources/` actually `import`s either framework, so the entries (and their rpath / `-F` flags) are gone; the binary now starts cleanly anywhere.
   - **Runtime:** `CoreSimulators.developerDir()` blindly trusted `xcode-select -p`, which on many machines points at `/Library/Developer/CommandLineTools` (no SimulatorKit) — particularly after a user renames their Xcode bundle. The resolver now verifies that `SimulatorKit.framework` actually exists at the selected developer directory and, if not, scans `/Applications` for any `Xcode*.app` (preferring the canonical `Xcode.app`) whose `Contents/Developer` does have it.
 
@@ -169,17 +179,17 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/josh-vincent/agent-sim/compare/v0.1.70...HEAD
-[0.1.70]: https://github.com/josh-vincent/agent-sim/compare/v0.1.69...v0.1.70
-[0.1.69]: https://github.com/josh-vincent/agent-sim/compare/v0.1.68...v0.1.69
-[0.1.68]: https://github.com/josh-vincent/agent-sim/compare/v0.1.67...v0.1.68
-[0.1.67]: https://github.com/josh-vincent/agent-sim/compare/v0.1.66...v0.1.67
-[0.1.66]: https://github.com/josh-vincent/agent-sim/compare/v0.1.65...v0.1.66
-[0.1.65]: https://github.com/josh-vincent/agent-sim/compare/v0.1.64...v0.1.65
-[0.1.64]: https://github.com/josh-vincent/agent-sim/compare/v0.1.63...v0.1.64
-[0.1.63]: https://github.com/josh-vincent/agent-sim/compare/v0.1.62...v0.1.63
-[0.1.62]: https://github.com/josh-vincent/agent-sim/compare/v0.1.61...v0.1.62
-[0.1.61]: https://github.com/josh-vincent/agent-sim/compare/v0.1.6...v0.1.61
-[0.1.6]: https://github.com/josh-vincent/agent-sim/compare/v0.1.5...v0.1.6
-[0.1.5]: https://github.com/josh-vincent/agent-sim/compare/v0.1.4...v0.1.5
-[0.1.4]: https://github.com/josh-vincent/agent-sim/compare/v0.1.1...v0.1.4
+[Unreleased]: https://github.com/Vinniai/agent-sim/compare/v0.1.70...HEAD
+[0.1.70]: https://github.com/Vinniai/agent-sim/compare/v0.1.69...v0.1.70
+[0.1.69]: https://github.com/Vinniai/agent-sim/compare/v0.1.68...v0.1.69
+[0.1.68]: https://github.com/Vinniai/agent-sim/compare/v0.1.67...v0.1.68
+[0.1.67]: https://github.com/Vinniai/agent-sim/compare/v0.1.66...v0.1.67
+[0.1.66]: https://github.com/Vinniai/agent-sim/compare/v0.1.65...v0.1.66
+[0.1.65]: https://github.com/Vinniai/agent-sim/compare/v0.1.64...v0.1.65
+[0.1.64]: https://github.com/Vinniai/agent-sim/compare/v0.1.63...v0.1.64
+[0.1.63]: https://github.com/Vinniai/agent-sim/compare/v0.1.62...v0.1.63
+[0.1.62]: https://github.com/Vinniai/agent-sim/compare/v0.1.61...v0.1.62
+[0.1.61]: https://github.com/Vinniai/agent-sim/compare/v0.1.6...v0.1.61
+[0.1.6]: https://github.com/Vinniai/agent-sim/compare/v0.1.5...v0.1.6
+[0.1.5]: https://github.com/Vinniai/agent-sim/compare/v0.1.4...v0.1.5
+[0.1.4]: https://github.com/Vinniai/agent-sim/compare/v0.1.1...v0.1.4

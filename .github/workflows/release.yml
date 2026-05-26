@@ -105,9 +105,9 @@ jobs:
             || git commit -m "chore(changelog): promote [Unreleased] to v${{ steps.version.outputs.version }}"
           git push origin HEAD:main
 
-  update-tap:
+  publish-npm:
     needs: release
-    uses: ./.github/workflows/update-homebrew-tap.yml
+    uses: ./.github/workflows/publish-npm.yml
     with:
       version: ${{ needs.release.outputs.tag }}
     secrets: inherit

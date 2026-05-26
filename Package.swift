@@ -35,6 +35,10 @@ let package = Package(
                 .product(name: "Mockable", package: "Mockable"),
                 .product(name: "Hummingbird", package: "hummingbird"),
                 .product(name: "HummingbirdWebSocket", package: "hummingbird-websocket"),
+                // WebSocket *client* for `agent-sim connect` — dials a
+                // remote serve's stream to smoke-test it. Same package as
+                // the server product, so no new external dependency.
+                .product(name: "HummingbirdWSClient", package: "hummingbird-websocket"),
             ],
             path: "Sources/AgentSim",
             resources: [

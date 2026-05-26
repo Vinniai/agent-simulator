@@ -10,3 +10,12 @@ DerivedData/
 
 # Built release binary (build.sh output)
 /agent-sim
+
+# Native binary the npm postinstall downloads into the package
+/npm/vendor/
+node_modules/
+
+# VirtualCamera dylib — build.sh output (VirtualCamera/build.sh), then
+# staged into the SwiftPM resources. Both are generated, not sources.
+/VirtualCamera/VirtualCamera.dylib
+/Sources/Baguette/

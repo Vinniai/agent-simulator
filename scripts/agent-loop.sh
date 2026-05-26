@@ -44,7 +44,8 @@
 #
 # ⚠ Name clash: some *consumer* repos ship an unrelated `scripts/agent-sim`
 # Python shim (e.g. a Convex-HTTP poller). That is NOT this CLI. This
-# script resolves the real binary via `command -v agent-sim` / Homebrew.
+# script resolves the real binary via `command -v agent-sim` (the npm
+# install puts it on PATH).
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -88,7 +89,7 @@ if [ -z "$TRUSTED_HOST" ] && { [ "$HOST" = "0.0.0.0" ] || [ "$HOST" = "::" ]; };
 fi
 
 if ! command -v agent-sim >/dev/null 2>&1; then
-    echo "error: 'agent-sim' not on PATH. Install: brew install tddworks/tap/agent-sim" >&2
+    echo "error: 'agent-sim' not on PATH. Install: npm install -g agent-sim" >&2
     exit 1
 fi
 

@@ -102,4 +102,8 @@ enum SimulatorError: Error, Equatable {
     case bootFailed
     case shutdownFailed
     case notFound(udid: String)
+    /// Auto-provisioning a simulator failed — no usable runtime /
+    /// device type, or CoreSimulator rejected the create. Non-fatal for
+    /// `serve` (the picker still lists existing devices).
+    case createFailed(reason: String)
 }

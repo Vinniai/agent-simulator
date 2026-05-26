@@ -49,6 +49,11 @@ struct Server: Sendable {
     /// Tailscale MagicDNS name so the UI is reachable over the tailnet
     /// while still bound to loopback. Empty = loopback-only (default).
     let trustedHosts: Set<String>
+    /// Hostnames discovered at runtime — a quick tunnel's public name
+    /// isn't known until the child prints it, so `serve --tunnel` feeds
+    /// it in through this live provider instead of the fixed allowlist.
+    /// Consulted per-request and unioned with `trustedHosts`.
+    let dynamicTrustedHosts: @Sendable () -> Set<String>
 
     init(
         simulators: any Simulators,
@@ -59,7 +64,8 @@ struct Server: Sendable {
         metro: any Metro = HostMetro(),
         host: String = "127.0.0.1",
         port: Int = 8421,
-        trustedHosts: Set<String> = []
+        trustedHosts: Set<String> = [],
+        dynamicTrustedHosts: @escaping @Sendable () -> Set<String> = { [] }
     ) {
         self.simulators = simulators
         self.chromes = chromes
@@ -70,6 +76,7 @@ struct Server: Sendable {
         self.host = host
         self.port = port
         self.trustedHosts = trustedHosts
+        self.dynamicTrustedHosts = dynamicTrustedHosts
     }
 
     func run() async throws {
@@ -101,17 +108,21 @@ struct Server: Sendable {
             reviewStore: reviewStore, simulators: simulators)
         let bindHost = self.host
         let bindPort = self.port
-        let trusted = self.trustedHosts
+        let staticTrusted = self.trustedHosts
+        let dynamicTrusted = self.dynamicTrustedHosts
+        let currentTrusted: @Sendable () -> Set<String> = {
+            Self.effectiveTrustedHosts(static: staticTrusted, dynamic: dynamicTrusted())
+        }
         let rejectUntrustedBrowser: @Sendable (Request) -> Response? = { request in
             Self.rejectUntrustedBrowserRequest(
-                request, bindHost: bindHost, bindPort: bindPort, trustedHosts: trusted
+                request, bindHost: bindHost, bindPort: bindPort, trustedHosts: currentTrusted()
             )
         }
         let trustedWebSocketUpgrade:
             @Sendable (Request, BasicWebSocketRequestContext) async throws -> RouterShouldUpgrade = {
                 request, _ in
                 Self.isTrustedBrowserRequest(
-                    request, bindHost: bindHost, bindPort: bindPort, trustedHosts: trusted
+                    request, bindHost: bindHost, bindPort: bindPort, trustedHosts: currentTrusted()
                 ) ? .upgrade([:]) : .dontUpgrade
             }
 
@@ -900,13 +911,16 @@ struct Server: Sendable {
         let simulators = self.simulators
         let bindHost = self.host
         let bindPort = self.port
-        let trusted = self.trustedHosts
+        let staticTrusted = self.trustedHosts
+        let dynamicTrusted = self.dynamicTrustedHosts
         let trustedWebSocketUpgrade:
             @Sendable (Request, BasicWebSocketRequestContext) async throws -> RouterShouldUpgrade = {
                 request, _ in
                 Self.isTrustedBrowserRequest(
                     request, bindHost: bindHost, bindPort: bindPort,
-                    trustedHosts: trusted
+                    trustedHosts: Self.effectiveTrustedHosts(
+                        static: staticTrusted, dynamic: dynamicTrusted()
+                    )
                 ) ? .upgrade([:]) : .dontUpgrade
             }
         router.ws(
@@ -2174,6 +2188,19 @@ struct Server: Sendable {
         )
     }
 
+    /// The trust allowlist the guard consults at request time: the
+    /// operator's `--trusted-host` set plus any hostnames a running
+    /// tunnel has discovered. A quick tunnel's hostname isn't known
+    /// until the child prints it, so it's merged in dynamically rather
+    /// than fixed at bind time. Same-origin still has to hold — being
+    /// on the allowlist only clears the DNS-rebind guard.
+    static func effectiveTrustedHosts(
+        static staticHosts: Set<String>,
+        dynamic dynamicHosts: Set<String>
+    ) -> Set<String> {
+        staticHosts.union(dynamicHosts)
+    }
+
     private static func rejectUntrustedBrowserRequest(
         _ request: Request,
         bindHost: String,
@@ -2230,7 +2257,16 @@ struct Server: Sendable {
         let authority = request.head.authority ?? "\(bindHost):\(bindPort)"
         guard let requestAuthority = parseAuthority(authority) else { return false }
         let requestPort = requestAuthority.port ?? bindPort
-        let originPort = originURL.port ?? defaultPort(for: originURL.scheme)
+        // A `ws://` / `wss://` Origin is only ever sent by a first-party
+        // WebSocket client (`agent-sim connect` via swift-websocket) — a
+        // browser carries the page's http(s) Origin for a WS handshake,
+        // never a ws-scheme one. That client omits the port, so default
+        // a port-less ws/wss Origin to the request port rather than ws's
+        // nominal 80/443; the host checks below still gate it.
+        let originSchemeIsWebSocket =
+            originURL.scheme?.lowercased() == "ws" || originURL.scheme?.lowercased() == "wss"
+        let originPort = originURL.port
+            ?? (originSchemeIsWebSocket ? requestPort : defaultPort(for: originURL.scheme))
 
         if isLoopbackBind(bindHost), !isAllowlisted {
             return isLoopbackHost(originHost)
@@ -2238,8 +2274,22 @@ struct Server: Sendable {
                 && (originPort ?? requestPort) == requestPort
         }
 
-        return originHost.caseInsensitiveCompare(requestAuthority.host) == .orderedSame
-            && (originPort ?? requestPort) == requestPort
+        // Same-origin for an allowlisted / non-loopback host. The host
+        // match is the cross-origin defence — a page from another site
+        // carries a mismatched Origin and is rejected here.
+        guard originHost.caseInsensitiveCompare(requestAuthority.host) == .orderedSame else {
+            return false
+        }
+        // Enforce the port too only when the Host header carried one
+        // (a direct bind, or a Tailscale URL like `host:8421`). A
+        // TLS-terminating tunnel / reverse proxy serves the public name
+        // on 443 and forwards a port-less Host that maps to the bind
+        // port — there's no port to match, and the host match already
+        // established same-origin.
+        if let explicitRequestPort = requestAuthority.port {
+            return (originPort ?? explicitRequestPort) == explicitRequestPort
+        }
+        return true
     }
 
     private static func parseAuthority(_ raw: String) -> (host: String, port: Int?)? {

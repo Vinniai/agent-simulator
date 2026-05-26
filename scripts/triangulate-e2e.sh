@@ -45,7 +45,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# Resolve the CLI: prefer one on PATH (Homebrew install), else the binary
+# Resolve the CLI: prefer one on PATH (npm install), else the binary
 # build.sh drops at the repo root (./agent-sim). Everything below calls $SIM.
 if command -v agent-sim >/dev/null 2>&1; then
     SIM="agent-sim"

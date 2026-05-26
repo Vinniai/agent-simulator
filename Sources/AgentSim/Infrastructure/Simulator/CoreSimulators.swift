@@ -25,6 +25,85 @@ final class CoreSimulators: Simulators, DeviceHost, @unchecked Sendable {
         all.first { $0.udid == udid }
     }
 
+    // MARK: - creation (aggregate CRUD)
+
+    /// Create a new simulator named `name` on the newest available iOS
+    /// runtime + newest iPhone, returning it shut down and ready to
+    /// `boot()`. The *selection* is the pure `NewSimulatorSpec.choose`;
+    /// only the runtime/device-type enumeration and the
+    /// `createDeviceWithType:runtime:name:error:` call below touch the
+    /// private API.
+    func createSimulator(named name: String) throws -> any Simulator {
+        guard let ctx = sharedServiceContext() else {
+            throw SimulatorError.createFailed(reason: "no CoreSimulator service context")
+        }
+        let runtimeObjs = (ctx.value(forKey: "supportedRuntimes") as? [NSObject]) ?? []
+        let deviceTypeObjs = (ctx.value(forKey: "supportedDeviceTypes") as? [NSObject]) ?? []
+
+        let runtimes = runtimeObjs.map { rt in
+            (
+                name: (rt.value(forKey: "name") as? String) ?? "",
+                identifier: (rt.value(forKey: "identifier") as? String) ?? "",
+                available: (rt.value(forKey: "available") as? NSNumber)?.boolValue ?? true
+            )
+        }
+        let deviceTypes = deviceTypeObjs.map { dt in
+            (
+                name: (dt.value(forKey: "name") as? String) ?? "",
+                identifier: (dt.value(forKey: "identifier") as? String) ?? ""
+            )
+        }
+
+        guard let spec = NewSimulatorSpec.choose(
+            name: name, runtimes: runtimes, deviceTypes: deviceTypes
+        ) else {
+            throw SimulatorError.createFailed(reason: "no usable iOS runtime / iPhone device type")
+        }
+        guard let runtime = runtimeObjs.first(where: {
+            ($0.value(forKey: "identifier") as? String) == spec.runtimeIdentifier
+        }), let deviceType = deviceTypeObjs.first(where: {
+            ($0.value(forKey: "identifier") as? String) == spec.deviceTypeIdentifier
+        }) else {
+            throw SimulatorError.createFailed(reason: "selected runtime / device type vanished")
+        }
+        guard let set = resolveSet() else {
+            throw SimulatorError.createFailed(reason: "no device set")
+        }
+
+        let sel = NSSelectorFromString("createDeviceWithType:runtime:name:error:")
+        guard set.responds(to: sel) else {
+            throw SimulatorError.createFailed(reason: "device set cannot create devices")
+        }
+        var err: NSError?
+        guard let device = invokeObjWith3ObjAndError(
+            set, sel, deviceType, runtime, spec.name as NSString, &err
+        ) else {
+            throw SimulatorError.createFailed(reason: err?.localizedDescription ?? "createDevice returned nil")
+        }
+        return coreSimulator(from: device)
+    }
+
+    /// Destroy the device with `udid`, removing its data container from
+    /// the set. Counterpart to `createSimulator`; `shutdown` only stops
+    /// a running device, this erases it. Integration-only — the
+    /// `deleteDevice:error:` call is the irreducible private-API line.
+    func deleteSimulator(udid: String) throws {
+        guard let set = resolveSet() else {
+            throw SimulatorError.notFound(udid: udid)
+        }
+        guard let device = resolveDevice(udid: udid) else {
+            throw SimulatorError.notFound(udid: udid)
+        }
+        let sel = NSSelectorFromString("deleteDevice:error:")
+        guard set.responds(to: sel) else {
+            throw SimulatorError.createFailed(reason: "device set cannot delete devices")
+        }
+        var err: NSError?
+        if !invokeBoolWithObjAndError(set, sel, device, &err) {
+            throw SimulatorError.createFailed(reason: err?.localizedDescription ?? "deleteDevice failed")
+        }
+    }
+
     // MARK: - resolution
 
     /// Look up the underlying `SimDevice` ObjC object for a UDID.
@@ -256,6 +335,18 @@ func invokeObjWithObjAndError(
         AnyObject, Selector, AnyObject, AutoreleasingUnsafeMutablePointer<NSError?>
     ) -> AnyObject?
     return unsafeBitCast(imp, to: Fn.self)(target, sel, arg, &err) as? NSObject
+}
+
+func invokeObjWith3ObjAndError(
+    _ target: NSObject, _ sel: Selector,
+    _ a: AnyObject, _ b: AnyObject, _ c: AnyObject, _ err: inout NSError?
+) -> NSObject? {
+    guard let imp = class_getMethodImplementation(type(of: target), sel) else { return nil }
+    typealias Fn = @convention(c) (
+        AnyObject, Selector, AnyObject, AnyObject, AnyObject,
+        AutoreleasingUnsafeMutablePointer<NSError?>
+    ) -> AnyObject?
+    return unsafeBitCast(imp, to: Fn.self)(target, sel, a, b, c, &err) as? NSObject
 }
 
 func invokeClassObjWithObjAndError(

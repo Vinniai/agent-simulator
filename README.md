@@ -11,10 +11,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/josh-vincent/agent-sim/actions/workflows/ci.yml"><img src="https://github.com/josh-vincent/agent-sim/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://codecov.io/gh/josh-vincent/agent-sim"><img src="https://codecov.io/gh/josh-vincent/agent-sim/branch/main/graph/badge.svg" alt="Coverage"></a>
-  <a href="https://github.com/josh-vincent/agent-sim/releases/latest"><img src="https://img.shields.io/github/v/release/josh-vincent/agent-sim?sort=semver" alt="Latest release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/josh-vincent/agent-sim" alt="License"></a>
+  <a href="https://github.com/Vinniai/agent-sim/actions/workflows/ci.yml"><img src="https://github.com/Vinniai/agent-sim/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.npmjs.com/package/agent-sim"><img src="https://img.shields.io/npm/v/agent-sim?logo=npm" alt="npm"></a>
+  <a href="https://github.com/Vinniai/agent-sim/releases/latest"><img src="https://img.shields.io/github/v/release/Vinniai/agent-sim?sort=semver" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Vinniai/agent-sim" alt="License"></a>
   <img src="https://img.shields.io/badge/Swift-6.2-orange?logo=swift" alt="Swift 6.2">
   <img src="https://img.shields.io/badge/macOS-15%2B-blue?logo=apple" alt="macOS 15+">
   <img src="https://img.shields.io/badge/Xcode-26-1575F9?logo=xcode" alt="Xcode 26">
@@ -29,17 +29,63 @@ review sessions: screenshots, accessibility trees, markups, source
 changes, verification snapshots, and score gates that let an agent run a
 self-building feedback loop.
 
-## Demo
+## Use cases
 
-https://github.com/user-attachments/assets/e904413f-16bb-4b3d-86d5-162333403cee
+**Drive a booted simulator from an agent or CI — no GUI.**
 
-https://github.com/user-attachments/assets/c49c9f4b-0e4b-47ea-9272-3223b1ac7739
+```bash
+agent-sim boot --udid <UDID>
+agent-sim describe-ui --udid <UDID> | jq '.[] | select(.label == "Sign in")'
+agent-sim tap --udid <UDID> --x 219 --y 478 --width 438 --height 954
+agent-sim screenshot --udid <UDID> --output after.jpg
+```
 
-https://github.com/user-attachments/assets/65dc62ee-f0c7-48fb-9c57-5bd267c8c02f
+`describe-ui` returns each node's `frame` in the same device points `tap`
+consumes, so a hit-test result pipes straight back into a gesture.
 
-> The raw clip lives at [`assets/demo.mp4`](assets/demo.mp4) — drag
-> it into a GitHub web edit of this README to upload as a CDN-hosted
-> video and replace the line above with the auto-generated URL.
+**Run a self-building review loop.** `agent bootstrap` seeds a review
+session plus capture → markup → enhance → verify tasks; an agent drains
+the queue, records its work, then closes the loop against the score gate.
+
+```bash
+agent-sim agent bootstrap --project ~/app --bundle-id com.acme.app --name "Login polish"
+agent-sim review-tasks watch --status open                  # one JSON line per change
+agent-sim review-tasks result <task-id> --status done --verify
+agent-sim agent quality-gate <task-id> --score 9            # the "8/10+, no highs" gate
+```
+
+**Author an acceptance criterion from a live element, then verify against it.**
+
+```bash
+agent-sim review-tasks criterion --udid <UDID> --x 219 --y 478
+agent-sim review-tasks verify-criteria <task-id> --live --udid <UDID>
+```
+
+**Collect human feedback from a phone over Tailscale.** Open `/m/<udid>`,
+tap an element, drop a note — agents pick it up with the source `file:line`
+already resolved.
+
+```bash
+agent-sim serve --host 0.0.0.0 --trusted-host mac.tailnet.ts.net
+agent-sim notes watch --status queued
+```
+
+**Type, key, double-tap, rotate — the full input surface from one CLI.**
+
+```bash
+agent-sim type --udid <UDID> --text "hello@example.com"
+agent-sim key  --udid <UDID> --code Enter
+agent-sim double-tap --udid <UDID> --x 219 --y 478 --width 438 --height 954
+agent-sim orientation --udid <UDID> landscape-left
+```
+
+**Stream the screen to anything that reads H.264.**
+
+```bash
+agent-sim stream --udid <UDID> --format avcc --fps 60 | ffplay -
+```
+
+## Features
 
 - **Frame streaming** — MJPEG or H.264 / AVCC over stdout or WebSocket.
   Runtime-tunable bitrate / fps / scale.
@@ -87,11 +133,17 @@ https://github.com/user-attachments/assets/65dc62ee-f0c7-48fb-9c57-5bd267c8c02f
 ## Install
 
 ```bash
-brew install josh-vincent/tap/agent-sim
+npm install -g agent-sim
 ```
 
 Apple Silicon only. Requires Xcode 26 — `agent-sim` links against private
 SimulatorKit / CoreSimulator frameworks shipped with Xcode.
+
+The npm package is a thin launcher: it's gated to `darwin`/`arm64`, and its
+`postinstall` downloads the matching native binary from the
+[GitHub release](https://github.com/Vinniai/agent-sim/releases),
+verifies its checksum, and execs it. Installs on other platforms are skipped
+with a warning rather than failing.
 
 ## Quickstart
 
@@ -148,6 +200,10 @@ agent-sim <command> [options]
                                              --json emits {"running":[…],"available":[…]})
   boot     --udid <UDID>                     Boot headlessly
   shutdown --udid <UDID>                     Shutdown
+  delete   --udid <UDID> [--device-set <path>]
+                                             Destroy the device (irreversible;
+                                             erases its data + removes it from
+                                             the set)
   stream   --udid <UDID> [--fps 60] [--format mjpeg|avcc]
                                              Stream frames on stdout
   screenshot --udid <UDID> [--output <path>] [--quality 0.85] [--scale 1]
@@ -167,6 +223,8 @@ agent-sim <command> [options]
                                              three the iOS-runtime `log stream`
                                              accepts — not host-`log`'s five.
   input    --udid <UDID>                     Read JSON gestures from stdin
+  orientation --udid <UDID> <portrait|landscape-left|landscape-right|portrait-upside-down>
+                                             Set the interface orientation
 
   # Standalone web UI on localhost. Serves /simulators (single-device
   # dashboard) and /farm (multi-device dashboard) — both backed by the
@@ -174,6 +232,22 @@ agent-sim <command> [options]
   serve    [--port 8421] [--host 127.0.0.1] [--device-set <path>]
            [--trusted-host <name> …]            Reach a loopback bind
                                                 over Tailscale/VPN
+           [--tunnel cloudflare|ngrok]          Expose over a public tunnel
+           [--auto-boot | --no-auto-boot]       Boot an "agent-sim" sim on an
+                                                idle host (default: on)
+                                             On startup, prints a copy-paste
+                                             `agent-sim connect …` hint for the
+                                             address a remote device should dial.
+
+  # Dial a remote `agent-sim serve` and smoke-test its stream: count
+  # downstream frames over a window and (optionally) fire one tap up the
+  # same socket to prove the gesture channel. The other half of the
+  # mini-at-home → Claude-on-the-web flow (see docs/REMOTE.md).
+  connect  <url> --udid <UDID> [--tap X,Y] [--size WxH]
+           [--format avcc|mjpeg] [--seconds 3]
+                                             url = the same base you'd open in a
+                                             browser (http://mini.local:8421 or
+                                             a tunnel https URL)
 
   # DeviceKit chrome / bezel data.
   chrome layout    --udid <UDID>             Print bezel layout JSON
@@ -184,11 +258,37 @@ agent-sim <command> [options]
   # One-shot gestures — same HID path as `input`, one gesture per
   # invocation. Coordinates are in DEVICE POINTS; `width` / `height`
   # are the simulator's screen size in points.
-  tap     --udid … --x … --y … --width … --height … [--duration 0.05]
-  swipe   --udid … --startX … --startY … --endX … --endY … --width … --height …
-  pinch   --udid … --cx … --cy … --startSpread … --endSpread … --width … --height …
-  pan     --udid … --x1 … --y1 … --x2 … --y2 … --dx … --dy … --width … --height …
-  press   --udid … --button home|lock
+  tap        --udid … --x … --y … --width … --height … [--duration 0.05]
+  double-tap --udid … --x … --y … --width … --height … [--interval 0.05] [--duration 0.08]
+  swipe      --udid … --startX … --startY … --endX … --endY … --width … --height …
+  pinch      --udid … --cx … --cy … --startSpread … --endSpread … --width … --height …
+  pan        --udid … --x1 … --y1 … --x2 … --y2 … --dx … --dy … --width … --height …
+  press      --udid … --button home|lock|power|action|volume-up|volume-down|… [--duration 0]
+
+  # Keyboard — Mac-keyboard HID path (letters, digits, named specials,
+  # US punctuation, shift/control/option/command). US-ASCII only today.
+  key      --udid … --code KeyA [--modifiers shift,command] [--duration 0]
+  type     --udid … --text "hello@example.com"
+
+  # Agent feedback loop — review tasks queue + session-less notes inbox.
+  # Agents poll (`watch`) or subscribe over WS; full protocol in docs/AGENT-API.md.
+  review-tasks list        [--session-id <id>] [--status <s>]
+  review-tasks next        [--status <s>]      Claim the next open task
+  review-tasks show        <task-id>
+  review-tasks claim       <task-id> --assignee <id>
+  review-tasks event       <task-id> --type <t> --message <m>
+  review-tasks result      <task-id> --status <s> [--summary <m>] [--verify]
+  review-tasks verify      <task-id> [--before <id> …] [--after <id>] [--status <s>]
+  review-tasks verify-criteria <task-id> [--live --udid <UDID>]
+  review-tasks criterion   --udid <UDID> --x <px> --y <px>
+                                             Emit a criterion for the element at a point
+  review-tasks add-code-change <task-id> --file <path> [--summary <m>] [--start-line N]
+  review-tasks bulk-create --session-id <id> --file <path>
+  review-tasks watch       [--session-id <id>] [--status <s>] [--interval 1]
+  notes list   [--status queued|promoted|all]
+  notes add    --udid <UDID> --message <m> [--source <file>:<line>[:<col>]]
+  notes promote <note-id>                    Flip a note to picked-up
+  notes watch  [--status <s>] [--interval 1] [--ws <WS /notes/stream URL>]
 
   # Diagnostics. Reports CLI version, build mode, booted-sim count,
   # whether the server is reachable, and surfaces version drift
@@ -212,7 +312,7 @@ DeviceKit-sourced bezel.
 
 The HTML is editable on disk — `Sources/AgentSim/Resources/Web/sim.html`
 opens directly in any browser via `file://` (preview mode), and points
-to its sibling `.js` files. Set `BAGUETTE_WEB_DIR` to override the
+to its sibling `.js` files. Set `AGENTSIM_WEB_DIR` to override the
 served root for live-iteration without rebuilding.
 
 ### Routes (single resource tree, no `/api/` prefix)
@@ -275,6 +375,12 @@ the trusted name cannot drive the simulator. An un-allowlisted host on
 a loopback bind is still `403`. Nothing is exposed publicly; reach is
 exactly your tailnet.
 
+To reach a network you don't control (e.g. Claude on the web), expose
+the loopback bind over a public quick tunnel — `serve --tunnel cloudflare`
+(or `ngrok`), which auto-allowlists its own discovered `https://…` name.
+LAN, tailnet, and tunnel setups — plus `agent-sim connect` to verify the
+link — are all in [docs/REMOTE.md](docs/REMOTE.md).
+
 `/m/:udid` is the mobile-first single-sim view: live stream, a
 touch AX element picker, a notes composer, and a collapsible activity
 drawer that live-updates over `WS /notes/stream`. The picker resolves
@@ -285,6 +391,43 @@ with the note, so agents reading `GET /notes.json` or
 element — no re-derivation. From the CLI, attach a pointer without
 the picker via `agent-sim notes add --source <file>:<line>[:<col>]`
 (handy when you have a location from a stack trace or lint hit).
+
+## `agent-sim connect` — dial a remote serve
+
+The other half of the "Mac mini at home, Claude on the web" story.
+`serve` runs on the machine the simulator lives on; `connect` runs
+*anywhere else* and proves the link works — it dials the same WebSocket
+the browser would, counts the frames coming downstream, and (with
+`--tap`) fires one gesture up the same socket.
+
+When `serve` starts it prints the exact line to run on the other end:
+
+```bash
+# on the mini — bind a routable interface so off-box clients can reach it
+$ agent-sim serve --host 0.0.0.0
+[agent-sim] remote: agent-sim connect http://192.168.1.132:8421 --udid 75091244-…
+[agent-sim] listening on http://0.0.0.0:8421/simulators
+```
+
+The hint resolves the bind to a dialable address — a `127.0.0.1` or
+`0.0.0.0` bind isn't reachable off-box, so it substitutes this Mac's LAN
+IP; with `--tunnel` it reprints the public URL once the tunnel is up.
+Copy that line to the other machine:
+
+```bash
+# elsewhere on the LAN (or over a tunnel / tailnet)
+$ agent-sim connect http://192.168.1.132:8421 --udid 75091244-… --tap 200,400
+[agent-sim] connecting to ws://192.168.1.132:8421/simulators/75091244-…/stream?format=avcc …
+[agent-sim] sent tap 200,400
+[agent-sim] frames=178 ~59.3fps 5049B/frame
+[agent-sim] handshake ok — stream is live
+```
+
+`frames > 0` is the verdict (exit 0); `--tap X,Y` (relative to `--size`,
+default `393x852`) proves the upstream gesture channel in the same run.
+It's a smoke test, not a viewer — for an interactive session open the
+URL in a browser. Full setup (LAN, tunnel, tailnet) is in
+[docs/REMOTE.md](docs/REMOTE.md).
 
 ## Device farm
 
@@ -329,7 +472,7 @@ loads five IIFE component scripts from `/farm/<name>.js`:
 | `farm-filter.js` | `FarmFilter` — filter state + sidebar wiring    |
 | `farm-app.js`    | `FarmApp` — orchestrator (boot, fetch, dispatch)|
 
-`BAGUETTE_WEB_DIR` overrides the served root, so you can iterate on the
+`AGENTSIM_WEB_DIR` overrides the served root, so you can iterate on the
 farm UI without rebuilding — point it at `Sources/AgentSim/Resources/Web`
 on disk and reload the browser.
 
@@ -353,9 +496,11 @@ on stdout, one ack per line.
 {"type":"touch2-move", "x1":150,"y1":478, "x2":288,"y2":478, "width":438,"height":954}
 {"type":"touch2-up",   "x1":150,"y1":478, "x2":288,"y2":478, "width":438,"height":954}
 
-// Buttons (only home / lock reach a working target on iOS 26.4)
+// Buttons (home / lock / power / action / volume-up / volume-down, plus
+// the Apple Watch crown + side buttons; `duration` enables long-press)
 {"type":"button", "button":"home"}
 {"type":"button", "button":"lock"}
+{"type":"button", "button":"action", "duration":1.0}
 
 // Scroll
 {"type":"scroll", "deltaX":0, "deltaY":-50}
@@ -378,8 +523,10 @@ coordinates by `width` / `height` before serialising.
 
 ### Not yet wired
 
-- `key` / `type` — keyboard isn't on the host-HID path yet (preview-kit
-  recipe still WIP). Routes through external tools today.
+- `key` / `type` are **US-ASCII only** — letters, digits, named specials,
+  US punctuation, and shift/control/option/command ride the host-HID path
+  (`agent-sim key` / `agent-sim type`). IME / non-Latin / emoji is deferred
+  to the `IndigoHIDMessageForKeyboardNSEvent` path.
 - `siri` button — crashes `backboardd` via every known Indigo path.
 
 ## `agent-sim stream` — frame streaming
@@ -569,6 +716,22 @@ That single calling-convention change is the entire difference. The
 recipe is heavily commented in `Sources/AgentSim/Infrastructure/Input/IndigoHIDInput.swift`,
 and the layered design is documented in
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## Acknowledgements
+
+Agent Sim began as a fork of [`tddworks/baguette`](https://github.com/tddworks/baguette)
+and owes its simulator-control foundation — the headless boot/stream/HID
+pipeline — to that project. We still absorb upstream work selectively.
+
+It has since taken its own direction: an **agentic review loop** as the
+core use case (review-task queue, session-less notes inbox, acceptance
+criteria + verification, quality-score gates), a re-architected layered
+domain with split private-API adapters, and the device farm. Where
+upstream rewrote the browser layer into a "Baguette SDK", we stayed on a
+leaner web stack and built the review/feedback surface on top.
+
+How we track and merge upstream changes is documented in
+[`docs/UPSTREAM.md`](docs/UPSTREAM.md).
 
 ## License
 

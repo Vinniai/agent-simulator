@@ -18,8 +18,8 @@ import Foundation
 ///      kept as legacy fallbacks. These are SPM-generated resource
 ///      bundles. We resolve manually via `dladdr` instead of
 ///      `Bundle.module` because the latter `fatalError`s when the
-///      bundle is missing (e.g. a Homebrew install that didn't ship
-///      the bundle).
+///      bundle is missing (e.g. an install that didn't ship the
+///      bundle next to the binary).
 ///
 /// `data(named:)` is used by the route handlers; the resolution logic
 /// runs once per call which is fine — the OS caches the file pages.
