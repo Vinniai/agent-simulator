@@ -264,7 +264,7 @@
       log,
       // Input + control rides over the same WebSocket the stream
       // session opened. SimInputBridge translates SimInput's asc-cli
-      // dialect (kind:"tap", fingers[]) to agent-sim's GestureRegistry
+      // dialect (kind:"tap", fingers[]) to agent-simulator's GestureRegistry
       // dialect (type:"tap", touch1-/touch2-, points-not-normalized);
       // also shared by farm-tile.js and sim-native.js.
       transport: window.SimInputBridge.makeTransport(session, log),

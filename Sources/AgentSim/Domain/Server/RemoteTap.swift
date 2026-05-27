@@ -1,6 +1,6 @@
 import Foundation
 
-/// One tap to fire at a remote `agent-sim serve` over the stream
+/// One tap to fire at a remote `agent-simulator serve` over the stream
 /// WebSocket, so the `connect` smoke test can prove the upstream
 /// (client→server) direction and not just frame flow.
 ///

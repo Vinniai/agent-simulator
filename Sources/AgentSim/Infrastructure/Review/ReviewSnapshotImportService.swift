@@ -6,7 +6,7 @@ import Foundation
 /// append a `ReviewScreenSnapshot` to `session.snapshots` — but this
 /// path doesn't touch the simulator at all. Used by external sources
 /// (agent-canvas route walkers, offline manifests, manual drops) to
-/// surface artefacts in agent-sim's review map.
+/// surface artefacts in agent-simulator's review map.
 enum ReviewSnapshotImportService {
     static func importSnapshot(
         input: ReviewSnapshotImportInput,

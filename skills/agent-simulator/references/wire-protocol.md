@@ -1,6 +1,6 @@
-# Wire protocol — `agent-sim input` / WebSocket
+# Wire protocol — `agent-simulator input` / WebSocket
 
-Newline-delimited JSON. One gesture per line. `agent-sim input` writes
+Newline-delimited JSON. One gesture per line. `agent-simulator input` writes
 `{"ok":true}` or `{"ok":false,"error":"…"}` per line on stdout. The
 WebSocket at `/simulators/<udid>/stream` accepts the same dialect.
 
@@ -10,7 +10,7 @@ All `x`, `y`, `startX`, `startY`, `endX`, `endY`, `x1`, `y1`, `x2`, `y2`,
 `cx`, `cy` are in **device points** — the same units as the `width` and
 `height` you pass on the same line.
 
-`width` and `height` come from `agent-sim chrome layout --udid <UDID>`'s
+`width` and `height` come from `agent-simulator chrome layout --udid <UDID>`'s
 `screen.width` / `screen.height`. They are device-specific. Hardcoding
 "438×954" only works for iPhone 17 Pro Max.
 
@@ -193,7 +193,7 @@ than silently dropping mid-string.
 scripts — those need `IndigoHIDMessageForKeyboardNSEvent` (phase 2).
 For non-ASCII text, fall back to `xcrun simctl io <UDID> text "…"`.
 
-## WebSocket-only verbs (during `agent-sim serve`)
+## WebSocket-only verbs (during `agent-simulator serve`)
 
 When connected to `WS /simulators/<UDID>/stream?format=…`, the same
 text channel that carries gestures also accepts stream-control verbs:
@@ -223,7 +223,7 @@ recursive `children` array. Use it as the structured-context
 counterpart to `screenshot.jpg` — pair the screenshot with the
 tree, or skip the image and act on the labels and frames directly.
 
-These do not exist for `agent-sim input` (no stream there).
+These do not exist for `agent-simulator input` (no stream there).
 
 ## Logs WebSocket — `WS /simulators/<UDID>/logs`
 
@@ -248,7 +248,7 @@ filtering, use `predicate=messageType == "error"`.
 
 ## Review-task queue WebSocket — `WS /review-tasks/stream`
 
-The push alternative to polling `agent-sim review-tasks watch`. Filter
+The push alternative to polling `agent-simulator review-tasks watch`. Filter
 is fixed at connect time via query string (same filters as the CLI):
 
 ```

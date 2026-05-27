@@ -1,4 +1,4 @@
-"""Convert an agent-canvas route manifest into a agent-sim review-tasks bulk-create
+"""Convert an agent-canvas route manifest into a agent-simulator review-tasks bulk-create
 envelope.
 
 agent-canvas (https://github.com/EvanBacon/serve-sim style, or the local
@@ -6,7 +6,7 @@ agent-canvas (https://github.com/EvanBacon/serve-sim style, or the local
 `agent-canvas/latest/manifest.json` — one entry per route with a
 screenshot, AX element bounds, and any pasted React Native Grab
 selection. This script reads that manifest and produces a JSON envelope
-suitable for `agent-sim review-tasks bulk-create --file -`, so the
+suitable for `agent-simulator review-tasks bulk-create --file -`, so the
 operator can queue one review task per route in a single shell
 pipeline.
 
@@ -14,7 +14,7 @@ Usage:
     python3 agent_canvas_to_agentsim.py \\
         --manifest path/to/agent-canvas/latest/manifest.json \\
         --session-id review-xyz \\
-        | agent-sim review-tasks bulk-create --session-id review-xyz --file -
+        | agent-simulator review-tasks bulk-create --session-id review-xyz --file -
 
 Required input fields per route (rest are tolerated and ignored):
     urlPath:       the Expo route path (used as task title fallback)
@@ -28,9 +28,9 @@ agent-canvas captures emit slightly different JSON depending on the
 dropped silently; the route still becomes a task.
 
 What this script does NOT do:
-    - Import agent-canvas's PNG screenshots into agent-sim's snapshot
+    - Import agent-canvas's PNG screenshots into agent-simulator's snapshot
       store. Until that adapter lands, the bulk-created tasks reference
-      `snapshotId` values that don't exist in agent-sim's review session.
+      `snapshotId` values that don't exist in agent-simulator's review session.
       You can still claim/work/verify them, but the operator's review
       browser won't render before/after screenshots for these. Treat
       them as "external-source tasks" that pipe through agent-canvas
@@ -150,7 +150,7 @@ def main() -> None:
     p.add_argument("--manifest", required=True, type=Path,
                    help="Path to agent-canvas/latest/manifest.json")
     p.add_argument("--session-id", required=True,
-                   help="Existing agent-sim review session id every task attaches to")
+                   help="Existing agent-simulator review session id every task attaches to")
     p.add_argument("--assignee", default=None,
                    help="Optional default assignee for every emitted task")
     args = p.parse_args()

@@ -31,7 +31,7 @@ import CoreGraphics
 /// Coordinates: AXP frames come back in **macOS host-window**
 /// coordinates. We project to device points using the simulator's
 /// `mainScreenSize` / `mainScreenScale` so callers can pipe values
-/// straight back into agent-sim's gesture wire (which is also in
+/// straight back into agent-simulator's gesture wire (which is also in
 /// device points).
 ///
 /// Cribbed from cameroncooke/AXe + Silbercue/SilbercueSwift's
@@ -486,7 +486,7 @@ final class TokenDispatcher: NSObject, @unchecked Sendable {
 
         let group = DispatchGroup()
         group.enter()
-        let queue = DispatchQueue(label: "agent-sim.ax.xpc")
+        let queue = DispatchQueue(label: "agent-simulator.ax.xpc")
         // Use a Sendable box so the completion-block capture compiles
         // under strict concurrency without copying through `inout`.
         final class Box: @unchecked Sendable { var value: AnyObject? }

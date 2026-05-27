@@ -74,7 +74,7 @@ struct NotesRouteTests {
 
     private static func tempTaskStore() -> SQLiteReviewTaskStore {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("agent-sim-notes-promote-\(UUID().uuidString)")
+            .appendingPathComponent("agent-simulator-notes-promote-\(UUID().uuidString)")
         return SQLiteReviewTaskStore(url: dir.appendingPathComponent("tasks.sqlite"))
     }
 

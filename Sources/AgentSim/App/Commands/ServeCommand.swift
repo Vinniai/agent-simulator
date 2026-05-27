@@ -1,7 +1,7 @@
 import ArgumentParser
 import Foundation
 
-/// `agent-sim serve [--port 8421] [--host 127.0.0.1] [--device-set …]
+/// `agent-simulator serve [--port 8421] [--host 127.0.0.1] [--device-set …]
 ///  [--trusted-host <name> …]`
 ///
 /// Boots the standalone simulator UI. Open `http://<host>:<port>/`
@@ -42,12 +42,12 @@ struct ServeCommand: AsyncParsableCommand {
 
     @Flag(
         inversion: .prefixedNo,
-        help: "On startup, boot an \"agent-sim\" simulator on the latest runtime when none is running (--no-auto-boot to skip)"
+        help: "On startup, boot an \"agent-simulator\" simulator on the latest runtime when none is running (--no-auto-boot to skip)"
     )
     var autoBoot: Bool = true
 
     /// Name of the simulator serve auto-provisions on an idle host.
-    static let autoBootName = "agent-sim"
+    static let autoBootName = "agent-simulator"
 
     /// Map the `--tunnel` flag to a `Tunnel.Provider`, or `nil` when
     /// the flag is absent. An unrecognised spelling is a usage error,

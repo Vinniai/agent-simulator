@@ -130,7 +130,7 @@
       const payload = { ...body, udid: this.udid };
       if (size) { payload.width = this.width; payload.height = this.height; }
       // Prefer an injected transport when given (e.g. WebSocket on
-      // agent-sim serve). Falls back to legacy POST /event so the
+      // agent-simulator serve). Falls back to legacy POST /event so the
       // asc-cli plugin keeps working unchanged.
       if (this.transport) {
         try { this.transport(payload); }

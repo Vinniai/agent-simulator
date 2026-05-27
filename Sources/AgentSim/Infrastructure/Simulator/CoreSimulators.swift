@@ -294,7 +294,7 @@ func dlerrorString() -> String {
 }
 
 func logErr(_ message: String) {
-    fputs("[agent-sim] \(message)\n", stderr)
+    fputs("[agent-simulator] \(message)\n", stderr)
 }
 
 func invokeBoolWithError(

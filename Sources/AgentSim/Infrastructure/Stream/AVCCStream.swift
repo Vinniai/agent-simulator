@@ -16,7 +16,7 @@ final class AVCCStream: Stream, @unchecked Sendable {
     private let jpeg: JPEGEncoder
     private let h264: H264Encoder
     private let scaler = Scaler()
-    private let queue = DispatchQueue(label: "agent-sim.avcc", qos: .userInteractive)
+    private let queue = DispatchQueue(label: "agent-simulator.avcc", qos: .userInteractive)
 
     private var screen: (any Screen)?
     private var lastSurface: IOSurface?

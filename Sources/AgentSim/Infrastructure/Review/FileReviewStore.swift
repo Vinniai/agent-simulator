@@ -23,7 +23,7 @@ final class FileReviewStore: ReviewStore, @unchecked Sendable {
            !override.isEmpty {
             return URL(fileURLWithPath: override, isDirectory: true)
         }
-        return home.appendingPathComponent(".agent-sim/reviews", isDirectory: true)
+        return home.appendingPathComponent(".agent-simulator/reviews", isDirectory: true)
     }
 
     func createSession(name: String) throws -> ReviewSession {

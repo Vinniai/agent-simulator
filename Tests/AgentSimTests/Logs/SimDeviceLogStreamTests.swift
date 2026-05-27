@@ -9,7 +9,7 @@ import Mockable
 /// invoking `xcrun simctl spawn` against a real booted simulator.
 /// The successful-spawn path (process runs, lines flow, SIGTERM
 /// stops it cleanly) is integration-only — manually smoke-tested
-/// via `agent-sim logs` against a booted iOS sim, not run in CI.
+/// via `agent-simulator logs` against a booted iOS sim, not run in CI.
 @Suite("SimDeviceLogStream — error paths")
 struct SimDeviceLogStreamErrorTests {
 

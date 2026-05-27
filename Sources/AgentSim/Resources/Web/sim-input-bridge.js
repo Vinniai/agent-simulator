@@ -1,5 +1,5 @@
 // SimInputBridge — translator + transport factory bridging SimInput's
-// asc-cli plugin dialect to agent-sim's GestureRegistry wire format.
+// asc-cli plugin dialect to agent-simulator's GestureRegistry wire format.
 //
 // Two clients consume this:
 //   • sim-stream.js     (single-device page)
@@ -7,13 +7,13 @@
 //
 // Wire-dialect deltas (kept verbatim from sim-stream.js):
 //   • SimInput payloads carry `kind:"tap"`, `kind:"touchDown"` with
-//     `fingers[]`. agent-sim wants `type:"tap"`, `type:"touch1-down"`,
+//     `fingers[]`. agent-simulator wants `type:"tap"`, `type:"touch1-down"`,
 //     `startX/endX/x1/x2` instead of `x1/x2`.
 //   • SimInput emits normalized [0,1] coords + width/height device
-//     points. agent-sim's `IndigoHIDInput.sendMouse` expects coords in
+//     points. agent-simulator's `IndigoHIDInput.sendMouse` expects coords in
 //     *device-point space* and re-normalizes internally — the bridge
 //     multiplies by width/height before sending.
-//   • `key`/`type` aren't on agent-sim's host-HID path yet; they're
+//   • `key`/`type` aren't on agent-simulator's host-HID path yet; they're
 //     dropped with a log on the standalone serve route.
 (function () {
   'use strict';
@@ -61,7 +61,7 @@
   }
 
   // touchDown/Move/Up + N fingers → touch1-* / touch2-*. Other counts
-  // are dropped (agent-sim only supports 1 or 2 simultaneous fingers).
+  // are dropped (agent-simulator only supports 1 or 2 simultaneous fingers).
   // An optional `edge` field on the SimInput payload (`bottom`,
   // `top`, `left`, `right`) propagates to touch1 envelopes so the
   // server-side digitizer dispatch can flag the touch as a system
@@ -91,7 +91,7 @@
   }
 
   // Adapter for SimInput's `transport` option: translate then send via
-  // a StreamSession's send(). Drops payloads that have no agent-sim
+  // a StreamSession's send(). Drops payloads that have no agent-simulator
   // equivalent so SimInput's own promise chain still resolves.
   function makeTransport(session, log) {
     return (payload) => {

@@ -42,7 +42,7 @@ protocol PDFRasterizer: Sendable {
 /// Raw PDF bytes for the eight outer pieces of a 9-slice chrome bundle
 /// (4 corners + 4 edges). The center is the simulator's screen area,
 /// supplied by the caller as `innerSize` and left transparent in the
-/// composed bezel — agent-sim overlays the live framebuffer on top.
+/// composed bezel — agent-simulator overlays the live framebuffer on top.
 struct NineSlicePDFs: Sendable, Equatable {
     let topLeft: Data
     let top: Data

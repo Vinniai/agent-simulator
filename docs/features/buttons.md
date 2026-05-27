@@ -4,9 +4,9 @@ Press-and-release of the physical side buttons on a simulated device:
 home, lock, power, volume up / down, and the iPhone 15 Pro's action
 button. Three entry points share the same dispatch:
 
-- `agent-sim press --udid <UDID> --button <name> [--duration <sec>]` — CLI.
+- `agent-simulator press --udid <UDID> --button <name> [--duration <sec>]` — CLI.
 - Wire JSON `{ "type": "button", "button": "<name>", "duration": <sec> }`
-  on `agent-sim serve`'s WebSocket and on `agent-sim input`'s stdin.
+  on `agent-simulator serve`'s WebSocket and on `agent-simulator input`'s stdin.
 - Browser overlay — when `actionable` mode is on, each chrome button
   in the rendered bezel is a real DOM button. Click → tap; click and
   hold → real long-press.

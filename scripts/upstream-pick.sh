@@ -3,7 +3,7 @@
 #
 # Applies the four divergence renames documented in docs/UPSTREAM.md before
 # `git am --3way`, so commits that only "conflict" because of the
-# baguette→agent-sim rename land cleanly.
+# baguette→agent-simulator rename land cleanly.
 #
 # Usage: ./scripts/upstream-pick.sh [--force] <upstream-sha>
 #   --force   attempt even when the commit touches a manual-port area
@@ -61,10 +61,10 @@ git format-patch -1 "$FULL" --stdout > "$TMP/orig.patch"
 sed \
     -e 's|Sources/Baguette/|Sources/AgentSim/|g' \
     -e 's|Tests/BaguetteTests/|Tests/AgentSimTests/|g' \
-    -e 's|skills/baguette/|skills/agent-sim/|g' \
+    -e 's|skills/baguette/|skills/agent-simulator/|g' \
     -e 's|BAGUETTE_WEB_DIR|AGENTSIM_WEB_DIR|g' \
-    -e 's|baguette\.ax\.xpc|agent-sim.ax.xpc|g' \
-    -e "s|baguette's gesture wire|agent-sim's gesture wire|g" \
+    -e 's|baguette\.ax\.xpc|agent-simulator.ax.xpc|g' \
+    -e "s|baguette's gesture wire|agent-simulator's gesture wire|g" \
     "$TMP/orig.patch" > "$TMP/rewritten.patch"
 
 # Inject "(cherry picked from commit <full>)" trailer before the diff separator

@@ -4,7 +4,7 @@ Multi-device dashboard for the iOS Simulator. One browser tab shows
 every booted simulator, with click-to-focus, gesture input on the
 selected device, and Grid / Wall / List view modes.
 
-Lives at `GET /farm` under `agent-sim serve`.
+Lives at `GET /farm` under `agent-simulator serve`.
 
 If you want the end-to-end tap-to-`UITouch` story, read
 [`../ARCHITECTURE.md`](../ARCHITECTURE.md). This doc is scoped to the
@@ -48,7 +48,7 @@ served URL structure — no rewriting, no flat-file aliasing.
 
 ```
 ┌─ HEADER ──────────────────────────────────────────────────────────┐
-│  agent-sim / DEVICE FARM   FLEET · FPS · BANDWIDTH · LATENCY · CLOCK│
+│  agent-simulator / DEVICE FARM   FLEET · FPS · BANDWIDTH · LATENCY · CLOCK│
 ├──────────┬───────────────────────────────────────────┬────────────┤
 │  RAIL    │  GRID / WALL / LIST                       │ FOCUS PANE │
 │          │  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐      │ big preview│
@@ -58,11 +58,11 @@ served URL structure — no rewriting, no flat-file aliasing.
 │ Display  │  │  📱  │ │  📱  │                        │  CONTROLS  │
 │ Bulk     │  └──────┘ └──────┘                        │  GESTURE   │
 └──────────┴───────────────────────────────────────────┴────────────┘
-└─ CLI MIRROR: agent-sim serve --platform … --runtime … --focus <udid> ┘
+└─ CLI MIRROR: agent-simulator serve --platform … --runtime … --focus <udid> ┘
 ```
 
 Three columns, one main row, plus header + footer. The CLI mirror
-footer reflects the current filter / focus state as an agent-sim
+footer reflects the current filter / focus state as an agent-simulator
 invocation — useful for copy-paste reproduction.
 
 ## Frontend split
@@ -146,7 +146,7 @@ strategy distorted screen-area percentages.
 ### Gesture input
 
 `SimInputBridge` is a small shared module (under `Resources/Web/`)
-that translates `SimInput`'s asc-cli plugin dialect to agent-sim's
+that translates `SimInput`'s asc-cli plugin dialect to agent-simulator's
 GestureRegistry wire format. Both `sim-stream.js` and `farm-tile.js`
 use it.
 

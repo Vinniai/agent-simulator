@@ -7,7 +7,7 @@ struct SQLiteReviewTaskStoreTests {
     @Test("creates, lists, claims, updates, and verifies tasks")
     func taskLifecycle() throws {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("agent-sim-task-tests-\(UUID().uuidString)")
+            .appendingPathComponent("agent-simulator-task-tests-\(UUID().uuidString)")
         let store = SQLiteReviewTaskStore(url: dir.appendingPathComponent("tasks.sqlite"))
         let now = Date()
         let task = ReviewTask(
@@ -97,7 +97,7 @@ struct SQLiteReviewTaskStoreTests {
     @Test("appendCodeChanges persists, hydrates, and emits a code_changes event")
     func appendCodeChangesRoundtrip() throws {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("agent-sim-task-tests-\(UUID().uuidString)")
+            .appendingPathComponent("agent-simulator-task-tests-\(UUID().uuidString)")
         let store = SQLiteReviewTaskStore(url: dir.appendingPathComponent("tasks.sqlite"))
         let now = Date()
         let task = ReviewTask(
@@ -170,7 +170,7 @@ struct SQLiteReviewTaskStoreTests {
     @Test("createTask persists acceptance criteria and hydrates them on load")
     func criteriaRoundtrip() throws {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("agent-sim-task-tests-\(UUID().uuidString)")
+            .appendingPathComponent("agent-simulator-task-tests-\(UUID().uuidString)")
         let store = SQLiteReviewTaskStore(url: dir.appendingPathComponent("tasks.sqlite"))
         let now = Date()
         let criteria = [
@@ -204,7 +204,7 @@ struct SQLiteReviewTaskStoreTests {
     @Test("bulkCreateTasks creates every supplied task with shared defaults")
     func bulkCreateAllSucceed() throws {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("agent-sim-task-tests-\(UUID().uuidString)")
+            .appendingPathComponent("agent-simulator-task-tests-\(UUID().uuidString)")
         let store = SQLiteReviewTaskStore(url: dir.appendingPathComponent("tasks.sqlite"))
 
         let result = try store.bulkCreateTasks(
@@ -256,7 +256,7 @@ struct SQLiteReviewTaskStoreTests {
     @Test("bulkCreateTasks records per-item errors without aborting the batch")
     func bulkCreatePartialFailure() throws {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("agent-sim-task-tests-\(UUID().uuidString)")
+            .appendingPathComponent("agent-simulator-task-tests-\(UUID().uuidString)")
         let store = SQLiteReviewTaskStore(url: dir.appendingPathComponent("tasks.sqlite"))
 
         let result = try store.bulkCreateTasks(
@@ -280,7 +280,7 @@ struct SQLiteReviewTaskStoreTests {
     @Test("bulkCreateTasks per-task title beats defaults; defaults beat fallback")
     func bulkCreateDefaultsResolution() throws {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("agent-sim-task-tests-\(UUID().uuidString)")
+            .appendingPathComponent("agent-simulator-task-tests-\(UUID().uuidString)")
         let store = SQLiteReviewTaskStore(url: dir.appendingPathComponent("tasks.sqlite"))
 
         let result = try store.bulkCreateTasks(

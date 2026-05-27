@@ -14,12 +14,12 @@ struct LoopRoutesVerifyTests {
 
     private func reviewStore() -> FileReviewStore {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("agent-sim-loop-reviews-\(UUID().uuidString)")
+            .appendingPathComponent("agent-simulator-loop-reviews-\(UUID().uuidString)")
         return FileReviewStore(root: dir)
     }
     private func taskStore() -> SQLiteReviewTaskStore {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("agent-sim-loop-tasks-\(UUID().uuidString)")
+            .appendingPathComponent("agent-simulator-loop-tasks-\(UUID().uuidString)")
         return SQLiteReviewTaskStore(url: dir.appendingPathComponent("tasks.sqlite"))
     }
     private func frame() -> Rect {

@@ -49,7 +49,7 @@ struct ServerSecurityTests {
     }
 
     @Test func `accepts a first-party WebSocket client Origin on a loopback bind`() {
-        // `agent-sim connect` (swift-websocket) sends a port-less
+        // `agent-simulator connect` (swift-websocket) sends a port-less
         // `ws://` Origin — never a shape a browser produces — so the
         // port must default to the request port, not ws's default 80.
         let request = Self.request(

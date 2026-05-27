@@ -1,6 +1,6 @@
 import Foundation
 
-/// What `agent-sim serve` should do at startup to guarantee the web
+/// What `agent-simulator serve` should do at startup to guarantee the web
 /// picker has a booted simulator to attach to.
 ///
 /// A pure decision over the current fleet — the side effects (boot an
@@ -23,7 +23,7 @@ enum SimulatorStartupPlan: Equatable, Sendable {
     case createAndBoot(name: String)
 
     /// Decide from a fleet snapshot. `desiredName` is the auto-boot
-    /// simulator's name (`"agent-sim"`); the match is case-insensitive
+    /// simulator's name (`"agent-simulator"`); the match is case-insensitive
     /// so a hand-created `Agent-Sim` still gets reused.
     static func decide(all: [any Simulator], desiredName: String) -> SimulatorStartupPlan {
         if all.contains(where: { $0.state == .booted || $0.state == .booting }) {

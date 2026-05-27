@@ -35,7 +35,7 @@ struct DeviceChromeTests {
         // Resources/chrome.json. The watch4 value (top:0, left:0,
         // bottom:0, right:11) reserves 11 px of right padding for the
         // digital crown / side-button caps to pop out into during
-        // hover; honouring it keeps agent-sim's bezel.png pixel-aligned
+        // hover; honouring it keeps agent-simulator's bezel.png pixel-aligned
         // with Apple's Simulator.app.
         let chrome = try DeviceChrome.parsing(json: Self.fixtureWatch4DevicePadding)
         #expect(chrome.devicePadding == Insets(top: 0, left: 0, bottom: 0, right: 11))

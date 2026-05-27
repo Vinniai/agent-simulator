@@ -2,15 +2,15 @@
 
 Paste this into a Claude Code session running in your **Expo app repo**
 (the app whose features you're building — e.g. `taskr-convex-test/apps/mobile`),
-with `agent-sim serve` reachable at `$BASE`. Fill the placeholders at the top.
+with `agent-simulator serve` reachable at `$BASE`. Fill the placeholders at the top.
 
 ---
 
 You are implementing a feature in this Expo Router app and proving it works on a
-real iOS simulator. agent-sim is your eyes (AX tree / screenshot / source
+real iOS simulator. agent-simulator is your eyes (AX tree / screenshot / source
 triangulation), hands (tap / type / gesture), and defect ledger (the review-task
 queue). Drive a closed loop: **author machine-checkable acceptance criteria →
-code → reload → capture a verification snapshot → let agent-sim grade the
+code → reload → capture a verification snapshot → let agent-simulator grade the
 criteria against it → on any FAIL, file a defect with its triangulated source
 location → claim it → fix → re-verify.** The grade is authoritative: a task is
 `verified` only when *every* criterion passes; any fail sends it back to `open`.
@@ -21,11 +21,11 @@ Do not stop until every task is `verified` and the queue has no open tasks.
 - ACCEPTANCE CRITERIA — express each as a structured, machine-checkable criterion
   (see "Authoring criteria" below). Prefer a stable `identifier` (the element's
   `accessibilityIdentifier` / React Native `testID`) over a visible label.
-- UDID: <booted simulator UDID, from `agent-sim list --json`>
-- BASE: http://127.0.0.1:8421   (agent-sim serve)
-- W, H: <device-point width,height from `agent-sim list --json | jq '.running[0].screen'`>
+- UDID: <booted simulator UDID, from `agent-simulator list --json`>
+- BASE: http://127.0.0.1:8421   (agent-simulator serve)
+- W, H: <device-point width,height from `agent-simulator list --json | jq '.running[0].screen'`>
 
-## Authoring criteria (the contract agent-sim will grade)
+## Authoring criteria (the contract agent-simulator will grade)
 A criterion is an **element selector** + an **expected state**. Whatever selector
 fields you set are ANDed; an all-empty selector matches nothing on purpose.
 Expected states are `kind`-tagged:
@@ -48,7 +48,7 @@ Create the review and a task that *carries its criteria* up front:
 REVIEW=$(curl -fsS -XPOST "$BASE/reviews" -H 'content-type: application/json' \
   -d '{"name":"create-task-sheet"}' | jq -r '.id')
 
-# 2. create a task whose acceptance criteria agent-sim will grade
+# 2. create a task whose acceptance criteria agent-simulator will grade
 TASK=$(curl -fsS -XPOST "$BASE/reviews/$REVIEW/tasks" -H 'content-type: application/json' -d '{
   "title": "Create-Task sheet",
   "instructions": "Add a Create-Task sheet reachable from the Tasks tab FAB.",
@@ -68,30 +68,30 @@ TASK=$(curl -fsS -XPOST "$BASE/reviews/$REVIEW/tasks" -H 'content-type: applicat
 ```
 
 ## Tools you will use
-- `agent-sim describe-ui --udid $UDID` → AX tree. Read it to find the element
+- `agent-simulator describe-ui --udid $UDID` → AX tree. Read it to find the element
   frames you need to drive interactions (centre = tap target). NEVER derive tap
   coordinates from a screenshot — always from describe-ui.
-- `agent-sim tap|double-tap|swipe ... --udid $UDID --x .. --y .. --width $W --height $H`
+- `agent-simulator tap|double-tap|swipe ... --udid $UDID --x .. --y .. --width $W --height $H`
   → exercise the UI. Coordinates are device points (same units as the frames).
-- `agent-sim screenshot --udid $UDID -o /tmp/step.png` → visual confirmation; read it.
+- `agent-simulator screenshot --udid $UDID -o /tmp/step.png` → visual confirmation; read it.
 - `POST $BASE/triangulate {udid,x,y}` → map a misbehaving element's tap-center to the
   source file:line that rendered it (`candidates[0]` is the best guess). This is how a
   defect gets an actionable source pointer.
 - **Verification (the authoritative grader):**
   - Capture the screen as a verification snapshot:
     `SNAP=$(curl -fsS -XPOST "$BASE/reviews/$REVIEW/capture" -H 'content-type: application/json' -d "{\"udid\":\"$UDID\"}" | jq -r '.snapshot.id')`
-  - Point the task at it: `agent-sim review-tasks result $TASK --status readyForVerify --verification-snapshot-id $SNAP --summary "ready"`
+  - Point the task at it: `agent-simulator review-tasks result $TASK --status readyForVerify --verification-snapshot-id $SNAP --summary "ready"`
   - Grade the criteria against that snapshot (no simulator needed — reproducible):
-    `agent-sim review-tasks verify-criteria $TASK` → prints the task with `verdicts[]`
+    `agent-simulator review-tasks verify-criteria $TASK` → prints the task with `verdicts[]`
     and `status` set to `verified` (all pass) or `open` (any fail/ambiguous).
   - Or grade a *live* capture instead of the snapshot:
-    `agent-sim review-tasks verify-criteria $TASK --live --udid $UDID`.
+    `agent-simulator review-tasks verify-criteria $TASK --live --udid $UDID`.
   - One-call shortcut once you trust the captured screen — record the result and
-    grade in a single step: `agent-sim review-tasks result $TASK --verification-snapshot-id $SNAP --summary "ready" --auto-verify`.
+    grade in a single step: `agent-simulator review-tasks result $TASK --verification-snapshot-id $SNAP --summary "ready" --auto-verify`.
 - Queue (your defect ledger):
-  - Claim next: `agent-sim review-tasks next --actor <agent-id>` → one task or nothing.
-  - Record a fix: `agent-sim review-tasks add-code-change $TASK --path <file> --start-line N ...`.
-  - Check the board: `agent-sim review-tasks list --status open`.
+  - Claim next: `agent-simulator review-tasks next --actor <agent-id>` → one task or nothing.
+  - Record a fix: `agent-simulator review-tasks add-code-change $TASK --path <file> --start-line N ...`.
+  - Check the board: `agent-simulator review-tasks list --status open`.
 
 ## The loop (repeat until the exit condition)
 1. **Code.** Implement the smallest slice toward the next failing criterion. Edit the
@@ -108,19 +108,19 @@ TASK=$(curl -fsS -XPOST "$BASE/reviews/$REVIEW/tasks" -H 'content-type: applicat
    - For each `verdicts[] where outcome != "pass"`, find the offending element and get a
      source pointer: `POST $BASE/triangulate {udid, x, y}` at its centre →
      `candidates[0]` → `<file:line:col>`.
-   - `agent-sim review-tasks event $TASK --type defect --message "FAIL <criterion.description>: <reason from verdict>" --metadata-json '{"file":"<file:line:col>"}'`
+   - `agent-simulator review-tasks event $TASK --type defect --message "FAIL <criterion.description>: <reason from verdict>" --metadata-json '{"file":"<file:line:col>"}'`
    - Fix the code at that pointer, record it with `add-code-change`, then go back to 2.
 6. **Re-grade everything** once you believe it's fixed — a late fix can regress an earlier
    criterion. The task only counts as done when `verify-criteria` returns `verified`.
 
 ## Exit condition (state it explicitly when you stop)
 Stop ONLY when, in a single fresh pass: `review-tasks verify-criteria` returns
-`verified` for every task AND `agent-sim review-tasks list --status open` is empty.
+`verified` for every task AND `agent-simulator review-tasks list --status open` is empty.
 Report: each task's final `verdicts[]`, the verification snapshot id per task, the
 final screenshot path, and the commits/files changed.
 
 ## Rules
-- Author criteria as structured selector+expect — they are the contract agent-sim grades,
+- Author criteria as structured selector+expect — they are the contract agent-simulator grades,
   not prose you eyeball.
 - One criterion at a time; smallest code change that could satisfy it; stable `testID`s.
 - Every tap target comes from a describe-ui frame, never from a screenshot.

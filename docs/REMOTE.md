@@ -1,19 +1,19 @@
 # Driving a simulator from elsewhere
 
 The shape of the problem: the iOS simulator (and the private SimulatorKit /
-CoreSimulator frameworks `agent-sim` drives) only exist on a Mac. But the
+CoreSimulator frameworks `agent-simulator` drives) only exist on a Mac. But the
 operator — you, or an agent like Claude running in a browser — is often
-*somewhere else*. `agent-sim serve` runs on the Mac that owns the simulator;
+*somewhere else*. `agent-simulator serve` runs on the Mac that owns the simulator;
 everything else dials in.
 
 This doc covers the three ways to reach a running `serve` from another
-machine, and `agent-sim connect`, the CLI smoke test that proves the link.
+machine, and `agent-simulator connect`, the CLI smoke test that proves the link.
 
 ```
 ┌─────────────── Mac mini at home ───────────────┐        ┌──────── elsewhere ────────┐
 │  iPhone 17 Pro sim                              │        │  browser  → live UI       │
-│      ▲ frames / ▼ HID                           │  WS    │  agent-sim connect        │
-│  agent-sim serve  ──────────────────────────────────────│  → smoke test (frames+tap)│
+│      ▲ frames / ▼ HID                           │  WS    │  agent-simulator connect        │
+│  agent-simulator serve  ──────────────────────────────────────│  → smoke test (frames+tap)│
 │  (SimulatorKit + 9-arg Indigo HID)              │        │  Claude on the web        │
 └─────────────────────────────────────────────────┘        └───────────────────────────┘
 ```
@@ -25,9 +25,9 @@ other end should run — it resolves the bind to a *dialable* address so you
 never have to figure out the LAN IP by hand:
 
 ```bash
-$ agent-sim serve --host 0.0.0.0
-[agent-sim] remote: agent-sim connect http://192.168.1.132:8421 --udid 75091244-…
-[agent-sim] listening on http://0.0.0.0:8421/simulators
+$ agent-simulator serve --host 0.0.0.0
+[agent-simulator] remote: agent-simulator connect http://192.168.1.132:8421 --udid 75091244-…
+[agent-simulator] listening on http://0.0.0.0:8421/simulators
 ```
 
 - A `127.0.0.1` or `0.0.0.0` bind is not reachable off-box (loopback, and the
@@ -49,10 +49,10 @@ accepts connections from the same machine):
 
 ```bash
 # on the mini
-agent-sim serve --host 0.0.0.0
+agent-simulator serve --host 0.0.0.0
 ```
 
-The same-origin guard still holds: a first-party client (`agent-sim connect`,
+The same-origin guard still holds: a first-party client (`agent-simulator connect`,
 or a browser opening the served page) carries a matching `Origin`/`Host`, so
 it passes; a cross-site page does not. Dial it from any machine on the LAN
 using the hint's URL.
@@ -64,7 +64,7 @@ DNS-rebind guard — nothing is exposed beyond your tailnet:
 
 ```bash
 # on the mini
-agent-sim serve --host 0.0.0.0 \
+agent-simulator serve --host 0.0.0.0 \
   --trusted-host mac.tailnet.ts.net \
   --trusted-host 100.101.102.103          # a 100.x tailnet IP works too
 ```
@@ -81,9 +81,9 @@ expose the loopback bind over a quick tunnel. Requires the provider's CLI on
 
 ```bash
 # on the mini
-agent-sim serve --tunnel cloudflare       # or: --tunnel ngrok
+agent-simulator serve --tunnel cloudflare       # or: --tunnel ngrok
 # [tunnel] public URL: https://something.trycloudflare.com
-# [tunnel] remote: agent-sim connect https://something.trycloudflare.com --udid 75091244-…
+# [tunnel] remote: agent-simulator connect https://something.trycloudflare.com --udid 75091244-…
 ```
 
 The tunnel's public hostname is discovered at runtime and auto-allowlisted, so
@@ -91,7 +91,7 @@ the guard lets it through while same-origin continues to gate cross-site pages.
 A TLS-terminating tunnel forwards a port-less `Host`; the host match alone
 establishes same-origin in that case.
 
-## 3. `agent-sim connect` — prove the link
+## 3. `agent-simulator connect` — prove the link
 
 `connect` is a **smoke test**, not a viewer. It dials the same WebSocket the
 browser would, counts the binary frames arriving downstream over a window, and
@@ -99,11 +99,11 @@ browser would, counts the binary frames arriving downstream over a window, and
 *other* machine, with the URL from the serve hint:
 
 ```bash
-$ agent-sim connect http://192.168.1.132:8421 --udid 75091244-… --tap 200,400
-[agent-sim] connecting to ws://192.168.1.132:8421/simulators/75091244-…/stream?format=avcc …
-[agent-sim] sent tap 200,400
-[agent-sim] frames=178 ~59.3fps 5049B/frame
-[agent-sim] handshake ok — stream is live
+$ agent-simulator connect http://192.168.1.132:8421 --udid 75091244-… --tap 200,400
+[agent-simulator] connecting to ws://192.168.1.132:8421/simulators/75091244-…/stream?format=avcc …
+[agent-simulator] sent tap 200,400
+[agent-simulator] frames=178 ~59.3fps 5049B/frame
+[agent-simulator] handshake ok — stream is live
 ```
 
 | Flag        | Meaning                                                            |

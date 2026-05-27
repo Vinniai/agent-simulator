@@ -12,7 +12,7 @@ struct NewSimulatorSpecTests {
 
     @Test func `picks the newest iOS runtime and newest iPhone`() {
         let spec = NewSimulatorSpec.choose(
-            name: "agent-sim",
+            name: "agent-simulator",
             runtimes: [
                 (name: "iOS 17.2", identifier: "rt.iOS-17-2", available: true),
                 (name: "iOS 26.5", identifier: "rt.iOS-26-5", available: true),
@@ -23,7 +23,7 @@ struct NewSimulatorSpecTests {
             ]
         )
         #expect(spec == NewSimulatorSpec(
-            name: "agent-sim",
+            name: "agent-simulator",
             runtimeIdentifier: "rt.iOS-26-5",
             deviceTypeIdentifier: "dt.iPhone-17-Pro"
         ))
@@ -31,7 +31,7 @@ struct NewSimulatorSpecTests {
 
     @Test func `prefers the base model over Pro at the same generation`() {
         let spec = NewSimulatorSpec.choose(
-            name: "agent-sim",
+            name: "agent-simulator",
             runtimes: [(name: "iOS 26.5", identifier: "rt", available: true)],
             deviceTypes: [
                 (name: "iPhone 17 Pro Max", identifier: "dt.max"),
@@ -44,7 +44,7 @@ struct NewSimulatorSpecTests {
 
     @Test func `ignores unavailable runtimes`() {
         let spec = NewSimulatorSpec.choose(
-            name: "agent-sim",
+            name: "agent-simulator",
             runtimes: [
                 (name: "iOS 27.0", identifier: "rt.future", available: false),
                 (name: "iOS 26.5", identifier: "rt.now",    available: true),
@@ -56,7 +56,7 @@ struct NewSimulatorSpecTests {
 
     @Test func `ignores non-iOS runtimes`() {
         let spec = NewSimulatorSpec.choose(
-            name: "agent-sim",
+            name: "agent-simulator",
             runtimes: [
                 (name: "watchOS 26.0", identifier: "rt.watch", available: true),
                 (name: "iOS 18.0",     identifier: "rt.ios",   available: true),
@@ -68,7 +68,7 @@ struct NewSimulatorSpecTests {
 
     @Test func `ignores non-iPhone device types`() {
         let spec = NewSimulatorSpec.choose(
-            name: "agent-sim",
+            name: "agent-simulator",
             runtimes: [(name: "iOS 26.5", identifier: "rt", available: true)],
             deviceTypes: [
                 (name: "iPad Pro 11-inch (M5)", identifier: "dt.ipad"),
@@ -80,7 +80,7 @@ struct NewSimulatorSpecTests {
 
     @Test func `no usable iOS runtime yields nil`() {
         #expect(NewSimulatorSpec.choose(
-            name: "agent-sim",
+            name: "agent-simulator",
             runtimes: [(name: "watchOS 26.0", identifier: "rt", available: true)],
             deviceTypes: [(name: "iPhone 16", identifier: "dt")]
         ) == nil)
@@ -88,7 +88,7 @@ struct NewSimulatorSpecTests {
 
     @Test func `no iPhone device type yields nil`() {
         #expect(NewSimulatorSpec.choose(
-            name: "agent-sim",
+            name: "agent-simulator",
             runtimes: [(name: "iOS 26.5", identifier: "rt", available: true)],
             deviceTypes: [(name: "iPad Air 11-inch (M3)", identifier: "dt")]
         ) == nil)

@@ -1,10 +1,10 @@
 #!/bin/bash
-# Bring up the agent-sim review-task queue and stream new/changed work as
+# Bring up the agent-simulator review-task queue and stream new/changed work as
 # newline-delimited JSON on stdout — one line per change, dedup'd.
 #
 # This is the "monitor & dispatch" entry point: pipe stdout into a watcher
 # (Claude Code's Monitor tool, a while-read loop, jq, …) that claims each
-# task with `agent-sim review-tasks next` and spawns a worker to implement
+# task with `agent-simulator review-tasks next` and spawns a worker to implement
 # it. Each line is a full task-list snapshot at the moment something
 # changed; downstream decides how to diff/group/dispatch.
 #
@@ -16,22 +16,22 @@
 #   --session-id   filter to one review session
 #   --interval     poll seconds (default: 1)
 #   --port         serve port to use / health-check (default: 8421)
-#   --host         interface agent-sim serve binds to (default: 0.0.0.0 so
+#   --host         interface agent-simulator serve binds to (default: 0.0.0.0 so
 #                  the UI is reachable on the LAN IP, not just loopback;
-#                  env: AGENT_SIM_HOST). agent-sim's own default is
+#                  env: AGENT_SIM_HOST). agent-simulator's own default is
 #                  127.0.0.1, which makes http://<lan-ip>:PORT refuse.
-#   --trusted-host hostname/IP allowed past agent-sim's DNS-rebind guard
+#   --trusted-host hostname/IP allowed past agent-simulator's DNS-rebind guard
 #                  (env: AGENT_SIM_TRUSTED_HOST). When unset and host is
 #                  0.0.0.0, the primary LAN IPv4 is auto-detected and
 #                  trusted so LAN access works without extra config.
-#   --no-serve     don't auto-start `agent-sim serve` (assume it's up)
+#   --no-serve     don't auto-start `agent-simulator serve` (assume it's up)
 #   --no-notes     don't auto-promote the session-less notes queue
 #   --once         emit one snapshot and exit (no loop)
 #
 # Notes bridge: notes left from a simulator ("leave a note" in the UI) land
 # in a SEPARATE session-less `notes` queue, not `review-tasks`. The loop only
 # watches review-tasks, so without this bridge a left note is never actioned
-# until someone runs `agent-sim notes promote` by hand. By default this
+# until someone runs `agent-simulator notes promote` by hand. By default this
 # script drains the existing queued-notes backlog once, then live-promotes
 # every new queued note into a review-task so it flows to the loop. Disable
 # with --no-notes or AGENT_SIM_NOTES_BRIDGE=0. Needs `jq` (soft-skips if
@@ -40,11 +40,11 @@
 # WebSocket alternative (server pushes, no poll loop):
 #   wscat -c 'ws://127.0.0.1:8421/review-tasks/stream?status=open'
 # See docs/AGENT-API.md ("Subscribing instead of polling") and
-# skills/agent-sim/references/wire-protocol.md ("WS /review-tasks/stream").
+# skills/agent-simulator/references/wire-protocol.md ("WS /review-tasks/stream").
 #
-# ⚠ Name clash: some *consumer* repos ship an unrelated `scripts/agent-sim`
+# ⚠ Name clash: some *consumer* repos ship an unrelated `scripts/agent-simulator`
 # Python shim (e.g. a Convex-HTTP poller). That is NOT this CLI. This
-# script resolves the real binary via `command -v agent-sim` (the npm
+# script resolves the real binary via `command -v agent-simulator` (the npm
 # install puts it on PATH).
 
 set -euo pipefail
@@ -76,7 +76,7 @@ while [ $# -gt 0 ]; do
 done
 
 # When binding all interfaces and no trusted host was given, auto-detect the
-# primary LAN IPv4 and trust it — otherwise agent-sim's DNS-rebind guard
+# primary LAN IPv4 and trust it — otherwise agent-simulator's DNS-rebind guard
 # rejects requests whose Host is the LAN IP even though the socket is bound,
 # so http://<lan-ip>:PORT would still fail. Mirrors worktree-metro.sh's
 # Wi-Fi/default-route detection. macOS-only ipconfig; silently no-ops
@@ -88,8 +88,8 @@ if [ -z "$TRUSTED_HOST" ] && { [ "$HOST" = "0.0.0.0" ] || [ "$HOST" = "::" ]; };
         || ipconfig getifaddr en0 2>/dev/null || echo '')"
 fi
 
-if ! command -v agent-sim >/dev/null 2>&1; then
-    echo "error: 'agent-sim' not on PATH. Install: npm install -g agent-sim" >&2
+if ! command -v agent-simulator >/dev/null 2>&1; then
+    echo "error: 'agent-simulator' not on PATH. Install: npm install -g agent-simulator" >&2
     exit 1
 fi
 
@@ -104,7 +104,7 @@ trap cleanup EXIT INT TERM
 # Notes→review-task bridge. Notes left from a sim land in the session-less
 # `notes` queue which `review-tasks watch` never sees. Drain the existing
 # queued backlog once, then live-promote every new queued note so it flows
-# into the loop with no manual `agent-sim notes promote`. Best-effort: jq is
+# into the loop with no manual `agent-simulator notes promote`. Best-effort: jq is
 # required to pull the id out of each JSON line; if it's missing we soft-skip
 # and the main review-tasks loop is entirely unaffected. The watch is wrapped
 # in a reconnect loop so a dropped stream never kills the bridge.
@@ -129,7 +129,7 @@ notes_bridge() {
             [ -n "$id" ] || continue
             case " $SEEN " in *" $id "*) continue ;; esac
             SEEN="$SEEN $id"
-            if agent-sim notes promote "$id" >/dev/null 2>&1; then
+            if agent-simulator notes promote "$id" >/dev/null 2>&1; then
                 echo "[agent-loop] promoted note $id → review-task" >&2
             fi
         done <<< "$ids"
@@ -137,12 +137,12 @@ notes_bridge() {
     # 1) Drain whatever is already queued, once.
     while IFS= read -r line; do
         [ -n "$line" ] && promote_snapshot "$line"
-    done < <(agent-sim notes watch --status queued --once 2>/dev/null || true)
+    done < <(agent-simulator notes watch --status queued --once 2>/dev/null || true)
     # 2) Live-consume new queued notes forever; reconnect if the stream drops.
     while :; do
         while IFS= read -r line; do
             [ -n "$line" ] && promote_snapshot "$line"
-        done < <(agent-sim notes watch --status queued --interval "$INTERVAL" 2>/dev/null || true)
+        done < <(agent-simulator notes watch --status queued --interval "$INTERVAL" 2>/dev/null || true)
         sleep "$INTERVAL"
     done
 }
@@ -152,8 +152,8 @@ if [ "$SERVE" = "1" ]; then
     if ! curl -fsS "http://127.0.0.1:${PORT}/simulators" >/dev/null 2>&1; then
         SERVE_ARGS=(serve --port "$PORT" --host "$HOST")
         [ -n "$TRUSTED_HOST" ] && SERVE_ARGS+=(--trusted-host "$TRUSTED_HOST")
-        echo "[agent-loop] starting agent-sim serve on ${HOST}:${PORT}${TRUSTED_HOST:+ (trusted: $TRUSTED_HOST)}" >&2
-        agent-sim "${SERVE_ARGS[@]}" >/dev/null 2>&1 &
+        echo "[agent-loop] starting agent-simulator serve on ${HOST}:${PORT}${TRUSTED_HOST:+ (trusted: $TRUSTED_HOST)}" >&2
+        agent-simulator "${SERVE_ARGS[@]}" >/dev/null 2>&1 &
         SERVE_PID=$!
         for _ in $(seq 1 30); do
             curl -fsS "http://127.0.0.1:${PORT}/simulators" >/dev/null 2>&1 && break
@@ -177,12 +177,12 @@ WATCH=(review-tasks watch --interval "$INTERVAL")
 [ -n "$SESSION_ID" ] && WATCH+=(--session-id "$SESSION_ID")
 [ "$ONCE" = "1" ]    && WATCH+=(--once)
 
-echo "[agent-loop] watching: agent-sim ${WATCH[*]}" >&2
+echo "[agent-loop] watching: agent-simulator ${WATCH[*]}" >&2
 # `exec` would replace the shell and orphan the bridge + skip the cleanup
 # trap, so when the bridge is live we run the watch as a child and forward
 # its exit. With no bridge, exec is fine (nothing to clean up but serve).
 if [ -n "$NOTES_PID" ]; then
-    agent-sim "${WATCH[@]}"
+    agent-simulator "${WATCH[@]}"
 else
-    exec agent-sim "${WATCH[@]}"
+    exec agent-simulator "${WATCH[@]}"
 fi

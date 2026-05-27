@@ -1,18 +1,18 @@
 import ArgumentParser
 import Foundation
 
-/// `agent-sim chrome <subcommand>` — read DeviceKit chrome data for a
+/// `agent-simulator chrome <subcommand>` — read DeviceKit chrome data for a
 /// simulator device family. Two leaves: `layout` prints the JSON the
 /// front end needs to position the screen overlay, `composite` writes
 /// the rasterized PNG bezel to stdout.
 ///
 /// The plugin shells out to these from its HTTP route handlers so
-/// the chrome data lives in one place (agent-sim) without forcing
-/// the plugin to depend on agent-sim's source.
+/// the chrome data lives in one place (agent-simulator) without forcing
+/// the plugin to depend on agent-simulator's source.
 ///
 /// Subcommands accept `--udid` *or* `--device-name`. UDID is what
 /// the plugin holds; device-name is convenient for ad-hoc CLI use
-/// (`agent-sim chrome layout --device-name "iPhone 17 Pro"`).
+/// (`agent-simulator chrome layout --device-name "iPhone 17 Pro"`).
 struct ChromeCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "chrome",

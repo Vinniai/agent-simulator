@@ -1,7 +1,7 @@
 import ArgumentParser
 import Foundation
 
-/// `agent-sim diag-digitizer-trackpad --udid <UDID>`
+/// `agent-simulator diag-digitizer-trackpad --udid <UDID>`
 ///
 /// One-shot research probe asking a single empirical question:
 ///   *Does `IndigoHIDMessageForTrackpadEventFromHIDEventRef` accept

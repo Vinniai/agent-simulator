@@ -1,7 +1,7 @@
 import Testing
 @testable import AgentSim
 
-/// `ConnectHint` renders the copy-pasteable `agent-sim connect …` line
+/// `ConnectHint` renders the copy-pasteable `agent-simulator connect …` line
 /// that `serve` prints at startup so a remote device knows exactly how
 /// to dial in. A loopback bind isn't reachable off-box, so the hint
 /// prefers a discovered LAN address for the host the remote should use.
@@ -11,14 +11,14 @@ struct ConnectHintTests {
     @Test func `renders connect with a udid`() {
         #expect(
             ConnectHint.line(base: "http://192.168.1.9:8421", udid: "ABC")
-                == "agent-sim connect http://192.168.1.9:8421 --udid ABC"
+                == "agent-simulator connect http://192.168.1.9:8421 --udid ABC"
         )
     }
 
     @Test func `omits --udid when no simulator is known`() {
         #expect(
             ConnectHint.line(base: "http://192.168.1.9:8421", udid: nil)
-                == "agent-sim connect http://192.168.1.9:8421"
+                == "agent-simulator connect http://192.168.1.9:8421"
         )
     }
 

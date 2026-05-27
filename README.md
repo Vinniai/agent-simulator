@@ -11,16 +11,16 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Vinniai/agent-sim/actions/workflows/ci.yml"><img src="https://github.com/Vinniai/agent-sim/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://www.npmjs.com/package/agent-sim"><img src="https://img.shields.io/npm/v/agent-sim?logo=npm" alt="npm"></a>
-  <a href="https://github.com/Vinniai/agent-sim/releases/latest"><img src="https://img.shields.io/github/v/release/Vinniai/agent-sim?sort=semver" alt="Latest release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/Vinniai/agent-sim" alt="License"></a>
+  <a href="https://github.com/Vinniai/agent-simulator/actions/workflows/ci.yml"><img src="https://github.com/Vinniai/agent-simulator/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.npmjs.com/package/agent-simulator"><img src="https://img.shields.io/npm/v/agent-simulator?logo=npm" alt="npm"></a>
+  <a href="https://github.com/Vinniai/agent-simulator/releases/latest"><img src="https://img.shields.io/github/v/release/Vinniai/agent-simulator?sort=semver" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Vinniai/agent-simulator" alt="License"></a>
   <img src="https://img.shields.io/badge/Swift-6.2-orange?logo=swift" alt="Swift 6.2">
   <img src="https://img.shields.io/badge/macOS-15%2B-blue?logo=apple" alt="macOS 15+">
   <img src="https://img.shields.io/badge/Xcode-26-1575F9?logo=xcode" alt="Xcode 26">
 </p>
 
-A single Swift CLI — **`agent-sim`** — that creates / boots / shuts down
+A single Swift CLI — **`agent-simulator`** — that creates / boots / shuts down
 simulator devices, streams their screens at 60 fps, and injects taps
 / swipes / multi-finger touches without booting the Simulator.app GUI.
 Optionally serves a self-contained web UI on `localhost` so you can
@@ -34,10 +34,10 @@ self-building feedback loop.
 **Drive a booted simulator from an agent or CI — no GUI.**
 
 ```bash
-agent-sim boot --udid <UDID>
-agent-sim describe-ui --udid <UDID> | jq '.[] | select(.label == "Sign in")'
-agent-sim tap --udid <UDID> --x 219 --y 478 --width 438 --height 954
-agent-sim screenshot --udid <UDID> --output after.jpg
+agent-simulator boot --udid <UDID>
+agent-simulator describe-ui --udid <UDID> | jq '.[] | select(.label == "Sign in")'
+agent-simulator tap --udid <UDID> --x 219 --y 478 --width 438 --height 954
+agent-simulator screenshot --udid <UDID> --output after.jpg
 ```
 
 `describe-ui` returns each node's `frame` in the same device points `tap`
@@ -48,17 +48,17 @@ session plus capture → markup → enhance → verify tasks; an agent drains
 the queue, records its work, then closes the loop against the score gate.
 
 ```bash
-agent-sim agent bootstrap --project ~/app --bundle-id com.acme.app --name "Login polish"
-agent-sim review-tasks watch --status open                  # one JSON line per change
-agent-sim review-tasks result <task-id> --status done --verify
-agent-sim agent quality-gate <task-id> --score 9            # the "8/10+, no highs" gate
+agent-simulator agent bootstrap --project ~/app --bundle-id com.acme.app --name "Login polish"
+agent-simulator review-tasks watch --status open                  # one JSON line per change
+agent-simulator review-tasks result <task-id> --status done --verify
+agent-simulator agent quality-gate <task-id> --score 9            # the "8/10+, no highs" gate
 ```
 
 **Author an acceptance criterion from a live element, then verify against it.**
 
 ```bash
-agent-sim review-tasks criterion --udid <UDID> --x 219 --y 478
-agent-sim review-tasks verify-criteria <task-id> --live --udid <UDID>
+agent-simulator review-tasks criterion --udid <UDID> --x 219 --y 478
+agent-simulator review-tasks verify-criteria <task-id> --live --udid <UDID>
 ```
 
 **Collect human feedback from a phone over Tailscale.** Open `/m/<udid>`,
@@ -66,23 +66,23 @@ tap an element, drop a note — agents pick it up with the source `file:line`
 already resolved.
 
 ```bash
-agent-sim serve --host 0.0.0.0 --trusted-host mac.tailnet.ts.net
-agent-sim notes watch --status queued
+agent-simulator serve --host 0.0.0.0 --trusted-host mac.tailnet.ts.net
+agent-simulator notes watch --status queued
 ```
 
 **Type, key, double-tap, rotate — the full input surface from one CLI.**
 
 ```bash
-agent-sim type --udid <UDID> --text "hello@example.com"
-agent-sim key  --udid <UDID> --code Enter
-agent-sim double-tap --udid <UDID> --x 219 --y 478 --width 438 --height 954
-agent-sim orientation --udid <UDID> landscape-left
+agent-simulator type --udid <UDID> --text "hello@example.com"
+agent-simulator key  --udid <UDID> --code Enter
+agent-simulator double-tap --udid <UDID> --x 219 --y 478 --width 438 --height 954
+agent-simulator orientation --udid <UDID> landscape-left
 ```
 
 **Stream the screen to anything that reads H.264.**
 
 ```bash
-agent-sim stream --udid <UDID> --format avcc --fps 60 | ffplay -
+agent-simulator stream --udid <UDID> --format avcc --fps 60 | ffplay -
 ```
 
 ## Features
@@ -94,27 +94,27 @@ agent-sim stream --udid <UDID> --format avcc --fps 60 | ffplay -
   all through SimulatorKit's 9-argument
   `IndigoHIDMessageForMouseNSEvent` from Xcode 26's preview-kit. No dylib
   injection, no `DYLD_INSERT_LIBRARIES`, no per-app priming.
-- **Agent loop** — `agent-sim agent bootstrap` creates a review session
-  and starter tasks for capture → markup → enhance → verify. `agent-sim
+- **Agent loop** — `agent-simulator agent bootstrap` creates a review session
+  and starter tasks for capture → markup → enhance → verify. `agent-simulator
   agent quality-gate` records the "no high recommendations, 8/10+"
   screen-review gate against the task history. Agents consume the queue
-  by **polling** (`agent-sim review-tasks watch --status open` — one
+  by **polling** (`agent-simulator review-tasks watch --status open` — one
   JSON line per change) or by **subscribing** over WebSocket
   (`WS /review-tasks/stream`, server-pushed `task_update` frames, with
   inbound claim/update/event on the same socket). Full protocol +
   reference Python agents: [`docs/AGENT-API.md`](docs/AGENT-API.md).
-- **Accessibility tree** — `agent-sim describe-ui` returns the on-screen
+- **Accessibility tree** — `agent-simulator describe-ui` returns the on-screen
   AX tree as JSON: per-node `role`, `label`, `value`, `identifier`, and
   `frame` in the same device-point coordinates as `tap` / `swipe`. Hit-test
   mode (`--x --y`) returns the topmost node under a coordinate. Powered by
   the private `AccessibilityPlatformTranslation` framework with a
   `bridgeTokenDelegate` we install ourselves to make the dispatcher work
   out of Simulator.app.
-- **Live unified-log stream** — `agent-sim logs --udid <X>` streams the
+- **Live unified-log stream** — `agent-simulator logs --udid <X>` streams the
   booted simulator's `os_log` output line-by-line to stdout; `WS
   /simulators/:udid/logs` does the same to a browser. Predicate /
   bundle-id filters supported.
-- **Standalone web UI** — `agent-sim serve` opens `http://localhost:8421/simulators`
+- **Standalone web UI** — `agent-simulator serve` opens `http://localhost:8421/simulators`
   with a list page, live stream, gesture input, and DeviceKit-sourced
   bezels for every simulator family.
 - **Device farm** — `http://localhost:8421/farm` is an interactive
@@ -133,16 +133,15 @@ agent-sim stream --udid <UDID> --format avcc --fps 60 | ffplay -
 ## Install
 
 ```bash
-npm install -g @vinniai/agent-sim
+npm install -g agent-simulator
 ```
 
-The package is scoped (`@vinniai/agent-sim`); the installed command is still
-`agent-sim`. Apple Silicon only. Requires Xcode 26 — `agent-sim` links against private
+Apple Silicon only. Requires Xcode 26 — `agent-simulator` links against private
 SimulatorKit / CoreSimulator frameworks shipped with Xcode.
 
 The npm package is a thin launcher: it's gated to `darwin`/`arm64`, and its
 `postinstall` downloads the matching native binary from the
-[GitHub release](https://github.com/Vinniai/agent-sim/releases),
+[GitHub release](https://github.com/Vinniai/agent-simulator/releases),
 verifies its checksum, and execs it. Installs on other platforms are skipped
 with a warning rather than failing.
 
@@ -150,7 +149,7 @@ with a warning rather than failing.
 
 ```bash
 # Start the web UI
-agent-sim serve
+agent-simulator serve
 
 # Single-device dashboard — list, boot/shutdown, per-device stream pages
 open http://localhost:8421/simulators
@@ -169,9 +168,9 @@ mouse/touch input, and the DeviceKit-sourced bezel.
 Headless from the terminal works too:
 
 ```bash
-agent-sim list
-agent-sim boot --udid <UDID>
-agent-sim tap --udid <UDID> --x 219 --y 478 --width 438 --height 954
+agent-simulator list
+agent-simulator boot --udid <UDID>
+agent-simulator tap --udid <UDID> --x 219 --y 478 --width 438 --height 954
 ```
 
 ## Build from source
@@ -190,7 +189,7 @@ linking `CoreSimulator`, `SimulatorKit`, `IOSurface`, `VideoToolbox`,
 ## CLI
 
 ```
-agent-sim <command> [options]
+agent-simulator <command> [options]
 
   agent bootstrap [--project <path>] [--bundle-id <id>] [--name <name>]
                                              Create a review session and starter
@@ -234,13 +233,13 @@ agent-sim <command> [options]
            [--trusted-host <name> …]            Reach a loopback bind
                                                 over Tailscale/VPN
            [--tunnel cloudflare|ngrok]          Expose over a public tunnel
-           [--auto-boot | --no-auto-boot]       Boot an "agent-sim" sim on an
+           [--auto-boot | --no-auto-boot]       Boot an "agent-simulator" sim on an
                                                 idle host (default: on)
                                              On startup, prints a copy-paste
-                                             `agent-sim connect …` hint for the
+                                             `agent-simulator connect …` hint for the
                                              address a remote device should dial.
 
-  # Dial a remote `agent-sim serve` and smoke-test its stream: count
+  # Dial a remote `agent-simulator serve` and smoke-test its stream: count
   # downstream frames over a window and (optionally) fire one tap up the
   # same socket to prove the gesture channel. The other half of the
   # mini-at-home → Claude-on-the-web flow (see docs/REMOTE.md).
@@ -293,17 +292,17 @@ agent-sim <command> [options]
 
   # Diagnostics. Reports CLI version, build mode, booted-sim count,
   # whether the server is reachable, and surfaces version drift
-  # between this CLI binary and the running `agent-sim serve` binary
+  # between this CLI binary and the running `agent-simulator serve` binary
   # (status: healthy | drift | stale | offline). Add --json for
   # scriptable output.
   doctor   [--base http://127.0.0.1:8421] [--timeout 2.0] [--json]
 ```
 
-## `agent-sim serve` — the web UI
+## `agent-simulator serve` — the web UI
 
 ```bash
-agent-sim serve --port 8421
-# [agent-sim] listening on http://127.0.0.1:8421/simulators
+agent-simulator serve --port 8421
+# [agent-simulator] listening on http://127.0.0.1:8421/simulators
 ```
 
 Open `http://localhost:8421/simulators` in any browser. You get the
@@ -348,7 +347,7 @@ The same WS carries everything for a viewing session:
   - Stream control: `{"type":"set_bitrate","bps":N}` /
     `{"type":"set_fps","fps":N}` / `{"type":"set_scale","scale":N}` /
     `{"type":"force_idr"}` / `{"type":"snapshot"}`.
-  - Gesture input: same wire format as `agent-sim input` (see below).
+  - Gesture input: same wire format as `agent-simulator input` (see below).
 
 No `/event` POST, no UDID-keyed registry — the WS handler closure owns
 the live stream + simulator handle for the duration.
@@ -364,7 +363,7 @@ allowlist the mesh hostname instead of opening the bind up:
 # Bind to the Tailscale interface (or 0.0.0.0) and allowlist the
 # MagicDNS name the phone will use. Repeat --trusted-host as needed;
 # a Tailscale 100.x IP works too.
-agent-sim serve --host 0.0.0.0 \
+agent-simulator serve --host 0.0.0.0 \
   --trusted-host mac.tailnet.ts.net \
   --trusted-host 100.101.102.103
 ```
@@ -379,7 +378,7 @@ exactly your tailnet.
 To reach a network you don't control (e.g. Claude on the web), expose
 the loopback bind over a public quick tunnel — `serve --tunnel cloudflare`
 (or `ngrok`), which auto-allowlists its own discovered `https://…` name.
-LAN, tailnet, and tunnel setups — plus `agent-sim connect` to verify the
+LAN, tailnet, and tunnel setups — plus `agent-simulator connect` to verify the
 link — are all in [docs/REMOTE.md](docs/REMOTE.md).
 
 `/m/:udid` is the mobile-first single-sim view: live stream, a
@@ -388,12 +387,12 @@ drawer that live-updates over `WS /notes/stream`. The picker resolves
 each tap to ranked source-file candidates via `POST /triangulate
 {udid, x, y}` and submits the envelope (`{workspace, candidates}`)
 with the note, so agents reading `GET /notes.json` or
-`agent-sim notes watch` land on the file:line that produced the
+`agent-simulator notes watch` land on the file:line that produced the
 element — no re-derivation. From the CLI, attach a pointer without
-the picker via `agent-sim notes add --source <file>:<line>[:<col>]`
+the picker via `agent-simulator notes add --source <file>:<line>[:<col>]`
 (handy when you have a location from a stack trace or lint hit).
 
-## `agent-sim connect` — dial a remote serve
+## `agent-simulator connect` — dial a remote serve
 
 The other half of the "Mac mini at home, Claude on the web" story.
 `serve` runs on the machine the simulator lives on; `connect` runs
@@ -405,9 +404,9 @@ When `serve` starts it prints the exact line to run on the other end:
 
 ```bash
 # on the mini — bind a routable interface so off-box clients can reach it
-$ agent-sim serve --host 0.0.0.0
-[agent-sim] remote: agent-sim connect http://192.168.1.132:8421 --udid 75091244-…
-[agent-sim] listening on http://0.0.0.0:8421/simulators
+$ agent-simulator serve --host 0.0.0.0
+[agent-simulator] remote: agent-simulator connect http://192.168.1.132:8421 --udid 75091244-…
+[agent-simulator] listening on http://0.0.0.0:8421/simulators
 ```
 
 The hint resolves the bind to a dialable address — a `127.0.0.1` or
@@ -417,11 +416,11 @@ Copy that line to the other machine:
 
 ```bash
 # elsewhere on the LAN (or over a tunnel / tailnet)
-$ agent-sim connect http://192.168.1.132:8421 --udid 75091244-… --tap 200,400
-[agent-sim] connecting to ws://192.168.1.132:8421/simulators/75091244-…/stream?format=avcc …
-[agent-sim] sent tap 200,400
-[agent-sim] frames=178 ~59.3fps 5049B/frame
-[agent-sim] handshake ok — stream is live
+$ agent-simulator connect http://192.168.1.132:8421 --udid 75091244-… --tap 200,400
+[agent-simulator] connecting to ws://192.168.1.132:8421/simulators/75091244-…/stream?format=avcc …
+[agent-simulator] sent tap 200,400
+[agent-simulator] frames=178 ~59.3fps 5049B/frame
+[agent-simulator] handshake ok — stream is live
 ```
 
 `frames > 0` is the verdict (exit 0); `--tap X,Y` (relative to `--size`,
@@ -433,7 +432,7 @@ URL in a browser. Full setup (LAN, tunnel, tailnet) is in
 ## Device farm
 
 ```bash
-agent-sim serve
+agent-simulator serve
 open http://localhost:8421/farm
 ```
 
@@ -477,7 +476,7 @@ loads five IIFE component scripts from `/farm/<name>.js`:
 farm UI without rebuilding — point it at `Sources/AgentSim/Resources/Web`
 on disk and reload the browser.
 
-## Wire protocol — `agent-sim input`
+## Wire protocol — `agent-simulator input`
 
 Newline-delimited JSON on stdin → `{"ok":true}` / `{"ok":false,"error":…}`
 on stdout, one ack per line.
@@ -526,14 +525,14 @@ coordinates by `width` / `height` before serialising.
 
 - `key` / `type` are **US-ASCII only** — letters, digits, named specials,
   US punctuation, and shift/control/option/command ride the host-HID path
-  (`agent-sim key` / `agent-sim type`). IME / non-Latin / emoji is deferred
+  (`agent-simulator key` / `agent-simulator type`). IME / non-Latin / emoji is deferred
   to the `IndigoHIDMessageForKeyboardNSEvent` path.
 - `siri` button — crashes `backboardd` via every known Indigo path.
 
-## `agent-sim stream` — frame streaming
+## `agent-simulator stream` — frame streaming
 
 ```bash
-agent-sim stream --udid <UDID> --format avcc --fps 60 | ffplay -
+agent-simulator stream --udid <UDID> --format avcc --fps 60 | ffplay -
 ```
 
 Outputs length-prefixed binary frames on stdout. AVCC carries a 1-byte
@@ -557,11 +556,11 @@ stdin to retune without restarting.
 {"type":"snapshot"}
 ```
 
-## `agent-sim chrome` — DeviceKit bezel data
+## `agent-simulator chrome` — DeviceKit bezel data
 
 ```bash
-agent-sim chrome layout --device-name "iPhone 17 Pro" | jq .
-agent-sim chrome composite --device-name "iPhone 17 Pro" > iphone17pro.png
+agent-simulator chrome layout --device-name "iPhone 17 Pro" | jq .
+agent-simulator chrome composite --device-name "iPhone 17 Pro" > iphone17pro.png
 ```
 
 Reads Apple's own DeviceKit chrome bundles
@@ -640,7 +639,7 @@ feature lives in one place across both layers.
 │       ├── sim-stream.js             stream-page orchestrator
 │       ├── sim-stream.html           stream view markup
 │       ├── sim-input.js              SimInput / MouseGestureSource / PinchOverlay
-│       ├── sim-input-bridge.js       SimInput → agent-sim wire-format mapper
+│       ├── sim-input-bridge.js       SimInput → agent-simulator wire-format mapper
 │       ├── sim-native.js             focus-mode (single-sim fullscreen) view
 │       ├── frame-decoder.js          MJPEG / AVCC strategy
 │       ├── device-frame.js           bezel + screen DOM

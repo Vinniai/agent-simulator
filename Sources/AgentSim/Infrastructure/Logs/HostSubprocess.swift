@@ -3,7 +3,7 @@ import Foundation
 /// Production `Subprocess` — wraps a `Foundation.Process` plus a
 /// stdout/stderr `Pipe`. The only Infrastructure code in the logs
 /// path that touches the real OS spawn pipeline. Integration-only
-/// (manually smoke-tested via `agent-sim logs` against a booted
+/// (manually smoke-tested via `agent-simulator logs` against a booted
 /// simulator); the orchestrator's behaviour is unit-covered
 /// against `MockSubprocess`.
 ///
@@ -35,7 +35,7 @@ final class HostSubprocess: Subprocess, @unchecked Sendable {
         process.standardOutput = pipe
         process.standardError  = pipe
         // Detach from any controlling terminal. Without this a
-        // SIGINT handed to the parent (Ctrl-C in `agent-sim logs`)
+        // SIGINT handed to the parent (Ctrl-C in `agent-simulator logs`)
         // would also kill the child via the foreground pgid
         // before the parent's own SIGTERM handler runs.
         process.standardInput  = FileHandle.nullDevice

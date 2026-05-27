@@ -1,6 +1,6 @@
 import Foundation
 
-/// The stream WebSocket URL for a *remote* `agent-sim serve` — the
+/// The stream WebSocket URL for a *remote* `agent-simulator serve` — the
 /// other half of the Mac-mini-at-home → Claude-on-the-web story. The
 /// operator pastes the same base URL they'd open in a browser
 /// (`http://mini.local:8421`, or a tunnel's `https://…`); this derives

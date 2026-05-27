@@ -44,7 +44,7 @@ struct WebRootSubdirTests {
             "farm/farm.html": "<!doctype html><title>farm</title>",
         ])
         let outside = tmp.deletingLastPathComponent()
-            .appendingPathComponent("agent-sim-outside-\(UUID().uuidString).txt")
+            .appendingPathComponent("agent-simulator-outside-\(UUID().uuidString).txt")
         defer {
             try? FileManager.default.removeItem(at: tmp)
             try? FileManager.default.removeItem(at: outside)
@@ -72,7 +72,7 @@ struct WebRootSubdirTests {
 
     private func makeTempWebTree(files: [String: String]) throws -> URL {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("agent-sim-webroot-\(UUID().uuidString)")
+            .appendingPathComponent("agent-simulator-webroot-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         for (path, contents) in files {
             let url = root.appendingPathComponent(path)

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Locator for the static web assets (`simulators.html` and friends)
-/// that `agent-sim serve` serves. Files live at
+/// that `agent-simulator serve` serves. Files live at
 /// `Sources/AgentSim/Resources/Web/` and are bundled into the
 /// executable as SPM resources for release.
 ///

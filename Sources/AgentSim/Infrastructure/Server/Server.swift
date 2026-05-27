@@ -5,7 +5,7 @@ import HummingbirdWebSocket
 import NIOCore
 @_spi(WSInternal) import WSCore
 
-/// Standalone HTTP + WebSocket server for `agent-sim serve`.
+/// Standalone HTTP + WebSocket server for `agent-simulator serve`.
 ///
 /// The server is **dumb**: it serves static UI files unchanged and
 /// projects domain values to JSON / PNG. No HTML rewriting, no
@@ -126,7 +126,7 @@ struct Server: Sendable {
                 ) ? .upgrade([:]) : .dontUpgrade
             }
 
-        // Health / version probe. Used by `agent-sim doctor` to detect
+        // Health / version probe. Used by `agent-simulator doctor` to detect
         // a drift between the local CLI binary and the running server,
         // and by external tooling (CI, watchdogs) to confirm reachability
         // without needing to parse a richer payload.
@@ -598,7 +598,7 @@ struct Server: Sendable {
     }
 
     private static func versionJSON() -> Response {
-        let body = #"{"service":"agent-sim","version":"\#(agentSimVersion)"}"#
+        let body = #"{"service":"agent-simulator","version":"\#(agentSimVersion)"}"#
         return Response(
             status: .ok,
             headers: [.contentType: "application/json", .cacheControl: "no-cache"],
@@ -2258,7 +2258,7 @@ struct Server: Sendable {
         guard let requestAuthority = parseAuthority(authority) else { return false }
         let requestPort = requestAuthority.port ?? bindPort
         // A `ws://` / `wss://` Origin is only ever sent by a first-party
-        // WebSocket client (`agent-sim connect` via swift-websocket) — a
+        // WebSocket client (`agent-simulator connect` via swift-websocket) — a
         // browser carries the page's http(s) Origin for a WS handshake,
         // never a ws-scheme one. That client omits the port, so default
         // a port-less ws/wss Origin to the request port rather than ws's

@@ -23,7 +23,7 @@ let package = Package(
         // `@Mockable` auto-generates `MockXxx` classes from `@Mockable`
         // protocols under the `MOCKING` compilation condition.
         .package(url: "https://github.com/Kolos65/Mockable", from: "0.4.0"),
-        // HTTP + WebSocket server for `agent-sim serve`.
+        // HTTP + WebSocket server for `agent-simulator serve`.
         .package(url: "https://github.com/hummingbird-project/hummingbird.git", from: "2.22.0"),
         .package(url: "https://github.com/hummingbird-project/hummingbird-websocket.git", from: "2.6.0"),
     ],
@@ -35,14 +35,14 @@ let package = Package(
                 .product(name: "Mockable", package: "Mockable"),
                 .product(name: "Hummingbird", package: "hummingbird"),
                 .product(name: "HummingbirdWebSocket", package: "hummingbird-websocket"),
-                // WebSocket *client* for `agent-sim connect` — dials a
+                // WebSocket *client* for `agent-simulator connect` — dials a
                 // remote serve's stream to smoke-test it. Same package as
                 // the server product, so no new external dependency.
                 .product(name: "HummingbirdWSClient", package: "hummingbird-websocket"),
             ],
             path: "Sources/AgentSim",
             resources: [
-                // Static HTML/CSS/JS for `agent-sim serve`. Each file is
+                // Static HTML/CSS/JS for `agent-simulator serve`. Each file is
                 // self-contained — open in a browser via file:// for a
                 // design preview without booting the server.
                 .copy("Resources/Web"),

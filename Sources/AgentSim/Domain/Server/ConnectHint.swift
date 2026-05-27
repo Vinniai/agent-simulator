@@ -1,6 +1,6 @@
 import Foundation
 
-/// The copy-pasteable `agent-sim connect …` invitation that `serve`
+/// The copy-pasteable `agent-simulator connect …` invitation that `serve`
 /// prints at startup, so an operator on another machine knows exactly
 /// how to dial in. Pure rendering + host selection; the LAN-address
 /// lookup that feeds `reachableHost` is integration-only.
@@ -8,7 +8,7 @@ enum ConnectHint {
     /// Render the remote connect command for the given reachable base
     /// URL, including `--udid` only when a target simulator is known.
     static func line(base: String, udid: String?) -> String {
-        var line = "agent-sim connect \(base)"
+        var line = "agent-simulator connect \(base)"
         if let udid { line += " --udid \(udid)" }
         return line
     }

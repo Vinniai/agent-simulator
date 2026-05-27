@@ -8,7 +8,7 @@ and shouldn't be conflated.
   Expo Router apps. Walks the route list once, screenshots each, lets
   the operator draw on the resulting boards, exports a manifest the
   agent acts on out-of-band.
-- **agent-sim** — *live simulator + queued task runner* for any iOS-26
+- **agent-simulator** — *live simulator + queued task runner* for any iOS-26
   app. Streams whatever's on-screen at 60 fps, lets the operator pick
   one accessibility element while live, queues a `ReviewTask` the
   agent claims / edits / captures-after / submits via HTTP, CLI, or
@@ -16,7 +16,7 @@ and shouldn't be conflated.
 
 ## Surface comparison
 
-| | agent-canvas | agent-sim |
+| | agent-canvas | agent-simulator |
 |---|---|---|
 | Language / runtime | Node ESM (~6.3 KLOC) | Swift 6.1, compiled binary (~12 KLOC Swift + ~10 KLOC web) |
 | Target apps | Expo Router only (relies on `+native-intent`, deeplink scheme) | Any iOS 26 app (private SimulatorKit) |
@@ -36,11 +36,11 @@ and shouldn't be conflated.
 ## Where they overlap
 
 - Both can produce *screenshot + AX element JSON + operator comment*
-  for a given screen. agent-sim via the review queue; agent-canvas via
+  for a given screen. agent-simulator via the review queue; agent-canvas via
   `capture-argent` + the canvas board.
 - Both expose a local web UI for operator annotation.
 - Both can call `argent` to drive the simulator (agent-canvas does
-  this exclusively; agent-sim has it as a fallback for AX-only).
+  this exclusively; agent-simulator has it as a fallback for AX-only).
 
 ## Where each pulls ahead
 
@@ -54,10 +54,10 @@ and shouldn't be conflated.
 - **Per-route config.** `agent-canvas.config.json` carries UDID,
   bundle ID, scheme, settle ms, dev-client URL in one place.
 
-### agent-sim wins on
+### agent-simulator wins on
 - **Live anything.** Captures bottom sheets, modals, mid-animation
   states, errors-while-typing — not just whatever routes resolve to.
-- **iOS-26 input dispatch.** The real reason agent-sim exists — the
+- **iOS-26 input dispatch.** The real reason agent-simulator exists — the
   9-arg `IndigoHIDMessageForMouseNSEvent` from Xcode 26's preview-kit
   is the only host-side path that injects on iOS 26 reliably.
 - **Gesture replay & recording.** Reusable flows you can re-run for
@@ -70,7 +70,7 @@ and shouldn't be conflated.
 - **Test discipline.** TDD non-negotiable, ~450 cases run without a
   booted sim, every external port is `@Mockable`.
 
-## Positioning for agent-sim-as-a-product
+## Positioning for agent-simulator-as-a-product
 
 The combined workflow that uses both:
 
@@ -80,17 +80,17 @@ agent-canvas capture --capture=argent     # 1. inventory all routes (one-time)
 operator annotates the board              # 2. notes + drawings per route
                                           #    → produces comments.json
 agent reads manifest+comments, fixes      # 3. external agent driver
-                                          #    via argent or agent-sim to drive
-agent-sim serves live verification         # 4. live re-capture + visual diff
-agent-sim review-tasks verify              # 5. pass/fail back into the queue
+                                          #    via argent or agent-simulator to drive
+agent-simulator serves live verification         # 4. live re-capture + visual diff
+agent-simulator review-tasks verify              # 5. pass/fail back into the queue
 ```
 
-If "our project" stays on top of agent-sim, the agent-canvas pieces
+If "our project" stays on top of agent-simulator, the agent-canvas pieces
 worth borrowing:
 
 1. **Route walker.** One-pass capture of every Expo Router route is
    genuinely useful and we don't have it. Plug into
-   `agent-sim review-tasks bulk-create --from-routes <manifest.json>`.
+   `agent-simulator review-tasks bulk-create --from-routes <manifest.json>`.
 2. **Richer drawing tools.** Rect / pin / arrow / freehand are more
    expressive than the current one-element selection. Order of ~200
    LOC web work.
@@ -100,7 +100,7 @@ worth borrowing:
 
 Pieces we should *not* borrow:
 
-- **Expo Router dependency.** agent-sim is app-agnostic and should
+- **Expo Router dependency.** agent-simulator is app-agnostic and should
   stay so.
 - **File-system manifest.** SQLite already gives us atomic claim and
   WS push; we can't downgrade to JSON-on-disk.
@@ -108,17 +108,17 @@ Pieces we should *not* borrow:
 
 ## Net
 
-agent-canvas and agent-sim are **complements, not competitors**. The
+agent-canvas and agent-simulator are **complements, not competitors**. The
 clearest split: agent-canvas catalogues *what exists* across an Expo
-Router app's surface; agent-sim captures *what's happening right now*
+Router app's surface; agent-simulator captures *what's happening right now*
 and drives an agent loop against it. A team running both gets:
 
 - *Coverage* from agent-canvas (every route inventoried at least once)
-- *Liveness* from agent-sim (whatever moment the operator wants fixed)
-- *Audit* from agent-sim (the code-change → before/after-snapshot trail
+- *Liveness* from agent-simulator (whatever moment the operator wants fixed)
+- *Audit* from agent-simulator (the code-change → before/after-snapshot trail
   per task)
 
-If we were ever to merge the two, agent-sim is the wider foundation —
+If we were ever to merge the two, agent-simulator is the wider foundation —
 agent-canvas's route walker bolts onto our queue cleanly, but our
 queue doesn't bolt onto its filesystem manifest without losing the
 WS / atomic-claim properties.

@@ -318,5 +318,5 @@ involved.
   `BrowserRecorder._paint`.
 - **CLI-issued record trigger.** The browser is the recorder, but a
   WS verb the page listens for (`{type:"record"}` → click the button)
-  would let `agent-sim serve` start recordings remotely without user
+  would let `agent-simulator serve` start recordings remotely without user
   interaction.

@@ -1,6 +1,6 @@
 import Foundation
 
-/// A public ingress that exposes a loopback `agent-sim serve` to the
+/// A public ingress that exposes a loopback `agent-simulator serve` to the
 /// internet without inbound port-forwarding — the Mac-mini-at-home →
 /// Claude-on-the-web case. The mini dials *out* to a tunnel provider,
 /// which hands back a public HTTPS hostname proxying to `localhost`.
@@ -17,7 +17,7 @@ import Foundation
 /// (stable hostname + DNS) keep doing that out-of-band and pass the
 /// hostname via `serve --trusted-host`.
 struct Tunnel: Equatable, Sendable {
-    /// The tunnel CLIs agent-sim knows how to launch. The raw value is
+    /// The tunnel CLIs agent-simulator knows how to launch. The raw value is
     /// also the `serve --tunnel <value>` flag spelling.
     enum Provider: String, CaseIterable, Sendable {
         case cloudflare
@@ -25,7 +25,7 @@ struct Tunnel: Equatable, Sendable {
     }
 
     let provider: Provider
-    /// The loopback port `agent-sim serve` is bound to — what the
+    /// The loopback port `agent-simulator serve` is bound to — what the
     /// tunnel proxies public traffic into.
     let localPort: Int
 

@@ -6,19 +6,19 @@ Two taps at one coordinate, close enough together that
 
 The trick is **process boundaries**. iOS aggregates taps into a
 double-tap when the inter-tap delay is below the recognizer's
-threshold (~0.25 s) — but two back-to-back `agent-sim tap` invocations
+threshold (~0.25 s) — but two back-to-back `agent-simulator tap` invocations
 spend ~150–300 ms each in process startup before they even open the
 HID port, which is already at or beyond the recognizer's budget. The
 fix is to do the whole four-event sequence inside one process. That's
-what `agent-sim double-tap` does, and that's what the four-line
+what `agent-simulator double-tap` does, and that's what the four-line
 `touch1-*` recipe over a single WebSocket / stdin connection does.
 
 ## Three entry points, one recipe
 
 | Surface | Invocation |
 |---------|------------|
-| **CLI** (one-shot) | `agent-sim double-tap --udid <UDID> --x 220 --y 480 --width 402 --height 874 [--interval 0.05] [--duration 0.08]` |
-| **Wire** (`agent-sim input` / WS) | Four lines on one connection — see below. No `{"type":"double-tap"}` envelope; the streaming primitives already cover this. |
+| **CLI** (one-shot) | `agent-simulator double-tap --udid <UDID> --x 220 --y 480 --width 402 --height 874 [--interval 0.05] [--duration 0.08]` |
+| **Wire** (`agent-simulator input` / WS) | Four lines on one connection — see below. No `{"type":"double-tap"}` envelope; the streaming primitives already cover this. |
 | **Browser** | The `Resources/Web/sim-input.js` stack (`MouseGestureSource` / `TouchGestureSource`) drives the same `touch1-*` dispatcher; a JS double-click produces the same four-line sequence. |
 
 `--interval` is the gap between tap-1-up and tap-2-down (the dwell
@@ -32,17 +32,17 @@ inside iOS's ~250 ms aggregation window).
 ## CLI
 
 ```bash
-agent-sim double-tap --udid <UDID> \
+agent-simulator double-tap --udid <UDID> \
   --x 220 --y 480 --width 402 --height 874
 
 # Override timing for a recognizer with non-default tapDelay:
-agent-sim double-tap --udid <UDID> \
+agent-simulator double-tap --udid <UDID> \
   --x 220 --y 480 --width 402 --height 874 \
   --interval 0.08 --duration 0.05
 ```
 
-`x` / `y` are device points; `width` / `height` come from `agent-sim
-list --json` or `agent-sim chrome layout`. Same units as every other
+`x` / `y` are device points; `width` / `height` come from `agent-simulator
+list --json` or `agent-simulator chrome layout`. Same units as every other
 gesture wire envelope.
 
 Exit code mirrors any one-shot gesture: `0` on success, `1` if the
@@ -55,7 +55,7 @@ events. Output is one JSON ack line:
 
 ## Wire (existing `touch1-*` primitives)
 
-`agent-sim input` and `agent-sim serve`'s WebSocket both already
+`agent-simulator input` and `agent-simulator serve`'s WebSocket both already
 support this — no new envelope. Send four lines on **one** connection:
 
 ```json
@@ -69,7 +69,7 @@ The timing that matters is wall-clock on the wire: each `touch1-*`
 event lands on iOS as it arrives, so the cadence the agent generates
 becomes the cadence the recognizer sees. A ~80 ms hold per tap and
 ~50 ms gap between taps is a known-good pattern; an example trace
-from `agent-sim serve`:
+from `agent-simulator serve`:
 
 ```
 11:59:16.217  touch1-down
@@ -78,7 +78,7 @@ from `agent-sim serve`:
 11:59:16.469  touch1-up    (hold ≈  85 ms)
 ```
 
-This is exactly what `agent-sim double-tap` produces internally — the
+This is exactly what `agent-simulator double-tap` produces internally — the
 CLI is a convenience wrapper around the same `Touch1` dispatcher,
 with `Thread.sleep` between events instead of relying on the
 caller's stream timing.
@@ -93,7 +93,7 @@ synthesize both taps). We didn't, because:
   sequence. iOS doesn't distinguish "two taps" from "one double-tap
   gesture" at the HID level — it's the recognizer's job to aggregate.
 - Adding a method to `Input` would force every consumer (CLI, WS,
-  `agent-sim input`) to grow a parallel envelope shape with no new
+  `agent-simulator input`) to grow a parallel envelope shape with no new
   behaviour underneath.
 - The composition lives where it belongs: in the App-layer command,
   where `Thread.sleep` is allowed and the four-event recipe is a
@@ -116,15 +116,15 @@ Image(systemName: "heart")
 Run a booted iPhone 17, then:
 
 ```bash
-UDID=$(agent-sim list --json | jq -r '.[0].udid')
-W=$(agent-sim list --json | jq -r '.[0].screen.width')
-H=$(agent-sim list --json | jq -r '.[0].screen.height')
-agent-sim double-tap --udid "$UDID" --x $((W / 2)) --y $((H / 2)) \
+UDID=$(agent-simulator list --json | jq -r '.[0].udid')
+W=$(agent-simulator list --json | jq -r '.[0].screen.width')
+H=$(agent-simulator list --json | jq -r '.[0].screen.height')
+agent-simulator double-tap --udid "$UDID" --x $((W / 2)) --y $((H / 2)) \
                                     --width "$W"   --height "$H"
 ```
 
 The toggle should fire on the first invocation. If it doesn't,
-inspect the wire: `agent-sim logs --udid "$UDID" --predicate
+inspect the wire: `agent-simulator logs --udid "$UDID" --predicate
 'process == "SpringBoard" OR process == "<your-app>"'` will show
 whether the recognizer thinks it received one or two taps. The
 common cause of "only one tap fires" is the **wrong device

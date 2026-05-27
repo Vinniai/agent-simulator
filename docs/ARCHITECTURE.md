@@ -30,7 +30,7 @@ standalone web UI it serves itself).
                 Subprocess pipeline                 Standalone serve
                 ───────────────────                 ────────────────
    Host plugin      JSON                Browser           text/binary WS
-   (asc-pro etc.)  ──────► agent-sim     (sim.html)       ──────► agent-sim
+   (asc-pro etc.)  ──────► agent-simulator     (sim.html)       ──────► agent-simulator
                     stdin    input                         /simulators       serve
                                   │                              │
                                   ▼                              ▼
@@ -48,10 +48,10 @@ standalone web UI it serves itself).
 
 Both paths share the same Domain + Infrastructure layers. The only
 difference is the App-layer entry point: `InputCommand` reads stdin
-and writes stdout; `Server` (under `agent-sim serve`) opens a
+and writes stdout; `Server` (under `agent-simulator serve`) opens a
 WebSocket and uses `WebSocketFrameSink` to push encoded frames back.
 
-Subprocess consumers typically spawn one persistent `agent-sim input
+Subprocess consumers typically spawn one persistent `agent-simulator input
 --udid <UDID>` per booted device because spawning costs ~1.2 s
 (framework resolution) and the IndigoHID pipeline has a ~40 ms
 per-session warmup that should only happen once.
@@ -117,7 +117,7 @@ mocks at the port boundary.
 | Chrome | `Chromes` | `LiveChromes` | composes `ChromeStore` + `PDFRasterizer`; caches per chrome identifier |
 | Chrome | `ChromeStore` | `FileSystemChromeStore` | reads `/Library/Developer/CoreSimulator/.../profile.plist` + `/Library/Developer/DeviceKit/Chrome/...` |
 | Chrome | `PDFRasterizer` | `CoreGraphicsPDFRasterizer` | turns composite PDFs into RGBA PNG |
-| Server | — | `Server` | Hummingbird HTTP + WebSocket server for `agent-sim serve` |
+| Server | — | `Server` | Hummingbird HTTP + WebSocket server for `agent-simulator serve` |
 | Server | — | `WebRoot` | resolves `Resources/Web/` via env override → source tree → `Bundle.module` |
 
 `StdoutSink` and `WebSocketFrameSink` both conform to `FrameSink`
@@ -144,7 +144,7 @@ Thin orchestration; ArgumentParser lives here.
   returns a new config. Same parser used by stdin `ControlChannel`
   and by `Server.streamWS`.
 
-## End-to-end flow: a tap in `agent-sim serve`
+## End-to-end flow: a tap in `agent-simulator serve`
 
 1. **Browser** — user taps inside the on-page simulator. `MouseGestureSource`
    computes the click's normalized coordinates and calls `SimInput.tap(...)`.
@@ -204,7 +204,7 @@ in points too — same unit system end to end.
 SimulatorKitScreen (IOSurface)        Stream impl                        FrameSink
 ─────────────────────────────         ───────────                        ─────────
   framebuffer callbacks      ──►      MJPEG / AVCC encode loop  ──►     StdoutSink
-  (queue: agent-sim.screen)            keepalive timer (H.264)            WebSocketFrameSink
+  (queue: agent-simulator.screen)            keepalive timer (H.264)            WebSocketFrameSink
                                       JPEG seed emitter                       │
                                       runtime reconfig                        ▼
                                                                      stdout (CLI)
@@ -227,7 +227,7 @@ Format-specific envelopes live in `Domain/Stream/Envelope.swift`:
   length prefix; CLI consumers (e.g. `ffplay`) read it.
 
 Runtime control: while a stream is live, JSON commands over the same
-channel (stdin for `agent-sim stream`, WS text frames for `serve`)
+channel (stdin for `agent-simulator stream`, WS text frames for `serve`)
 retune scale / fps / bitrate without restarting. `ReconfigParser`
 turns one line into a new `StreamConfig` and `Stream.apply(_:)` does
 the deltas (VideoToolbox bitrate retune, etc.).

@@ -1,5 +1,5 @@
 name: Feature Request
-description: Propose a new capability for agent-sim
+description: Propose a new capability for agent-simulator
 title: "[feat]: "
 labels: ["enhancement"]
 body:
@@ -25,7 +25,7 @@ body:
       description: What can the user do now? Show the command(s) or wire format.
       placeholder: |
         ```bash
-        agent-sim key --udid <UDID> --code 0x07
+        agent-simulator key --udid <UDID> --code 0x07
         ```
         or via the WS:
         ```json

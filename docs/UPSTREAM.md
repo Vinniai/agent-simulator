@@ -1,6 +1,6 @@
 # Tracking upstream `tddworks/baguette`
 
-`Vinniai/agent-sim` is a **clone** (not a GitHub fork) of
+`Vinniai/agent-simulator` is a **clone** (not a GitHub fork) of
 [`tddworks/baguette`](https://github.com/tddworks/baguette). We absorb upstream
 work selectively. We do **not** do whole-tree merges — the fork has diverged too
 far for that to be anything but a perpetual conflict.
@@ -9,10 +9,10 @@ far for that to be anything but a perpetual conflict.
 
 Three independent sources of divergence:
 
-1. **Full rename.** `baguette → agent-sim` across 235 files, including the SPM
+1. **Full rename.** `baguette → agent-simulator` across 235 files, including the SPM
    module name itself (`Sources/Baguette/…` → `Sources/AgentSim/…`,
    `BAGUETTE_WEB_DIR` → `AGENTSIM_WEB_DIR`, `skills/baguette/` →
-   `skills/agent-sim/`). Every upstream hunk conflicts on surrounding context.
+   `skills/agent-simulator/`). Every upstream hunk conflicts on surrounding context.
 2. **Web architecture fork.** Upstream rewrote the browser layer into a
    "Baguette SDK" (`Resources/Web/baguette/{baguette,simulator,transport}.js`,
    `baguette/gestures/pointer-interpreter.js`, `baguette/parts/*`). Our fork is
@@ -40,7 +40,7 @@ Three independent sources of divergence:
 `Sources/Baguette/ → Sources/AgentSim/` directory rename. Apply with
 `git cherry-pick -x --strategy=recursive -Xrename-threshold=20 <sha>`; if it
 lands files under `Sources/Baguette/`, `git mv` them and re-stage. `git rerere`
-is enabled (`rerere.autoupdate true`) so the repeated `baguette→agent-sim` hunk
+is enabled (`rerere.autoupdate true`) so the repeated `baguette→agent-simulator` hunk
 resolutions are recorded once and replayed.
 
 ## Workflow

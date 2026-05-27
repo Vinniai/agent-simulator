@@ -169,7 +169,7 @@
 
     // Hardware buttons — UI exposes the full set (home, lock, volume,
     // screenshot, rotate). Today only `home` and `lock` reach
-    // agent-sim's host-HID path (Press.swift); the rest land server-side
+    // agent-simulator's host-HID path (Press.swift); the rest land server-side
     // as ignored gestures until DeviceButton is widened. The buttons
     // are wired so the UI stays useful as soon as the Domain layer
     // grows the cases — no client change needed.

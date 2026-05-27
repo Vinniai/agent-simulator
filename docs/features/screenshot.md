@@ -3,9 +3,9 @@
 One-shot JPEG of the simulator's framebuffer. Two entry points share
 the same capture path:
 
-- `GET /simulators/:udid/screenshot.jpg` — served by `agent-sim serve`,
+- `GET /simulators/:udid/screenshot.jpg` — served by `agent-simulator serve`,
   returns `image/jpeg` bytes.
-- `agent-sim screenshot --udid <UDID>` — CLI; writes to `--output` or
+- `agent-simulator screenshot --udid <UDID>` — CLI; writes to `--output` or
   stdout.
 
 If you want the live recording-and-overlays story instead, read
@@ -15,7 +15,7 @@ trade-offs.
 
 ## Why
 
-`agent-sim serve` already streams via WebSocket and accepts `snapshot`
+`agent-simulator serve` already streams via WebSocket and accepts `snapshot`
 as an inline verb on that channel, but two real workflows wanted a
 plain HTTP fetch:
 
@@ -23,7 +23,7 @@ plain HTTP fetch:
   a rotating timestamp is the simplest possible "refresh on demand"
   affordance for review tools and dashboards. No WS plumbing needed
   in the embedding page.
-- **CLI / CI** — `curl -o shot.jpg …` and `agent-sim screenshot --output
+- **CLI / CI** — `curl -o shot.jpg …` and `agent-simulator screenshot --output
   shot.jpg` drop into shell pipelines, golden-image diffs, and bug
   reports without spinning up a stream session.
 
@@ -42,15 +42,15 @@ GET /simulators/:udid/screenshot.jpg[?quality=0.85][?scale=1]
 ```
 
 ```
-agent-sim screenshot --udid <UDID> [--output <path>] [--quality 0.85] [--scale 1]
+agent-simulator screenshot --udid <UDID> [--output <path>] [--quality 0.85] [--scale 1]
 ```
 
 `--output` defaults to stdout, so it composes with redirection:
 
 ```bash
-agent-sim screenshot --udid 5A1B… > shot.jpg
-agent-sim screenshot --udid 5A1B… --output /tmp/shot.jpg
-agent-sim screenshot --udid 5A1B… --quality 0.6 --scale 2 > thumb.jpg
+agent-simulator screenshot --udid 5A1B… > shot.jpg
+agent-simulator screenshot --udid 5A1B… --output /tmp/shot.jpg
+agent-simulator screenshot --udid 5A1B… --quality 0.6 --scale 2 > thumb.jpg
 ```
 
 ## Pipeline
@@ -139,7 +139,7 @@ Sources/AgentSim/
 │       └── Server.swift                  /screenshot.jpg route
 └── App/
     ├── Commands/
-    │   └── ScreenshotCommand.swift       agent-sim screenshot
+    │   └── ScreenshotCommand.swift       agent-simulator screenshot
     └── RootCommand.swift                 registers ScreenshotCommand
 ```
 

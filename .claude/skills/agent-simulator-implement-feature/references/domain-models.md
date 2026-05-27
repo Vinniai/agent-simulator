@@ -1,6 +1,6 @@
-# Rich domain model patterns (agent-sim)
+# Rich domain model patterns (agent-simulator)
 
-agent-sim's domain layer is a small set of value types + `@Mockable`
+agent-simulator's domain layer is a small set of value types + `@Mockable`
 abstractions, organised by bounded context (`Domain/Input/`,
 `Domain/Screen/`, `Domain/Stream/`, `Domain/Chrome/`,
 `Domain/Simulator/`, `Domain/Accessibility/`, `Domain/Logs/`). The
@@ -181,7 +181,7 @@ these. Otherwise it's a `struct` (or `enum`).
 3. **Identity tested with `===`** — "is this *the same instance*"
    is a domain question, not just "are these values equal."
 
-agent-sim's class boundaries each satisfy at least one condition:
+agent-simulator's class boundaries each satisfy at least one condition:
 
 | Type             | Why it's a class                                  |
 |------------------|---------------------------------------------------|
@@ -191,7 +191,7 @@ agent-sim's class boundaries each satisfy at least one condition:
 | `LiveChromes`    | chrome cache + lock (1, 2)                        |
 | `H264Encoder`    | VTCompressionSession + frame queue + lock (1, 2)  |
 
-agent-sim's domain values fail all three:
+agent-simulator's domain values fail all three:
 
 | Type           | Resource? | Multi-owner mutation? | Identity? | Verdict |
 |----------------|-----------|-----------------------|-----------|---------|
@@ -207,7 +207,7 @@ agent-sim's domain values fail all three:
 The classical DDD argument: *"`Simulator` has a UDID, two with the
 same UDID are the same → identity → class."*
 
-Look at what `Simulator` actually IS in agent-sim. It's a **snapshot**:
+Look at what `Simulator` actually IS in agent-simulator. It's a **snapshot**:
 when `simulators.find(udid:)` returns a `Simulator`, you have a value
 reflecting the device's state at that moment. Boot the device, then
 re-read your local value — `state` still says `.shutdown`. Fresh

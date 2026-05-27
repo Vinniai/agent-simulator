@@ -6,7 +6,7 @@ accepted
 
 ## Context
 
-agent-sim is a selective clone of `tddworks/baguette` (see `docs/UPSTREAM.md`): we
+agent-simulator is a selective clone of `tddworks/baguette` (see `docs/UPSTREAM.md`): we
 absorb upstream Device Control improvements but never whole-tree merge. The fork's
 reason to exist is the **Agentic Feedback Loop** (see `CONTEXT.md`), not device
 control. Every change we make to code that maps cleanly to upstream raises the cost
@@ -37,7 +37,7 @@ Enforce the boundary pragmatically rather than by module split (for now):
 ## Considered options
 
 - **Separate SPM module (`AgentSimCore` + `AgentSimLoop`)** — compiler-enforced
-  boundary, strongest guarantee, but a large refactor and the `baguette→agent-sim`
+  boundary, strongest guarantee, but a large refactor and the `baguette→agent-simulator`
   rename still bites Core. Held as the possible stronger form if the boundary proves
   valuable.
 - **Convention only** — naming/dir rule with no guard. Rejected: nothing stops the

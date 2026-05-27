@@ -1,6 +1,6 @@
 {
-  "name": "@vinniai/agent-sim",
-  "version": "0.2.0",
+  "name": "agent-simulator",
+  "version": "0.2.1",
   "description": "Agent-driven iOS Simulator control, screen streaming, gesture/keyboard input, accessibility dumps, and a self-building review loop — CLI.",
   "keywords": [
     "ios",
@@ -14,19 +14,19 @@
     "screen-streaming",
     "mobile"
   ],
-  "homepage": "https://github.com/Vinniai/agent-sim#readme",
+  "homepage": "https://github.com/Vinniai/agent-simulator#readme",
   "bugs": {
-    "url": "https://github.com/Vinniai/agent-sim/issues"
+    "url": "https://github.com/Vinniai/agent-simulator/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Vinniai/agent-sim.git",
+    "url": "git+https://github.com/Vinniai/agent-simulator.git",
     "directory": "npm"
   },
   "license": "Apache-2.0",
   "type": "module",
   "bin": {
-    "agent-sim": "bin/agent-sim.mjs"
+    "agent-simulator": "bin/agent-simulator.mjs"
   },
   "files": [
     "bin/",

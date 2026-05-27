@@ -3,7 +3,7 @@ import ArgumentParser
 @main
 struct AgentSim: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "agent-sim",
+        commandName: "agent-simulator",
         abstract: "Agent-driven iOS simulator control, capture, markup, and review",
         version: agentSimVersion,
         subcommands: [

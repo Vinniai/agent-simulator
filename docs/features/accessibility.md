@@ -4,9 +4,9 @@ Read the on-screen UI tree (labels, frames, traits, identifiers) of a
 booted simulator without taking a screenshot or running a test bundle.
 Two entry points share one dispatch path:
 
-- `agent-sim describe-ui --udid <UDID> [--x <px> --y <px>] [--output <path>]` — CLI.
+- `agent-simulator describe-ui --udid <UDID> [--x <px> --y <px>] [--output <path>]` — CLI.
 - Wire JSON `{ "type": "describe_ui", "x"?: <px>, "y"?: <px> }` on
-  `agent-sim serve`'s `/simulators/:udid/stream` WebSocket. Reply
+  `agent-simulator serve`'s `/simulators/:udid/stream` WebSocket. Reply
   arrives on the same socket as
   `{ "type": "describe_ui_result", "ok": true, "tree": { … } }`.
 
@@ -96,7 +96,7 @@ we found.
 `AccessibilityPlatformTranslation.framework`. Inside Simulator.app
 its `bridgeTokenDelegate` is wired up by `SimulatorKit.SimAccessibilityManager`
 when a display view is added per simulator. Out of Simulator.app —
-which is where `agent-sim` runs — the delegate is `nil`, and every
+which is where `agent-simulator` runs — the delegate is `nil`, and every
 `-frontmostApplicationWithDisplayId:bridgeDelegateToken:` call
 returns `nil` because the translator has no idea where to send its
 XPC requests.

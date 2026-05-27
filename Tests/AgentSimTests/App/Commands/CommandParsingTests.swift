@@ -11,9 +11,9 @@ struct CommandParsingTests {
 
     // MARK: - root
 
-    @Test func `agent-sim root lists every subcommand`() {
+    @Test func `agent-simulator root lists every subcommand`() {
         let cfg = AgentSim.configuration
-        #expect(cfg.commandName == "agent-sim")
+        #expect(cfg.commandName == "agent-simulator")
         let names = cfg.subcommands.map { $0.configuration.commandName }
         #expect(Set(names) == [
             "agent",
@@ -33,7 +33,7 @@ struct CommandParsingTests {
         #expect(Set(names) == ["list", "add", "promote", "watch"])
     }
 
-    @Test func `agent-sim root exposes version`() {
+    @Test func `agent-simulator root exposes version`() {
         #expect(AgentSim.configuration.version == agentSimVersion)
         #expect(!agentSimVersion.isEmpty)
     }
@@ -610,5 +610,21 @@ struct CommandParsingTests {
         #expect(cmd.base == "http://127.0.0.1:9001")
         #expect(cmd.timeout == 0.5)
         #expect(cmd.json == true)
+    }
+
+    // MARK: - brand identity defaults
+
+    @Test func `serve auto-boots a simulator named for the brand`() {
+        #expect(ServeCommand.autoBootName == "agent-simulator")
+    }
+
+    @Test func `agent bootstrap defaults the agent id to the brand`() throws {
+        let cmd = try AgentCommand.Bootstrap.parse([])
+        #expect(cmd.agentId == "agent-simulator")
+    }
+
+    @Test func `agent quality-gate defaults the actor to the brand`() throws {
+        let cmd = try AgentCommand.QualityGate.parse(["task-1", "--score", "9"])
+        #expect(cmd.actor == "agent-simulator")
     }
 }

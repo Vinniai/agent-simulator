@@ -359,7 +359,7 @@
   }
 
   async function fetchDevices() {
-    // agent-sim serve exposes the list at /simulators.json, pre-split
+    // agent-simulator serve exposes the list at /simulators.json, pre-split
     // into running/available. We fold them back into a flat array
     // because the IIFE renders its own RUNNING / AVAILABLE sections.
     const response = await fetch('/simulators.json', { cache: 'no-store' });
@@ -390,7 +390,7 @@
 
   async function postSimAction(action, id) {
     // POST /simulators/<udid>/<action> — UDID lives in the path,
-    // body is empty. Matches the canonical /agent-sim serve route
+    // body is empty. Matches the canonical /agent-simulator serve route
     // table (no /api/ prefix, no payload).
     const response = await fetch(
       `/simulators/${encodeURIComponent(id)}/${encodeURIComponent(action)}`,

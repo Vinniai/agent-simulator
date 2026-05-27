@@ -1,7 +1,7 @@
 import ArgumentParser
 import Foundation
 
-/// `agent-sim orientation --udid <UDID> <portrait|landscape-left|landscape-right|portrait-upside-down>`
+/// `agent-simulator orientation --udid <UDID> <portrait|landscape-left|landscape-right|portrait-upside-down>`
 ///
 /// Sends a `GSEventTypeDeviceOrientationChanged` Purple event to the
 /// booted simulator so the iOS guest sees `UIDeviceOrientationDidChange`

@@ -1194,5 +1194,5 @@
     }, 'image/png');
   }
 
-  console.log('[agent-sim] sim-native.js active for', udid);
+  console.log('[agent-simulator] sim-native.js active for', udid);
 })();

@@ -3,7 +3,7 @@ import IOSurface
 
 /// One-shot frame capture: open `Screen`, wait for the first IOSurface
 /// SimulatorKit delivers, encode JPEG, stop. Shared by the
-/// `agent-sim screenshot` CLI and the `GET /simulators/:udid/screenshot.jpg`
+/// `agent-simulator screenshot` CLI and the `GET /simulators/:udid/screenshot.jpg`
 /// HTTP route. A timeout guards against an idle / wedged simulator that
 /// never fires its frame callback.
 enum ScreenSnapshot {

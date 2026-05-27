@@ -1,8 +1,8 @@
-agent-sim:
+agent-simulator:
 	./build.sh
 
 clean:
 	swift package clean 2>/dev/null || true
-	rm -f agent-sim AgentSim
+	rm -f agent-simulator AgentSim
 
-.PHONY: agent-sim clean
+.PHONY: agent-simulator clean

@@ -14,7 +14,7 @@ struct NoteSourceTests {
 
     private func freshStore() -> SQLiteNotes {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("agent-sim-notes-source-tests-\(UUID().uuidString)")
+            .appendingPathComponent("agent-simulator-notes-source-tests-\(UUID().uuidString)")
         return SQLiteNotes(url: dir.appendingPathComponent("notes.sqlite"))
     }
 

@@ -23,10 +23,10 @@
 #       (env not ready: no booted sim / nothing on screen to calibrate).
 #
 # IMPORTANT: serve and this script must share the default store
-# (~/.agent-sim/reviews) — don't point serve at a custom review root, or the
+# (~/.agent-simulator/reviews) — don't point serve at a custom review root, or the
 # CLI verify-criteria won't find the snapshot the server captured.
 #
-# Deps: agent-sim, curl, jq.
+# Deps: agent-simulator, curl, jq.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -44,12 +44,12 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-if command -v agent-sim >/dev/null 2>&1; then
-    SIM="agent-sim"
-elif [ -x "./agent-sim" ]; then
-    SIM="./agent-sim"
+if command -v agent-simulator >/dev/null 2>&1; then
+    SIM="agent-simulator"
+elif [ -x "./agent-simulator" ]; then
+    SIM="./agent-simulator"
 else
-    echo "skip: agent-sim not on PATH and ./agent-sim not built (run: make)" >&2; exit 2
+    echo "skip: agent-simulator not on PATH and ./agent-simulator not built (run: make)" >&2; exit 2
 fi
 for dep in curl jq; do
     command -v "$dep" >/dev/null 2>&1 || { echo "skip: missing dependency '$dep'" >&2; exit 2; }
@@ -103,7 +103,7 @@ else
     PRESENT_SEL="$(jq -nc --arg v "$PRESENT_LABEL" '{label:$v}')"
     PRESENT_DESC="label=$PRESENT_LABEL exists"
 fi
-ABSENT_ID="agent-sim-e2e-absent-$RANDOM$RANDOM"
+ABSENT_ID="agent-simulator-e2e-absent-$RANDOM$RANDOM"
 echo "[e2e] present criterion: $PRESENT_DESC  ·  absent criterion: identifier=$ABSENT_ID" >&2
 
 # ── Build the review + two tasks carrying criteria ───────────────────────

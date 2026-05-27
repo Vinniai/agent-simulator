@@ -4,6 +4,14 @@ import Testing
 
 @Suite("Review store")
 struct ReviewStoreTests {
+    @Test func `review data defaults under the rebranded home directory`() {
+        // defaultRoot honours AGENT_SIM_REVIEW_ROOT; only the no-override
+        // branch carries the brand path, so skip when an override is set.
+        if let override = ProcessInfo.processInfo.environment["AGENT_SIM_REVIEW_ROOT"],
+           !override.isEmpty { return }
+        #expect(FileReviewStore.defaultRoot().path.hasSuffix("/.agent-simulator/reviews"))
+    }
+
     @Test func `file store persists sessions and artifacts`() throws {
         let store = FileReviewStore(root: tempRoot())
         var session = try store.createSession(name: "Checkout flow")
@@ -195,7 +203,7 @@ struct ReviewStoreTests {
 
 private func tempRoot() -> URL {
     FileManager.default.temporaryDirectory
-        .appendingPathComponent("agent-sim-review-tests-\(UUID().uuidString)", isDirectory: true)
+        .appendingPathComponent("agent-simulator-review-tests-\(UUID().uuidString)", isDirectory: true)
 }
 
 private func snapshot(id: String, sessionId: String) -> ReviewScreenSnapshot {

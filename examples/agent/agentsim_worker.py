@@ -1,9 +1,9 @@
-"""Reference agent-sim worker — claim → tap → capture → submit.
+"""Reference agent-simulator worker — claim → tap → capture → submit.
 
 A self-contained, dependency-light Python loop that demonstrates the
 full agent protocol described in `docs/AGENT-API.md`. Copy this file
 into your own project as a starting point. It is NOT compiled into
-the agent-sim binary and has no test coverage of its own — the wire
+the agent-simulator binary and has no test coverage of its own — the wire
 contract it depends on is what's tested.
 
 Usage:

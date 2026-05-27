@@ -14,7 +14,7 @@ struct VerifyTaskTests {
 
     private func store() -> SQLiteReviewTaskStore {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("agent-sim-verify-tests-\(UUID().uuidString)")
+            .appendingPathComponent("agent-simulator-verify-tests-\(UUID().uuidString)")
         return SQLiteReviewTaskStore(url: dir.appendingPathComponent("tasks.sqlite"))
     }
 

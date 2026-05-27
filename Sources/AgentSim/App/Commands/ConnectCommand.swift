@@ -4,11 +4,11 @@ import HummingbirdWSClient
 import Logging
 import NIOCore
 
-/// `agent-sim connect <url> --udid <id> [--tap X,Y] [--size WxH]
+/// `agent-simulator connect <url> --udid <id> [--tap X,Y] [--size WxH]
 ///  [--format mjpeg] [--seconds 3]`
 ///
 /// The other end of the Mac-mini-at-home → Claude-on-the-web story:
-/// from a *remote* machine, dial a running `agent-sim serve`, confirm
+/// from a *remote* machine, dial a running `agent-simulator serve`, confirm
 /// frames are actually flowing (downstream), and optionally fire one
 /// tap (upstream) to prove the gesture channel — a two-way smoke test.
 ///
@@ -20,7 +20,7 @@ import NIOCore
 struct ConnectCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "connect",
-        abstract: "Connect to a remote agent-sim serve and smoke-test its stream"
+        abstract: "Connect to a remote agent-simulator serve and smoke-test its stream"
     )
 
     @Argument(help: "Base URL of the remote serve (e.g. http://mini.local:8421 or a tunnel https URL)")
@@ -83,7 +83,7 @@ struct ConnectCommand: AsyncParsableCommand {
         url: String, tap: RemoteTap?, seconds: Double
     ) async throws -> ConnectReport {
         let tally = FrameTally()
-        let logger = Logger(label: "agent-sim.connect")
+        let logger = Logger(label: "agent-simulator.connect")
 
         // The default client frame ceiling is 16 KiB — far below a single
         // AVCC seed / H.264 keyframe (often 100 KiB+). Left at the default

@@ -1,7 +1,7 @@
 # Agent Sim — Agent API
 
 How an external agent (a script, an MCP server, or another autonomous
-worker) drives a booted iOS-26 simulator end-to-end via agent-sim: claim
+worker) drives a booted iOS-26 simulator end-to-end via agent-simulator: claim
 a queued task that names specific AX elements, open a long-lived
 WebSocket to the device, tap each element by its frame, capture the
 after-state, and submit a result back into the review queue for human
@@ -46,7 +46,7 @@ required: `WS /review-tasks/stream` pushes status changes for any
 listener, so an agent can subscribe instead of looping on
 `/agent/tasks/next` if it prefers.
 
-The whole protocol assumes `agent-sim serve` is running locally; the
+The whole protocol assumes `agent-simulator serve` is running locally; the
 default base URL is `http://127.0.0.1:8421`.
 
 ## Discovery — claiming a task
@@ -102,8 +102,8 @@ WS  /simulators/:udid/stream?format=mjpeg
 
 Server → browser frames are binary (encoded video). Agent → server
 frames are text JSON, one envelope per message. Same wire format as
-`agent-sim input`; full reference in
-[README "Wire protocol"](../README.md#wire-protocol--agent-sim-input).
+`agent-simulator input`; full reference in
+[README "Wire protocol"](../README.md#wire-protocol--agent-simulator-input).
 
 For a single-finger tap on `elements[0]`:
 
@@ -232,7 +232,7 @@ populated (mirrors `events` / `verifySnapshotId` shape).
 CLI mirror:
 
 ```
-agent-sim review-tasks add-code-change <task-id> \
+agent-simulator review-tasks add-code-change <task-id> \
     --path Sources/Save/SaveButton.swift \
     --summary "added validation on submit" \
     --start-line 42 --end-line 58 \
@@ -243,7 +243,7 @@ agent-sim review-tasks add-code-change <task-id> \
     --actor claude-code-mcp@laptop-01
 
 # Batch alternative — feed a JSON array of ReviewTaskCodeChangeInput:
-agent-sim review-tasks add-code-change <task-id> --changes-file changes.json
+agent-simulator review-tasks add-code-change <task-id> --changes-file changes.json
 ```
 
 ## Subscribing instead of polling
@@ -263,15 +263,15 @@ handler.
 
 ## CLI equivalents
 
-Every endpoint above has a CLI mirror under `agent-sim review-tasks`,
+Every endpoint above has a CLI mirror under `agent-simulator review-tasks`,
 suitable for shell-loop agents that prefer subprocess invocation:
 
 ```
-agent-sim review-tasks next   --agent-id <id>           # → JSON task or null
-agent-sim review-tasks event  <task-id> --type progress --actor <id> --message "…"
-agent-sim review-tasks result <task-id> --status readyForVerify --summary "…" \
+agent-simulator review-tasks next   --agent-id <id>           # → JSON task or null
+agent-simulator review-tasks event  <task-id> --type progress --actor <id> --message "…"
+agent-simulator review-tasks result <task-id> --status readyForVerify --summary "…" \
                                        --verification-snapshot-id snap_…
-agent-sim review-tasks watch  --status open             # one JSON line per change
+agent-simulator review-tasks watch  --status open             # one JSON line per change
 ```
 
 `next` and `claim` accept **`--actor` as an alias for `--agent-id`** so
@@ -280,8 +280,8 @@ and `add-code-change` all use `--actor`). Either spelling is accepted on
 the claim path:
 
 ```
-agent-sim review-tasks next  --actor <id>      # same as --agent-id <id>
-agent-sim review-tasks claim <task-id> --actor <id>
+agent-simulator review-tasks next  --actor <id>      # same as --agent-id <id>
+agent-simulator review-tasks claim <task-id> --actor <id>
 ```
 
 The HTTP and CLI paths share storage (`SQLiteReviewTaskStore`), so a
@@ -324,7 +324,7 @@ the operator is interactively marking up live captures.
 
 ## Importing external snapshots
 
-Sometimes the artefacts arrive from somewhere other than agent-sim
+Sometimes the artefacts arrive from somewhere other than agent-simulator
 itself — a route walker that owns its own screenshotter, an offline
 manifest, a manual drop. Push them in with:
 
@@ -350,7 +350,7 @@ content-type: application/json
 
 The response is the same `ReviewCaptureResult` shape as the live
 capture path — `{session, snapshot, edge:null}`. The snapshot is
-written to `~/.agent-sim/reviews/<sessionId>/screenshots/<id>.jpg` and
+written to `~/.agent-simulator/reviews/<sessionId>/screenshots/<id>.jpg` and
 `<id>.json` for AX, just like a live capture, so the review browser
 renders them identically.
 
@@ -370,7 +370,7 @@ renders them identically.
 CLI mirror — pipe a JSON file or stream from stdin:
 
 ```bash
-agent-sim review-tasks bulk-create \
+agent-simulator review-tasks bulk-create \
     --session-id review_01HX… \
     --file path/to/tasks.json \
     --assignee agent-import \
@@ -379,7 +379,7 @@ agent-sim review-tasks bulk-create \
 # Stdin form — handy with adapters that emit the envelope.
 agent_canvas_to_agentsim --manifest agent-canvas/latest/manifest.json \
                          --session-id review_01HX… \
-    | agent-sim review-tasks bulk-create --session-id review_01HX… --file -
+    | agent-simulator review-tasks bulk-create --session-id review_01HX… --file -
 ```
 
 CLI overrides (`--assignee` / `--priority` / `--title` / `--instructions`)
@@ -401,7 +401,7 @@ Two self-contained Python loops ship in the repo:
 - [`../examples/agent/agent_canvas_to_agentsim.py`](../examples/agent/agent_canvas_to_agentsim.py)
   — adapter that reads an `agent-canvas/latest/manifest.json` (Expo
   Router route inventory) and emits the bulk-create envelope on
-  stdout. Pipe it into `agent-sim review-tasks bulk-create --file -`
+  stdout. Pipe it into `agent-simulator review-tasks bulk-create --file -`
   to queue one task per route. Pure stdlib.
 
 Copy either as a starting point for an MCP server, a CI hook, or an

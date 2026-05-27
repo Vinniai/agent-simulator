@@ -1,11 +1,11 @@
 import ArgumentParser
 import Foundation
 
-/// `agent-sim delete --udid <id> [--device-set …]`
+/// `agent-simulator delete --udid <id> [--device-set …]`
 ///
 /// Destroys a simulator device — the counterpart to `shutdown` (which
 /// only stops a running device). Used to clean up the throwaway
-/// "agent-sim" device that `serve --auto-boot` provisions.
+/// "agent-simulator" device that `serve --auto-boot` provisions.
 struct DeleteCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "delete",

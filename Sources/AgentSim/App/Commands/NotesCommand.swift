@@ -1,7 +1,7 @@
 import ArgumentParser
 import Foundation
 
-/// `agent-sim notes` — the session-less queue from the CLI.
+/// `agent-simulator notes` — the session-less queue from the CLI.
 ///
 /// Sending events: `add` appends a message (optionally anchored to an
 /// AX path), `promote` flips one to picked-up. Listening: `list`

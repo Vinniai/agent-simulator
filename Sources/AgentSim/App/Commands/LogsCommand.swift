@@ -1,14 +1,14 @@
 import ArgumentParser
 import Foundation
 
-/// `agent-sim logs --udid <UDID> [--level …] [--style …] [--predicate …] [--bundle-id …]`
+/// `agent-simulator logs --udid <UDID> [--level …] [--style …] [--predicate …] [--bundle-id …]`
 ///
 /// Streams the booted simulator's unified log to stdout, line by
 /// line, until SIGINT (Ctrl-C). Spawns `/usr/bin/log stream` inside
 /// the simulator via `SimDevice.spawn…` — no `serve`, no
 /// WebSocket, just a long-running pipe.
 ///
-/// Composition: `agent-sim logs --udid X | grep Foo`,
+/// Composition: `agent-simulator logs --udid X | grep Foo`,
 /// `… > /tmp/sim.log`, `… | head -c 4096`, etc., all behave as
 /// expected; stdout is line-buffered through `print`.
 struct LogsCommand: AsyncParsableCommand {

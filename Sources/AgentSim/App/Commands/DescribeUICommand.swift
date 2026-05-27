@@ -1,7 +1,7 @@
 import ArgumentParser
 import Foundation
 
-/// `agent-sim describe-ui --udid <UDID> [--x <px> --y <px>]`
+/// `agent-simulator describe-ui --udid <UDID> [--x <px> --y <px>]`
 ///
 /// Dumps the simulator's on-screen UI tree as JSON. With `--x` /
 /// `--y` it hit-tests a single point (returns the topmost

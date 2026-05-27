@@ -10,14 +10,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const binary = join(root, "vendor", "agent-sim");
+const binary = join(root, "vendor", "agent-simulator");
 
 if (!existsSync(binary)) {
   console.error(
-    "agent-sim: native binary missing.\n" +
+    "agent-simulator: native binary missing.\n" +
       "The postinstall step downloads it from the GitHub release; try:\n" +
-      "  npm install -g agent-sim\n" +
-      "agent-sim requires macOS on Apple Silicon with Xcode 26 installed."
+      "  npm install -g agent-simulator\n" +
+      "agent-simulator requires macOS on Apple Silicon with Xcode 26 installed."
   );
   process.exit(1);
 }

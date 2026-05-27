@@ -1,6 +1,6 @@
 # Fork-only vs tracks-upstream boundary manifest (ADR-0001)
 #
-# agent-sim is a selective clone of tddworks/baguette. Code that maps cleanly to
+# agent-simulator is a selective clone of tddworks/baguette. Code that maps cleanly to
 # upstream ("tracks-upstream") must stay upstream-shaped so commits cherry-pick
 # with only a path remap; code that exists only to serve the Agentic Feedback
 # Loop ("fork-only") may evolve freely because it costs nothing at absorb time.

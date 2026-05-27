@@ -14,7 +14,7 @@ import ObjectiveC
 final class SimulatorKitScreen: Screen, @unchecked Sendable {
     private let udid: String
     private let host: any DeviceHost
-    private let queue = DispatchQueue(label: "agent-sim.screen", qos: .userInteractive)
+    private let queue = DispatchQueue(label: "agent-simulator.screen", qos: .userInteractive)
 
     private var ioClient: NSObject?
     private var descriptors: [NSObject] = []

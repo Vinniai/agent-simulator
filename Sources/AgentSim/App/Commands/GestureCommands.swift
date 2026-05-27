@@ -42,11 +42,11 @@ struct TapCommand: ParsableCommand {
 
 /// One-shot CLI for a native iOS double-tap at a single coordinate.
 ///
-/// The browser / `agent-sim input` paths already cover this by sending
+/// The browser / `agent-simulator input` paths already cover this by sending
 /// four `touch1-down` / `touch1-up` lines on one long-lived connection —
 /// see `docs/features/double-tap.md`. What this command adds is the
 /// same recipe inside a **single process**, because two back-to-back
-/// `agent-sim tap` invocations spend so long in process startup that
+/// `agent-simulator tap` invocations spend so long in process startup that
 /// `UITapGestureRecognizer` times out between them.
 ///
 /// Defaults (`duration` = 0.08 s, `interval` = 0.05 s) match the

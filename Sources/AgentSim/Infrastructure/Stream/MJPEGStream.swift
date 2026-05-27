@@ -10,7 +10,7 @@ final class MJPEGStream: Stream, @unchecked Sendable {
     private let sink: any FrameSink
     private let jpeg: JPEGEncoder
     private let scaler = Scaler()
-    private let queue = DispatchQueue(label: "agent-sim.mjpeg", qos: .userInteractive)
+    private let queue = DispatchQueue(label: "agent-simulator.mjpeg", qos: .userInteractive)
 
     private var screen: (any Screen)?
     private var filter = SeedFilter()

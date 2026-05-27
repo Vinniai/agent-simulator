@@ -140,7 +140,7 @@ struct ReviewSnapshotImportServiceTests {
 
     private func makeStore() -> FileReviewStore {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("agent-sim-snap-import-\(UUID().uuidString)")
+            .appendingPathComponent("agent-simulator-snap-import-\(UUID().uuidString)")
         return FileReviewStore(root: dir)
     }
 }

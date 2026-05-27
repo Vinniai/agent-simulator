@@ -26,7 +26,7 @@ if ! grep -q "^## \[Unreleased\]" "$CHANGELOG_FILE"; then
 fi
 
 # Derive repo URL and previous version from the existing [Unreleased] reference link
-# e.g. [Unreleased]: https://github.com/Vinniai/agent-sim/compare/v0.1.1...HEAD
+# e.g. [Unreleased]: https://github.com/Vinniai/agent-simulator/compare/v0.1.1...HEAD
 UNRELEASED_LINK=$(grep "^\[Unreleased\]:" "$CHANGELOG_FILE" || true)
 REPO_URL=""
 PREV_VERSION=""

@@ -23,7 +23,7 @@
 # Exit: 0 = all assertions passed · 1 = an assertion failed · 2 = skipped
 #       (env not ready: no booted sim / no Metro / no calibratable label).
 #
-# Deps: agent-sim, curl, jq, lsof (all on a standard dev box).
+# Deps: agent-simulator, curl, jq, lsof (all on a standard dev box).
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -46,13 +46,13 @@ while [ $# -gt 0 ]; do
 done
 
 # Resolve the CLI: prefer one on PATH (npm install), else the binary
-# build.sh drops at the repo root (./agent-sim). Everything below calls $SIM.
-if command -v agent-sim >/dev/null 2>&1; then
-    SIM="agent-sim"
-elif [ -x "./agent-sim" ]; then
-    SIM="./agent-sim"
+# build.sh drops at the repo root (./agent-simulator). Everything below calls $SIM.
+if command -v agent-simulator >/dev/null 2>&1; then
+    SIM="agent-simulator"
+elif [ -x "./agent-simulator" ]; then
+    SIM="./agent-simulator"
 else
-    echo "skip: agent-sim not on PATH and ./agent-sim not built (run: make)" >&2; exit 2
+    echo "skip: agent-simulator not on PATH and ./agent-simulator not built (run: make)" >&2; exit 2
 fi
 for dep in curl jq lsof; do
     command -v "$dep" >/dev/null 2>&1 || { echo "skip: missing dependency '$dep'" >&2; exit 2; }

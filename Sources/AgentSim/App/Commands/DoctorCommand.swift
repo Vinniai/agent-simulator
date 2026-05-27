@@ -7,7 +7,7 @@ struct DoctorCommand: AsyncParsableCommand {
         abstract: "Report CLI / server / simulator health and surface version drift"
     )
 
-    @Option(name: .long, help: "URL of the running agent-sim server")
+    @Option(name: .long, help: "URL of the running agent-simulator server")
     var base: String = "http://127.0.0.1:8421"
 
     @Option(name: .long, help: "Probe timeout in seconds")

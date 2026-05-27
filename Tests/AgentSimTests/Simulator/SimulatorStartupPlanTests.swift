@@ -18,7 +18,7 @@ struct SimulatorStartupPlanTests {
     @Test func `a booted simulator means there is nothing to provision`() {
         let plan = SimulatorStartupPlan.decide(
             all: [sim("U1", "iPhone 17 Pro", .booted)],
-            desiredName: "agent-sim"
+            desiredName: "agent-simulator"
         )
         #expect(plan == .useRunning)
     }
@@ -26,41 +26,41 @@ struct SimulatorStartupPlanTests {
     @Test func `a simulator already booting is left to come up`() {
         let plan = SimulatorStartupPlan.decide(
             all: [sim("U1", "iPhone 17 Pro", .booting)],
-            desiredName: "agent-sim"
+            desiredName: "agent-simulator"
         )
         #expect(plan == .useRunning)
     }
 
-    @Test func `an existing agent-sim is booted rather than duplicated`() {
+    @Test func `an existing agent-simulator is booted rather than duplicated`() {
         let plan = SimulatorStartupPlan.decide(
             all: [
                 sim("U1", "iPhone 17 Pro", .shutdown),
-                sim("U2", "agent-sim",     .shutdown),
+                sim("U2", "agent-simulator",     .shutdown),
             ],
-            desiredName: "agent-sim"
+            desiredName: "agent-simulator"
         )
         #expect(plan == .bootExisting(udid: "U2"))
     }
 
-    @Test func `the agent-sim match is case-insensitive`() {
+    @Test func `the agent-simulator match is case-insensitive`() {
         let plan = SimulatorStartupPlan.decide(
-            all: [sim("U2", "Agent-Sim", .shutdown)],
-            desiredName: "agent-sim"
+            all: [sim("U2", "Agent-Simulator", .shutdown)],
+            desiredName: "agent-simulator"
         )
         #expect(plan == .bootExisting(udid: "U2"))
     }
 
-    @Test func `nothing booted and no agent-sim means create one`() {
+    @Test func `nothing booted and no agent-simulator means create one`() {
         let plan = SimulatorStartupPlan.decide(
             all: [sim("U1", "iPhone 17 Pro", .shutdown)],
-            desiredName: "agent-sim"
+            desiredName: "agent-simulator"
         )
-        #expect(plan == .createAndBoot(name: "agent-sim"))
+        #expect(plan == .createAndBoot(name: "agent-simulator"))
     }
 
     @Test func `an empty fleet means create one`() {
-        let plan = SimulatorStartupPlan.decide(all: [], desiredName: "agent-sim")
-        #expect(plan == .createAndBoot(name: "agent-sim"))
+        let plan = SimulatorStartupPlan.decide(all: [], desiredName: "agent-simulator")
+        #expect(plan == .createAndBoot(name: "agent-simulator"))
     }
 
     // MARK: - helpers

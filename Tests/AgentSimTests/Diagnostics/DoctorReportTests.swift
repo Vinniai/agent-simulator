@@ -17,7 +17,7 @@ struct DoctorReportTests {
         )
 
         let lines = report.textReport().split(separator: "\n").map(String.init)
-        #expect(lines.contains("agent-sim doctor"))
+        #expect(lines.contains("agent-simulator doctor"))
         #expect(lines.contains("  cli version       0.1.61"))
         #expect(lines.contains("  build mode        release"))
         #expect(lines.contains("  booted sims       2"))

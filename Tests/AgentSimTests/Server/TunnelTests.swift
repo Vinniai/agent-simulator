@@ -3,7 +3,7 @@ import Foundation
 @testable import AgentSim
 
 /// Unit tests for the `Tunnel` value type — the pure description of
-/// how to expose a loopback `agent-sim serve` over a public ingress
+/// how to expose a loopback `agent-simulator serve` over a public ingress
 /// (cloudflared / ngrok): which executable to run, its argv, and how
 /// to read the advertised public URL back out of the child's output.
 ///

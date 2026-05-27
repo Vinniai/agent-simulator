@@ -17,7 +17,7 @@
   function renderHeader(host, ctx) {
     host.innerHTML = `
       <div class="brand">
-        <div class="mark"><em>agent-sim</em></div>
+        <div class="mark"><em>agent-simulator</em></div>
         <div class="sub">DEVICE&nbsp;FARM</div>
       </div>
       <div class="telemetry-bar">
@@ -514,7 +514,7 @@
     host.innerHTML = `
       <div class="lab">CLI&nbsp;Mirror</div>
       <div class="cmd">
-        <span class="prompt">$</span> agent-sim
+        <span class="prompt">$</span> agent-simulator
         <span class="arg">serve</span>
         <span class="flag">--platform</span> ${platforms}
         <span class="flag">--runtime</span> ${runtimes}

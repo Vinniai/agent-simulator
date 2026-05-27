@@ -33,7 +33,7 @@ struct ReviewSnapshotImportElement: Codable, Equatable, Sendable {
 }
 
 /// Payload for `POST /reviews/:id/snapshots/import` — used to push a
-/// snapshot that wasn't captured live by agent-sim (an external tool
+/// snapshot that wasn't captured live by agent-simulator (an external tool
 /// like agent-canvas, an offline screenshot the operator wants to
 /// reference, etc.) into a review session.
 ///

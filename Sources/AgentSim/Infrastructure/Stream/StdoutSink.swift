@@ -10,7 +10,7 @@ protocol FrameSink: Sendable {
     func write(_ data: Data)
 }
 
-/// CLI sink — `agent-sim stream` writes binary frames to stdout. The
+/// CLI sink — `agent-simulator stream` writes binary frames to stdout. The
 /// encoders run on the screen's own queue and may overlap with the
 /// keepalive / reconfig timers, so every `write` is serialised by an
 /// `NSLock`.

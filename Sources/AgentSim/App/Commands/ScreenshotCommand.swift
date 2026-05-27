@@ -1,7 +1,7 @@
 import ArgumentParser
 import Foundation
 
-/// `agent-sim screenshot --udid <UDID> [--output path] [--quality N] [--scale N]`
+/// `agent-simulator screenshot --udid <UDID> [--output path] [--quality N] [--scale N]`
 ///
 /// Captures one JPEG frame from the simulator's framebuffer. Mirrors
 /// the `GET /simulators/<UDID>/screenshot.jpg` endpoint so the same

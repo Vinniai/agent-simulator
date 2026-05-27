@@ -2,7 +2,7 @@
 
 A Swift CLI + web server that turns a booted iOS simulator into the eyes, hands,
 and defect-ledger of an autonomous coding agent. It exists to **close a feedback
-loop**: an agent ships a feature, agent-sim verifies it on a real simulator,
+loop**: an agent ships a feature, agent-simulator verifies it on a real simulator,
 files precise defects into a queue, and the agent drains the queue until the
 acceptance criteria pass.
 
@@ -12,7 +12,7 @@ acceptance criteria pass.
 
 **Agentic Feedback Loop**:
 The closed cycle of code → verify-on-simulator → file defects → iterate that
-agent-sim exists to serve. The north star every enhancement is judged against.
+agent-simulator exists to serve. The north star every enhancement is judged against.
 _Avoid_: "the agent loop" (overloaded), "automation".
 
 **Device Control**:
@@ -23,17 +23,17 @@ _Avoid_: "core feature" (it's the substrate, not the goal).
 ### Upstream relationship
 
 **Upstream**:
-`tddworks/baguette` — the project agent-sim was cloned from. Owns Device Control.
+`tddworks/baguette` — the project agent-simulator was cloned from. Owns Device Control.
 _Avoid_: "fork parent" (this is a clone, not a GitHub fork — see `docs/UPSTREAM.md`).
 
 **Absorb**:
-To bring an upstream commit into agent-sim, either by cherry-pick (clean-mapping
+To bring an upstream commit into agent-simulator, either by cherry-pick (clean-mapping
 areas) or manual port (re-architected areas), recorded so it never resurfaces.
 _Avoid_: "merge" (we never whole-tree merge upstream), "sync" (too vague).
 
 **Divergence Surface**:
-The code areas where agent-sim differs from Upstream such that every upstream
-hunk conflicts there: the `baguette→agent-sim` rename, the pre-SDK web stack +
+The code areas where agent-simulator differs from Upstream such that every upstream
+hunk conflicts there: the `baguette→agent-simulator` rename, the pre-SDK web stack +
 review/queue JS, and the re-architected AX adapter.
 _Avoid_: "the diff".
 

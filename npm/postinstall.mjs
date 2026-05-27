@@ -1,8 +1,8 @@
-// Downloads the platform-native agent-sim binary + its SPM resource
+// Downloads the platform-native agent-simulator binary + its SPM resource
 // bundle from the matching GitHub release and stages them in vendor/,
 // where the bin/ shim execs them.
 //
-// agent-sim is a Swift binary that links private SimulatorKit /
+// agent-simulator is a Swift binary that links private SimulatorKit /
 // CoreSimulator frameworks shipped with Xcode 26 — it only runs on
 // macOS / Apple Silicon. The `os` / `cpu` fields in package.json gate
 // normal installs; this script repeats the guard for `--force` users
@@ -20,20 +20,20 @@ const pkg = JSON.parse(
   await import("node:fs/promises").then((fs) => fs.readFile(join(here, "package.json"), "utf8"))
 );
 
-const REPO = process.env.AGENT_SIM_REPO || "Vinniai/agent-sim";
+const REPO = process.env.AGENT_SIM_REPO || "Vinniai/agent-simulator";
 const VERSION = pkg.version;
 const TAG = `v${VERSION}`;
 const BASE = `https://github.com/${REPO}/releases/download/${TAG}`;
-const ASSET = `agent-sim_${TAG}_macOS_arm64.tar.gz`;
-const CHECKSUMS = `agent-sim_${TAG}_checksums.txt`;
+const ASSET = `agent-simulator_${TAG}_macOS_arm64.tar.gz`;
+const CHECKSUMS = `agent-simulator_${TAG}_checksums.txt`;
 const VENDOR = join(here, "vendor");
 
 function warn(msg) {
-  console.warn(`agent-sim (postinstall): ${msg}`);
+  console.warn(`agent-simulator (postinstall): ${msg}`);
 }
 
 function fail(msg) {
-  console.error(`agent-sim (postinstall): ${msg}`);
+  console.error(`agent-simulator (postinstall): ${msg}`);
   process.exit(1);
 }
 
@@ -49,7 +49,7 @@ if (process.env.AGENT_SIM_SKIP_DOWNLOAD) {
 if (process.platform !== "darwin" || process.arch !== "arm64") {
   warn(
     `unsupported platform ${process.platform}/${process.arch}. ` +
-      "agent-sim requires macOS on Apple Silicon — the binary was not downloaded."
+      "agent-simulator requires macOS on Apple Silicon — the binary was not downloaded."
   );
   process.exit(0);
 }
@@ -89,12 +89,12 @@ if (got !== want) {
 // side-by-side: WebRoot resolves the bundle via dladdr from the
 // executable's directory. macOS ships bsdtar, so shelling out is safe
 // here (this script only ever runs on macOS).
-const tmpTar = join(tmpdir(), `agent-sim-${TAG}-${process.pid}.tar.gz`);
+const tmpTar = join(tmpdir(), `agent-simulator-${TAG}-${process.pid}.tar.gz`);
 writeFileSync(tmpTar, tarball);
 rmSync(VENDOR, { recursive: true, force: true });
 mkdirSync(VENDOR, { recursive: true });
 
-// The archive nests everything under agent-sim-<tag>-macOS-arm64/;
+// The archive nests everything under agent-simulator-<tag>-macOS-arm64/;
 // --strip-components=1 lands the files directly in vendor/.
 const tar = spawnSync("tar", ["xzf", tmpTar, "--strip-components=1", "-C", VENDOR], {
   stdio: "inherit",
@@ -104,10 +104,10 @@ if (tar.status !== 0) {
   fail(`tar extraction failed (exit ${tar.status ?? "signal"}).`);
 }
 
-const binary = join(VENDOR, "agent-sim");
+const binary = join(VENDOR, "agent-simulator");
 if (!existsSync(binary)) {
-  fail("extraction completed but vendor/agent-sim is missing.");
+  fail("extraction completed but vendor/agent-simulator is missing.");
 }
 chmodSync(binary, 0o755);
 
-console.log(`agent-sim ${VERSION} installed (downloaded from ${REPO}).`);
+console.log(`agent-simulator ${VERSION} installed (downloaded from ${REPO}).`);

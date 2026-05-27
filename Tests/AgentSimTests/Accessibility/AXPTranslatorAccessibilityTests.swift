@@ -11,7 +11,7 @@ import Mockable
 /// service depends on private framework load + dispatcher install
 /// + `frontmostApplicationWithDisplayId:` returning a usable
 /// translation. That path is integration-only — manually
-/// smoke-tested via `agent-sim describe-ui` against a booted sim.
+/// smoke-tested via `agent-simulator describe-ui` against a booted sim.
 @Suite("AXPTranslatorAccessibility — error paths")
 struct AXPTranslatorAccessibilityErrorTests {
 

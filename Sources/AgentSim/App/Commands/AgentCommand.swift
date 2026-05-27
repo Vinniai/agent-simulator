@@ -4,7 +4,7 @@ import Foundation
 struct AgentCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "agent",
-        abstract: "Create and inspect agent-sim feedback loops",
+        abstract: "Create and inspect agent-simulator feedback loops",
         subcommands: [
             Bootstrap.self,
             Status.self,
@@ -28,7 +28,7 @@ struct AgentCommand: ParsableCommand {
         var bundleId: String?
 
         @Option(name: .long, help: "Agent id assigned to starter tasks")
-        var agentId: String = "agent-sim"
+        var agentId: String = "agent-simulator"
 
         @Flag(name: .long, help: "Emit JSON instead of a readable summary")
         var json: Bool = false
@@ -88,7 +88,7 @@ struct AgentCommand: ParsableCommand {
             if json {
                 try printAgentJSON(output)
             } else {
-                print("agent-sim session: \(output.sessionId)")
+                print("agent-simulator session: \(output.sessionId)")
                 print("review UI: \(output.reviewURL)")
                 print("tasks: \(output.tasksCreated.joined(separator: ", "))")
                 if !output.errors.isEmpty {
@@ -159,7 +159,7 @@ struct AgentCommand: ParsableCommand {
         var afterSnapshotId: String?
 
         @Option(name: .long, help: "Reviewer or agent id")
-        var actor: String = "agent-sim"
+        var actor: String = "agent-simulator"
 
         func run() throws {
             let passed = score >= 8 && !["high", "critical", "p0", "p1"].contains(highestRecommendation.lowercased())

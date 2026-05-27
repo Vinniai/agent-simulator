@@ -2,7 +2,7 @@ import Testing
 @testable import AgentSim
 
 /// `RemoteEndpoint` turns the user-facing base URL of a remote
-/// `agent-sim serve` (the thing they'd paste into a browser) into the
+/// `agent-simulator serve` (the thing they'd paste into a browser) into the
 /// stream WebSocket URL the `connect` command dials. The scheme flips
 /// to its WS counterpart (http→ws, https→wss) and the canonical
 /// `/simulators/<udid>/stream` route is appended — all pure string
