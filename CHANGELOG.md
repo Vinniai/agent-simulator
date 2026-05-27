@@ -10,6 +10,10 @@ For releases prior to this changelog, see the
 
 ## [Unreleased]
 
+---
+
+## [0.2.1] - 2026-05-27
+
 ### Changed
 - **CLI command and project artifacts renamed `agent-sim` → `agent-simulator`.** The CLI command (npm [`agent-simulator`](https://www.npmjs.com/package/agent-simulator)'s `bin`) renamed from `agent-sim` to `agent-simulator`, the GitHub repository moved to `Vinniai/agent-simulator`, and the release artifacts are now `agent-simulator_v<version>_macOS_arm64.tar.gz` + checksums — install with `npm install -g agent-simulator`, then invoke `agent-simulator <subcommand>` (the npm package name was already `agent-simulator`). The startup `connect` hint, the `doctor` report header, the `serve` auto-boot simulator name, the default agent/actor identity, and the `GET /version` `service` field now read `agent-simulator`. Local review data lives under `~/.agent-simulator/reviews` (still overridable via `AGENT_SIM_REVIEW_ROOT`). The SwiftPM product name and its resource bundle (`agent-sim_AgentSim.bundle`) are unchanged. The previously published `agent-simulator@0.2.0` (whose `bin` was `agent-sim`) and the old `Vinniai/agent-sim` URLs keep resolving through GitHub redirects.
 
@@ -186,7 +190,8 @@ For releases prior to this changelog, see the
 
 ---
 
-[Unreleased]: https://github.com/Vinniai/agent-simulator/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Vinniai/agent-simulator/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/Vinniai/agent-simulator/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Vinniai/agent-sim/compare/v0.1.70...v0.2.0
 [0.1.70]: https://github.com/Vinniai/agent-sim/compare/v0.1.69...v0.1.70
 [0.1.69]: https://github.com/Vinniai/agent-sim/compare/v0.1.68...v0.1.69
