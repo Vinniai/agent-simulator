@@ -1,5 +1,5 @@
 {
-  "name": "agent-sim",
+  "name": "@vinniai/agent-sim",
   "version": "0.2.0",
   "description": "Agent-driven iOS Simulator control, screen streaming, gesture/keyboard input, accessibility dumps, and a self-building review loop — CLI.",
   "keywords": [

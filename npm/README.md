@@ -6,7 +6,7 @@ accessibility tree, tail the unified log, and run a self-building review loop.
 No Simulator.app GUI required.
 
 ```bash
-npm install -g agent-sim
+npm install -g @vinniai/agent-sim
 agent-sim list
 agent-sim serve            # web UI on http://localhost:8421/simulators
 ```

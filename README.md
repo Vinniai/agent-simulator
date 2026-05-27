@@ -133,10 +133,11 @@ agent-sim stream --udid <UDID> --format avcc --fps 60 | ffplay -
 ## Install
 
 ```bash
-npm install -g agent-sim
+npm install -g @vinniai/agent-sim
 ```
 
-Apple Silicon only. Requires Xcode 26 — `agent-sim` links against private
+The package is scoped (`@vinniai/agent-sim`); the installed command is still
+`agent-sim`. Apple Silicon only. Requires Xcode 26 — `agent-sim` links against private
 SimulatorKit / CoreSimulator frameworks shipped with Xcode.
 
 The npm package is a thin launcher: it's gated to `darwin`/`arm64`, and its
